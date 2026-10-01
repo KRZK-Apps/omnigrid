@@ -1,0 +1,26 @@
+{
+  "name": "@omnigrid/core",
+  "version": "0.1.0",
+  "description": "Framework-agnostic core engine for OmniGrid",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npx tsc -p tsconfig.json",
+    "lint": "npx tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.2"
+  }
+}

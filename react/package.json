@@ -1,0 +1,37 @@
+{
+  "name": "@omnigrid/react",
+  "version": "0.1.0",
+  "description": "React adapter and renderer for OmniGrid",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "lint": "npx tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "prebuild": "npm --workspace @omnigrid/core run build && npm run clean",
+    "build": "npx tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  },
+  "dependencies": {
+    "@omnigrid/core": "^0.1.0",
+    "@omnigrid/style": "0.1.0"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@omnigrid/plugin-pro",
+  "version": "0.1.0",
+  "description": "Advanced plugins for OmniGrid",
+  "license": "SEE LICENSE IN LICENSE.PRO.md",
+  "dependencies": {
+    "@omnigrid/core": "0.1.0"
+  }
+}

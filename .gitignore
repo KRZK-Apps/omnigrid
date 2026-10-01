@@ -1,0 +1,50 @@
+# --- Зависимости (Dependencies) ---
+node_modules/
+
+# --- Артефакты сборки (Build artifacts) ---
+dist/
+build/
+*.tsbuildinfo
+
+# --- Кэш turbo (turborepo) ---
+.turbo/
+
+# --- Кэш Vite ---
+.vite/
+
+# --- Переменные окружения и секреты (Env & Secrets) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# --- Логи ---
+logs/
+*.log
+npm-debug.log*
+
+# --- Покрытие тестов (Test coverage) ---
+coverage/
+
+# --- Редакторы и IDE ---
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- ОС (Windows/macOS) ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Временные файлы ---
+*.tmp
+*~
+.temp/
