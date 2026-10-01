@@ -20,7 +20,8 @@
     "lint": "npx tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "prebuild": "npm --workspace @omnigrid/core run build && npm run clean",
-    "build": "npx tsc -p tsconfig.json"
+    "build": "npx tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

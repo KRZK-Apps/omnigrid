@@ -18,7 +18,8 @@
     "scripts": {
         "build": "npx tsc -p tsconfig.json",
         "lint": "npx tsc --noEmit -p tsconfig.json",
-        "test": "vitest run"
+        "test": "vitest run",
+        "prepublishOnly": "npm run build"
     },
     "dependencies": {
         "@omnigrid/core": "0.1.0"
