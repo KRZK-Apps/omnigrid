@@ -1,7 +1,15 @@
 {
   "name": "@omnigrid/react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React adapter and renderer for OmniGrid",
+  "keywords": ["omnigrid", "grid", "table", "react", "react-component"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KRZK-Apps/omnigrid.git",
+    "directory": "react"
+  },
+  "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/react#readme",
+  "bugs": { "url": "https://github.com/KRZK-Apps/omnigrid/issues" },
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",

@@ -1,7 +1,15 @@
 {
     "name": "@omnigrid/selection-plugin",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Headless row selection plugin for OmniGrid",
+    "keywords": ["omnigrid", "grid", "selection", "plugin"],
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/KRZK-Apps/omnigrid.git",
+      "directory": "plugins/base/selection"
+    },
+    "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/selection#readme",
+    "bugs": { "url": "https://github.com/KRZK-Apps/omnigrid/issues" },
     "license": "MIT",
     "type": "module",
     "main": "dist/index.js",

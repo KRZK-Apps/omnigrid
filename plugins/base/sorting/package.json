@@ -1,8 +1,16 @@
 {
     "name": "@omnigrid/sorting-plugin",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Headless sorting plugin for OmniGrid",
-  "license": "MIT",
+    "keywords": ["omnigrid", "grid", "sorting", "plugin"],
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/KRZK-Apps/omnigrid.git",
+      "directory": "plugins/base/sorting"
+    },
+    "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/sorting#readme",
+    "bugs": { "url": "https://github.com/KRZK-Apps/omnigrid/issues" },
+    "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
     "types": "dist/index.d.ts",
