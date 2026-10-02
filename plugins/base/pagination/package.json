@@ -1,15 +1,22 @@
 {
     "name": "@omnigrid/pagination-plugin",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "Headless pagination plugin for OmniGrid. Mounts a pager into the bottom slot.",
-    "keywords": ["omnigrid", "grid", "pagination", "plugin"],
+    "keywords": [
+        "omnigrid",
+        "grid",
+        "pagination",
+        "plugin"
+    ],
     "repository": {
-      "type": "git",
-      "url": "https://github.com/KRZK-Apps/omnigrid.git",
-      "directory": "plugins/base/pagination"
+        "type": "git",
+        "url": "https://github.com/KRZK-Apps/omnigrid.git",
+        "directory": "plugins/base/pagination"
     },
     "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/pagination#readme",
-    "bugs": { "url": "https://github.com/KRZK-Apps/omnigrid/issues" },
+    "bugs": {
+        "url": "https://github.com/KRZK-Apps/omnigrid/issues"
+    },
     "license": "MIT",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -24,9 +31,9 @@
     ],
     "scripts": {
         "build": "npx tsc -p tsconfig.json",
-    "prepublishOnly": "npm run build"
+        "prepublishOnly": "npm run build"
     },
     "dependencies": {
-        "@omnigrid/core": "0.1.0"
+        "@omnigrid/core": "^0.1.0"
     }
 }

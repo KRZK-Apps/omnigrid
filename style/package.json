@@ -1,15 +1,23 @@
 {
   "name": "@omnigrid/style",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Shared styles for OmniGrid",
-  "keywords": ["omnigrid", "grid", "table", "styles", "css"],
+  "keywords": [
+    "omnigrid",
+    "grid",
+    "table",
+    "styles",
+    "css"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/KRZK-Apps/omnigrid.git",
     "directory": "style"
   },
   "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/style#readme",
-  "bugs": { "url": "https://github.com/KRZK-Apps/omnigrid/issues" },
+  "bugs": {
+    "url": "https://github.com/KRZK-Apps/omnigrid/issues"
+  },
   "license": "MIT",
   "main": "dist/index.js",
   "files": [

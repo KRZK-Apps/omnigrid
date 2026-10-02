@@ -1,15 +1,24 @@
 {
   "name": "@omnigrid/core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Framework-agnostic core engine for OmniGrid",
-  "keywords": ["omnigrid", "grid", "table", "datatable", "core", "typescript"],
+  "keywords": [
+    "omnigrid",
+    "grid",
+    "table",
+    "datatable",
+    "core",
+    "typescript"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/KRZK-Apps/omnigrid.git",
     "directory": "core"
   },
   "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/core#readme",
-  "bugs": { "url": "https://github.com/KRZK-Apps/omnigrid/issues" },
+  "bugs": {
+    "url": "https://github.com/KRZK-Apps/omnigrid/issues"
+  },
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",

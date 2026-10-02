@@ -23,7 +23,7 @@ const data = [...];
 
 ## Links
 
-- **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/react
+- **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/adapters/react
 - **Demo:** https://omnigrid-demo.vercel.app/
 - **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
 
