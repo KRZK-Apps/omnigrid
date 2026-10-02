@@ -63,3 +63,26 @@ describe("SelectionPlugin column pinning", () => {
         expect(state).toHaveLength(columns.length);
     });
 });
+
+describe("SelectionPlugin row presentation", () => {
+    it("marks selected rows with the selected-row class and clears it after deselection", () => {
+        const columns: ColumnDef<Row>[] = [
+            { id: "name", field: "name", header: "Name", flex: 1 },
+            { id: "age", field: "age", header: "Age", width: 100 },
+        ];
+        const plugin = new SelectionPlugin<Row>({ mode: "multiple" });
+        const grid = new Grid<Row>({ columns, data: ROWS, plugins: [plugin] });
+
+        plugin.setSelectedRowIds(["a"]);
+        expect(plugin.getRowClass({ id: "a", index: 0, data: ROWS[0] })).toBe("omnigrid-row-selected");
+        expect(plugin.getRowClass({ id: "b", index: 1, data: ROWS[1] })).toBeUndefined();
+
+        plugin.toggleRow("a", 0, {});
+        expect(plugin.getRowClass({ id: "a", index: 0, data: ROWS[0] })).toBeUndefined();
+    });
+
+    it("does not set inline colors — the theme owns the selected-row color", () => {
+        const plugin = new SelectionPlugin<Row>({ mode: "single" });
+        expect((plugin as any).getRowStyle).toBeUndefined();
+    });
+});

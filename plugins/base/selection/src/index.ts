@@ -1,6 +1,13 @@
-import type { CheckboxRenderParams, ColumnDef, GridApi, GridPlugin, RowClickEvent, RowId, RowRenderParams, RowStyle } from "@omnigrid/core";
+import type { CheckboxRenderParams, ColumnDef, GridApi, GridPlugin, RowClickEvent, RowId, RowRenderParams } from "@omnigrid/core";
 
 export type SelectionMode = "single" | "multiple";
+
+/**
+ * CSS class applied to selected rows. The concrete selected-row color is
+ * owned by the active theme (e.g. `@omnigrid/default-theme` defines
+ * `--omnigrid-cell-selected-background`); the plugin only marks the row.
+ */
+export const SELECTED_ROW_CLASS = "omnigrid-row-selected";
 
 export interface SelectionRendererParams<T> extends CheckboxRenderParams {
     data?: T;
@@ -114,8 +121,8 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         this.applySelection(rowId, index, modifiers);
     }
 
-    public getRowStyle({ id }: RowRenderParams<T>): RowStyle | undefined {
-        return this.selectedRowIds.has(id) ? { backgroundColor: "#dceffd" } : undefined;
+    public getRowClass({ id }: RowRenderParams<T>): string | undefined {
+        return this.selectedRowIds.has(id) ? SELECTED_ROW_CLASS : undefined;
     }
 
     private handleRowClick(event: RowClickEvent<T>): void {

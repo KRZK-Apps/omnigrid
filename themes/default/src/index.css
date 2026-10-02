@@ -10,6 +10,7 @@
     --omnigrid-cell-border: #d9e0ea;
     --omnigrid-cell-color: #182230;
     --omnigrid-cell-hover-background: #eef5ff;
+    --omnigrid-cell-selected-background: #dceffd;
     --omnigrid-header-background: #e9eef5;
     --omnigrid-header-border: #c5cfdd;
     --omnigrid-header-color: #334155;
@@ -30,6 +31,7 @@
     --omnigrid-cell-border: #3a3f40;
     --omnigrid-cell-color: #e8ebe9;
     --omnigrid-cell-hover-background: #2a2f30;
+    --omnigrid-cell-selected-background: #2b4a63;
     --omnigrid-header-background: #2a2f30;
     --omnigrid-header-border: #3a3f40;
     --omnigrid-header-color: #e8ebe9;

@@ -197,7 +197,10 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 const ruleClasses = Object.entries(currentOptions.rowClassRules ?? {})
                     .filter(([, predicate]) => predicate(rowParams))
                     .map(([ruleClass]) => ruleClass);
-                return ["omnigrid-row", rowClass, ...ruleClasses, dynamicRowClass].filter(Boolean).join(" ");
+                const pluginClasses = (currentOptions.plugins ?? [])
+                    .map((plugin) => plugin.getRowClass?.(rowParams))
+                    .filter((rowClass): rowClass is string => Boolean(rowClass));
+                return ["omnigrid-row", rowClass, ...ruleClasses, dynamicRowClass, ...pluginClasses].filter(Boolean).join(" ");
             },
             resolveRowStyle: (row) => {
                 const rowParams: RowRenderParams<T> = { id: row.rowId, index: row.index, data: row.data };

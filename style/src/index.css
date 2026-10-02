@@ -29,6 +29,12 @@
     background: var(--omnigrid-cell-hover-background) !important;
 }
 
+/* Selected rows: the SelectionPlugin only adds the class, the active theme
+   provides the concrete color via --omnigrid-cell-selected-background. */
+.omnigrid-row-selected [role="cell"] {
+    background: var(--omnigrid-cell-selected-background);
+}
+
 .omnigrid-no-row-hover [role="cell"]:hover {
     background: unset;
 }

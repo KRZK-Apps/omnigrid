@@ -258,6 +258,7 @@ export interface RowHoverEvent<T> extends RowRenderParams<T> {
 export interface GridPlugin<T> {
     name: string;
     register(api: GridApi<T>): void | (() => void);
+    getRowClass?(params: RowRenderParams<T>): string | undefined;
     getRowStyle?(params: RowRenderParams<T>): RowStyle | undefined;
 }
 

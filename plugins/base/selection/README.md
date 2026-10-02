@@ -9,6 +9,13 @@ Headless row/column selection plugin for OmniGrid.
 - Keyboard navigation support (Shift+Click, Ctrl+Click)
 - API to read/modify selection state programmatically
 
+## Styling
+
+Selected rows receive the `omnigrid-row-selected` CSS class. The plugin does
+**not** set inline colors — the concrete selected-row color is owned by the
+active theme (for example, `@omnigrid/default-theme` and `@omnigrid/mint-theme`
+define `--omnigrid-cell-selected-background` for light and dark modes).
+
 ## Usage
 
 ```ts
