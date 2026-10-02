@@ -135,6 +135,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const buildRenderContext = useCallback(() => renderContext, [renderContext]);
 
     const autoHeight = style?.height === undefined;
+    const verticalScrollbarGutter = autoHeight ? "auto" : "stable";
     const rowHeight = grid.getState().rowHeight;
 
     // Column-group header stack: `headerRowCount` group rows (one per depth) above
@@ -236,7 +237,11 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     ctrlKey: modifiers.ctrlKey,
                     shiftKey: modifiers.shiftKey,
                 }),
-            onRowHover: (row, hovered) => grid.rowHover({ id: row.rowId, index: row.index, data: row.data, hovered }),
+            onRowHover: (row, hovered) => {
+                const rowElements = viewportRef.current?.querySelectorAll<HTMLElement>(`[data-row-index="${row.index}"]`);
+                rowElements?.forEach((element) => element.classList.toggle("omnigrid-row-hover", hovered));
+                grid.rowHover({ id: row.rowId, index: row.index, data: row.data, hovered });
+            },
             onCellClick: (row, column, modifiers) => {
                 if (column.stopRowClick) return;
                 grid.rowClick({
@@ -490,7 +495,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     overflowX: "auto",
                     overflowY: autoHeight ? "hidden" : "auto",
                     position: "relative",
-                    scrollbarGutter: "stable",
+                    scrollbarGutter: verticalScrollbarGutter,
                 }}
             />
         );
@@ -720,7 +725,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                         overflowX: needsHorizontalScroll ? "auto" : "hidden",
                         overflowY: autoHeight ? "hidden" : "auto",
                         position: "relative",
-                        scrollbarGutter: "stable",
+                        scrollbarGutter: verticalScrollbarGutter,
                         width: "100%",
                     }}
                 >

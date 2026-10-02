@@ -121,7 +121,11 @@ export class PooledRowPane<T> {
     }
     /** Binds a row to the panel and fully rebuilds content. */
     public bind(row: PooledRow<T>, columns: PooledColumn<T>[], originX = 0): void {
+        const hovered = this.host.matches(":hover");
+        if (hovered && this.row) this.callbacks.onRowHover(this.row, false);
         this.row = row;
+        this.host.dataset.rowIndex = String(row.index);
+        this.host.classList.remove("omnigrid-row-hover");
         this.originX = originX;
         this.applyRowSizing(row);
         // Cells must exist BEFORE presentation is applied: applyRowPresentation
@@ -130,6 +134,7 @@ export class PooledRowPane<T> {
         // until the next bind (i.e. until scrolling).
         this.mapColumns(columns, true);
         this.applyRowPresentation(row);
+        if (hovered) this.callbacks.onRowHover(row, true);
     }
 
     /** Re-layouts cells for a new horizontal column window. */
@@ -152,7 +157,10 @@ export class PooledRowPane<T> {
 
     /** Clears content and unbinds the row, preserving DOM nodes. */
     public recycle(): void {
+        if (this.row && this.host.matches(":hover")) this.callbacks.onRowHover(this.row, false);
         this.row = null;
+        delete this.host.dataset.rowIndex;
+        this.host.classList.remove("omnigrid-row-hover");
         for (const cell of this.cells) this.clearContent(cell);
         this.hide();
     }
