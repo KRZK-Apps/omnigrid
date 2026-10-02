@@ -1,19 +1,22 @@
 # @omnigrid/style
 
-Shared CSS styles for OmniGrid. Provides base styles and CSS variables that all themes extend.
+Required structural CSS for OmniGrid. It provides the layout and component rules;
+color values come from a separate theme package.
 
 ## What it provides
 
-- `index.css` — base grid styles, CSS variables for theming, and default class names
+- `index.css` — grid layout and component styles using theme CSS variables
 - `index.js` — re-exports the CSS for `import` usage
 
 ## Usage
 
 ```ts
-import "@omnigrid/style/index.css";
-// or
 import "@omnigrid/style";
 ```
+
+`@omnigrid/react` includes this package automatically. When using another
+adapter, install a theme package as well; for example,
+`@omnigrid/default-theme`.
 
 ## Links
 

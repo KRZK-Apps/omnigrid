@@ -1,20 +1,20 @@
 {
-  "name": "@omnigrid/style",
-  "version": "0.1.2",
-  "description": "Shared styles for OmniGrid",
+  "name": "@omnigrid/default-theme",
+  "version": "0.1.0",
+  "description": "Default light and dark color theme for OmniGrid",
   "keywords": [
     "omnigrid",
     "grid",
     "table",
-    "styles",
+    "theme",
     "css"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/KRZK-Apps/omnigrid.git",
-    "directory": "style"
+    "directory": "themes/default"
   },
-  "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/style#readme",
+  "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/themes/default#readme",
   "bugs": {
     "url": "https://github.com/KRZK-Apps/omnigrid/issues"
   },

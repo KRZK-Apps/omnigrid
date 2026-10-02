@@ -1,0 +1,41 @@
+html:root {
+    color-scheme: light;
+    font-family: system-ui, sans-serif;
+    color: #173b35;
+    background: #effaf6;
+
+    --omnigrid-grid-background: #fbfffd;
+    --omnigrid-grid-border: #b8d9ce;
+    --omnigrid-cell-background: transparent;
+    --omnigrid-cell-border: #c9e2d9;
+    --omnigrid-cell-color: #173b35;
+    --omnigrid-cell-hover-background: #e8f3ef;
+    --omnigrid-header-background: #d7eee5;
+    --omnigrid-header-border: #b8d9ce;
+    --omnigrid-header-color: #174b40;
+    --omnigrid-slot-background: #effaf6;
+    --omnigrid-button-background: #f7fffb;
+    --omnigrid-button-border: #9bcbbc;
+    --omnigrid-button-color: #175344;
+}
+
+html.dark,
+html .dark {
+    color-scheme: dark;
+    color: #d9f2e9;
+    background: #10231f;
+
+    --omnigrid-grid-background: #172d27;
+    --omnigrid-grid-border: #35584d;
+    --omnigrid-cell-background: transparent;
+    --omnigrid-cell-border: #35584d;
+    --omnigrid-cell-color: #d9f2e9;
+    --omnigrid-cell-hover-background: #24463b;
+    --omnigrid-header-background: #203c33;
+    --omnigrid-header-border: #35584d;
+    --omnigrid-header-color: #d9f2e9;
+    --omnigrid-slot-background: #10231f;
+    --omnigrid-button-background: #203c33;
+    --omnigrid-button-border: #456d60;
+    --omnigrid-button-color: #d9f2e9;
+}

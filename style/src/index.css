@@ -1,54 +1,31 @@
-:root {
-    font-family: system-ui, sans-serif;
-    color: #182230;
-    background: #f4f7fb;
-}
-
-.dark {
-    color: #e8ebe9;
-    background: #1a1d1e;
-}
-
 * {
     box-sizing: border-box;
 }
+
 .omnigrid {
+    background: var(--omnigrid-grid-background);
     border-collapse: collapse;
-    border: 1px solid #d9e0ea;
+    border: 1px solid var(--omnigrid-grid-border);
     scrollbar-gutter: stable;
 }
 
 [role="cell"] {
     align-items: center;
-    background: transparent;
-    border-bottom: 1px solid #d9e0ea;
-    border-right: 1px solid #d9e0ea;
+    background: var(--omnigrid-cell-background);
+    border-bottom: 1px solid var(--omnigrid-cell-border);
+    border-right: 1px solid var(--omnigrid-cell-border);
+    color: var(--omnigrid-cell-color);
     display: flex;
     padding: 0 12px;
     white-space: nowrap;
 }
 
-.dark [role="cell"] {
-    background: transparent;
-    border-bottom: 1px solid #3a3f40;
-    border-right: 1px solid #3a3f40;
-    color: #e8ebe9;
-}
-
 [role="cell"]:hover {
-    background: #eef5ff;
-}
-
-.dark [role="cell"]:hover {
-    background: #2a2f30;
+    background: var(--omnigrid-cell-hover-background);
 }
 
 .omnigrid-row:hover [role="cell"] {
-    background: #eef5ff !important;
-}
-
-.dark .omnigrid-row:hover [role="cell"] {
-    background: #2a2f30 !important;
+    background: var(--omnigrid-cell-hover-background) !important;
 }
 
 .omnigrid-no-row-hover [role="cell"]:hover {
@@ -63,70 +40,27 @@
     user-select: none;
 }
 
-.omnigrid {
-    background: #ffffff;
-}
-
-.dark .omnigrid {
-    background: #1a1d1e;
-}
-
-/* Pinned panes are opaque by default. Cells are transparent, so without a
-   background the scrollable columns sliding underneath the sticky panes would
-   be visible through them. Use the same background as the table. */
+/* Pinned panes are opaque so the scrollable columns underneath do not show through. */
 .omnigrid-pinned-left,
 .omnigrid-pinned-right {
-    background: #ffffff;
-}
-
-.dark .omnigrid-pinned-left,
-.dark .omnigrid-pinned-right {
-    background: #1a1d1e;
+    background: var(--omnigrid-grid-background);
 }
 
 .omnigrid-header-row {
-    background: #e9eef5;
-}
-
-.dark .omnigrid-header-row {
-    background: #2a2f30;
+    background: var(--omnigrid-header-background);
 }
 
 [role="columnheader"] {
-    background: #e9eef5;
-    border-bottom: 1px solid #c5cfdd;
-    border-right: 1px solid #c5cfdd;
-    color: #334155;
+    background: var(--omnigrid-header-background);
+    border-bottom: 1px solid var(--omnigrid-header-border);
+    border-right: 1px solid var(--omnigrid-header-border);
+    color: var(--omnigrid-header-color);
 }
 
-/* The pinned panes intentionally have NO border: the pinned columns are
-   positioned so their pixels land exactly on the core-computed offsets, and
-   the pane boxes are sized to the full pinned width. Any border would shrink
-   the content box by its width (box-sizing: border-box) while the header-row
-   and rows-layer inside still span the full border-box width, making the layer
-   stick out 1px past the pane and creating a phantom horizontal scrollbar
-   (scrollWidth > clientWidth).
-
-   Separators between the pinned zones and the scrollable zone are drawn by
-   cell borders instead:
-     - left edge of the right-pinned block  -> the FIRST right-pinned column
-       gets border-left (below). The scrollable area flex-grows, so the last
-       scrollable column does NOT touch the right pane; without this border the
-       block would have no left edge line.
-     - right edge of the left-pinned block  -> the last left-pinned column
-       already carries border-right from the base [role="cell"] /
-       [role="columnheader"] rules, which sits exactly on the pane boundary.
-   A 1px border on a cell extends LEFT inside the pane and can never extend
-   the container's right edge, so it cannot produce a phantom scrollbar. */
-
+/* Pinned panes have no border so their contents stay aligned to core-computed offsets. */
 .omnigrid-pinned-right [role="cell"]:first-child,
 .omnigrid-pinned-right [role="columnheader"]:first-child {
-    border-left: 1px solid #d9e0ea;
-}
-
-.dark .omnigrid-pinned-right [role="cell"]:first-child,
-.dark .omnigrid-pinned-right [role="columnheader"]:first-child {
-    border-left: 1px solid #3a3f40;
+    border-left: 1px solid var(--omnigrid-grid-border);
 }
 
 /* ------------------------------------------------------------------ */
@@ -154,25 +88,15 @@
 .omnigrid-slot-bottom {
     width: 100%;
     padding: 4px 8px;
-    background: #f4f7fb;
-}
-
-.dark .omnigrid-slot-top,
-.dark .omnigrid-slot-bottom {
-    background: #1a1d1e;
+    background: var(--omnigrid-slot-background);
 }
 
 .omnigrid-slot-left,
 .omnigrid-slot-right {
     flex-shrink: 0;
     padding: 0 8px;
-    background: #f4f7fb;
+    background: var(--omnigrid-slot-background);
     align-self: stretch;
-}
-
-.dark .omnigrid-slot-left,
-.dark .omnigrid-slot-right {
-    background: #1a1d1e;
 }
 
 .omnigrid-slot-item-group {
@@ -201,10 +125,10 @@
 }
 
 .omnigrid-pagination-btn {
-    background: #ffffff;
-    border: 1px solid #c5cfdd;
+    background: var(--omnigrid-button-background);
+    border: 1px solid var(--omnigrid-button-border);
     border-radius: 4px;
-    color: #334155;
+    color: var(--omnigrid-button-color);
     cursor: pointer;
     font-size: 12px;
     line-height: 1.4;
@@ -214,19 +138,6 @@
 .omnigrid-pagination-btn:disabled {
     cursor: default;
     opacity: 0.5;
-}
-
-.dark .omnigrid-pagination-btn {
-    background: #2a2f30;
-    border-color: #3a3f40;
-    color: #e8ebe9;
-}
-
-.dark [role="columnheader"] {
-    background: #2a2f30;
-    border-bottom: 1px solid #3a3f40;
-    border-right: 1px solid #3a3f40;
-    color: #e8ebe9;
 }
 
 .omnigrid-sort-indicator {

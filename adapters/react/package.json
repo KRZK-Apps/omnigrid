@@ -35,17 +35,18 @@
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "lint": "npx tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "prebuild": "npm --workspace @omnigrid/core run build && npm run clean",
+    "prebuild": "npm --workspace @omnigrid/core run build && npm --workspace @omnigrid/style run build && npm --workspace @omnigrid/default-theme run build && npm run clean",
     "build": "npx tsc -p tsconfig.json",
     "prepublishOnly": "npm run build"
   },
+  "dependencies": {
+    "@omnigrid/core": "^0.1.0",
+    "@omnigrid/style": "^0.1.0",
+    "@omnigrid/default-theme": "^0.1.0"
+  },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@omnigrid/style": "^0.1.0"
-  },
-  "dependencies": {
-    "@omnigrid/core": "^0.1.0"
+    "@types/react-dom": "^19.0.0"
   },
   "peerDependencies": {
     "react": ">=18",
