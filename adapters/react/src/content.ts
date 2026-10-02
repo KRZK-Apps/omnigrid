@@ -35,6 +35,7 @@ function renderCheckboxControl(value: CheckboxControl): ReactNode {
         "input",
         {
             type: "checkbox",
+            className: "omnigrid-checkbox",
             checked: value.checked,
             disabled: value.disabled,
             "aria-label": value.ariaLabel,

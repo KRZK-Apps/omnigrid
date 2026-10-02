@@ -11,6 +11,9 @@ html:root {
     --omnigrid-cell-color: #173b35;
     --omnigrid-cell-hover-background: #e8f3ef;
     --omnigrid-cell-selected-background: #d3efe1;
+    --omnigrid-cell-unselectable-background: #e6f1ec;
+    --omnigrid-cell-unselectable-color: #71877d;
+    --omnigrid-checkbox-accent: #059669;
     --omnigrid-header-background: #d7eee5;
     --omnigrid-header-border: #b8d9ce;
     --omnigrid-header-color: #174b40;
@@ -33,6 +36,9 @@ html .dark {
     --omnigrid-cell-color: #d9f2e9;
     --omnigrid-cell-hover-background: #24463b;
     --omnigrid-cell-selected-background: #2c5244;
+    --omnigrid-cell-unselectable-background: #1b3029;
+    --omnigrid-cell-unselectable-color: #8ba99d;
+    --omnigrid-checkbox-accent: #5eead4;
     --omnigrid-header-background: #203c33;
     --omnigrid-header-border: #35584d;
     --omnigrid-header-color: #d9f2e9;

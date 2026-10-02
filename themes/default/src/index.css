@@ -11,6 +11,9 @@
     --omnigrid-cell-color: #182230;
     --omnigrid-cell-hover-background: #eef5ff;
     --omnigrid-cell-selected-background: #dceffd;
+    --omnigrid-cell-unselectable-background: #f1f4f6;
+    --omnigrid-cell-unselectable-color: #778391;
+    --omnigrid-checkbox-accent: #2563eb;
     --omnigrid-header-background: #e9eef5;
     --omnigrid-header-border: #c5cfdd;
     --omnigrid-header-color: #334155;
@@ -32,6 +35,9 @@
     --omnigrid-cell-color: #e8ebe9;
     --omnigrid-cell-hover-background: #2a2f30;
     --omnigrid-cell-selected-background: #2b4a63;
+    --omnigrid-cell-unselectable-background: #232a2d;
+    --omnigrid-cell-unselectable-color: #89949a;
+    --omnigrid-checkbox-accent: #60a5fa;
     --omnigrid-header-background: #2a2f30;
     --omnigrid-header-border: #3a3f40;
     --omnigrid-header-color: #e8ebe9;

@@ -2,7 +2,8 @@
 
 A mint-green color theme for OmniGrid with both light and dark palettes. The
 palette changes with the existing `.dark` class; the theme itself is the table's
-color style, not a light/dark mode switch.
+color style, not a light/dark mode switch. SelectionPlugin checkboxes use
+matching mint accents in both modes.
 
 ## Install and use
 

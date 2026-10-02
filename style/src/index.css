@@ -44,8 +44,19 @@
     background: unset !important;
 }
 
+.omnigrid-row-unselectable [role="cell"],
+.omnigrid-row-unselectable:hover [role="cell"],
+.omnigrid-row-unselectable.omnigrid-row-hover [role="cell"] {
+    background: var(--omnigrid-cell-unselectable-background) !important;
+    color: var(--omnigrid-cell-unselectable-color);
+}
+
 .omnigrid-row {
     user-select: none;
+}
+
+.omnigrid-checkbox {
+    accent-color: var(--omnigrid-checkbox-accent);
 }
 
 /* Pinned panes are opaque so the scrollable columns underneath do not show through. */

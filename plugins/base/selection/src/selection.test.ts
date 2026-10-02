@@ -85,4 +85,36 @@ describe("SelectionPlugin row presentation", () => {
         const plugin = new SelectionPlugin<Row>({ mode: "single" });
         expect((plugin as any).getRowStyle).toBeUndefined();
     });
+
+    it("marks rows rejected by isRowSelectable with the unselectable-row class", () => {
+        const plugin = new SelectionPlugin<Row>({
+            isRowSelectable: (row) => row.age >= 30,
+        });
+
+        expect(plugin.getRowClass({ id: "a", index: 0, data: ROWS[0] })).toBeUndefined();
+        expect(plugin.getRowClass({ id: "b", index: 1, data: ROWS[1] })).toBe("omnigrid-row-unselectable");
+    });
+
+    it("keeps the unselectable class when a row is also selected programmatically", () => {
+        const plugin = new SelectionPlugin<Row>({
+            isRowSelectable: (row) => row.age >= 30,
+        });
+        plugin.setSelectedRowIds(["b"]);
+
+        expect(plugin.getRowClass({ id: "b", index: 1, data: ROWS[1] })).toBe("omnigrid-row-selected omnigrid-row-unselectable");
+    });
+
+    it("notifies listeners with the current selected rows whenever selection changes", () => {
+        const onSelectionChange = vi.fn();
+        const plugin = new SelectionPlugin<Row>({ mode: "multiple", onSelectionChange });
+        const grid = new Grid<Row>({ columns: [], data: ROWS, getRowId: (row) => row.id, plugins: [plugin] });
+
+        plugin.toggleRow("b", 1);
+
+        expect(onSelectionChange).toHaveBeenCalledWith({
+            selectedRowIds: ["b"],
+            selectedRows: [ROWS[1]],
+        });
+        grid.destroy();
+    });
 });

@@ -9,6 +9,9 @@ export type SelectionMode = "single" | "multiple";
  */
 export const SELECTED_ROW_CLASS = "omnigrid-row-selected";
 
+/** Applied to rows rejected by `isRowSelectable`; themes supply muted colors. */
+export const UNSELECTABLE_ROW_CLASS = "omnigrid-row-unselectable";
+
 export interface SelectionRendererParams<T> extends CheckboxRenderParams {
     data?: T;
     rowId?: RowId;
@@ -26,6 +29,7 @@ export interface SelectionPluginOptions<T> {
     showHeaderCheckbox?: boolean;
     isRowSelectable?: (row: T, index: number) => boolean;
     checkboxRenderer?: SelectionRenderer<T>;
+    onSelectionChange?: (state: SelectionState<T>) => void;
     selectionColumnId?: string;
     selectionColumnWidth?: number;
 }
@@ -51,6 +55,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
     private showHeaderCheckbox: boolean;
     private isRowSelectable: (row: T, index: number) => boolean;
     private checkboxRenderer: SelectionRenderer<T>;
+    private onSelectionChange?: (state: SelectionState<T>) => void;
     private readonly selectionColumnId: string;
     private readonly selectionColumnWidth: number;
     private readonly selectedRowIds = new Set<RowId>();
@@ -65,6 +70,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         this.showHeaderCheckbox = options.showHeaderCheckbox ?? false;
         this.isRowSelectable = options.isRowSelectable ?? (() => true);
         this.checkboxRenderer = options.checkboxRenderer ?? defaultCheckboxRenderer;
+        this.onSelectionChange = options.onSelectionChange;
         this.selectionColumnId = options.selectionColumnId ?? CHECKBOX_COLUMN_DEFAULT_ID;
         this.selectionColumnWidth = options.selectionColumnWidth ?? 44;
     }
@@ -121,8 +127,11 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         this.applySelection(rowId, index, modifiers);
     }
 
-    public getRowClass({ id }: RowRenderParams<T>): string | undefined {
-        return this.selectedRowIds.has(id) ? SELECTED_ROW_CLASS : undefined;
+    public getRowClass({ id, index, data }: RowRenderParams<T>): string | undefined {
+        const classes: string[] = [];
+        if (this.selectedRowIds.has(id)) classes.push(SELECTED_ROW_CLASS);
+        if (!this.isRowSelectable(data, index)) classes.push(UNSELECTABLE_ROW_CLASS);
+        return classes.length > 0 ? classes.join(" ") : undefined;
     }
 
     private handleRowClick(event: RowClickEvent<T>): void {
@@ -260,6 +269,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
     private refresh(): void {
         if (!this.api || this.api.isDestroyed()) return;
         this.api.setData(this.api.getState().data);
+        this.onSelectionChange?.(this.getSelectionState());
     }
 
     private validateSelection(): void {
@@ -289,6 +299,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         if (newOptions.showHeaderCheckbox !== undefined) (this as any).showHeaderCheckbox = newOptions.showHeaderCheckbox;
         if (newOptions.isRowSelectable !== undefined) (this as any).isRowSelectable = newOptions.isRowSelectable;
         if (newOptions.checkboxRenderer !== undefined) (this as any).checkboxRenderer = newOptions.checkboxRenderer;
+        if (newOptions.onSelectionChange !== undefined) this.onSelectionChange = newOptions.onSelectionChange;
 
         this.updateColumns();
         this.validateSelection();

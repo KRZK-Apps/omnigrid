@@ -2,6 +2,7 @@
 
 The default OmniGrid color theme. It provides both light colors and a `.dark`
 variant, so the same theme works with class-based light/dark mode switches.
+It also sets the theme-specific accent color for SelectionPlugin checkboxes.
 
 ## Usage
 

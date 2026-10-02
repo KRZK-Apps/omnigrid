@@ -72,5 +72,6 @@ describe("contentToReactNode", () => {
         });
 
         expect(html).toContain('type="checkbox"');
+        expect(html).toContain('class="omnigrid-checkbox"');
     });
 });
