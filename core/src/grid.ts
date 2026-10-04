@@ -1,5 +1,6 @@
 import { flattenColumns, getColumnGroups } from "./columns";
 import { EventBus } from "./events";
+import { IconRegistry } from "./icons";
 import { SlotManager } from "./slots";
 import { Store } from "./store";
 import type {
@@ -28,6 +29,7 @@ export class Grid<T> implements GridApi<T> {
     private readonly dataProcessors = new Set<DataProcessor<T>>();
     private readonly resolveRowId: NonNullable<GridOptions<T>["getRowId"]>;
     public readonly slots: SlotManager<T>;
+    public readonly icons = new IconRegistry<T>();
     private processedDataCache: T[] | null = null;
     private revision = 0;
     private destroyed = false;

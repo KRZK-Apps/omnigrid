@@ -136,25 +136,93 @@
     align-items: center;
 }
 
-/* Headless pager (PaginationPlugin). */
-.omnigrid-pagination {
+/* Reusable controls for slot-based plugin widgets. */
+.omnigrid-control-bar {
     align-items: center;
     display: flex;
-    gap: 8px;
+    gap: 24px;
 }
 
-.omnigrid-pagination-btn {
-    background: var(--omnigrid-button-background);
-    border: 1px solid var(--omnigrid-button-border);
-    border-radius: 4px;
-    color: var(--omnigrid-button-color);
+.omnigrid-control-group {
+    align-items: center;
+    display: inline-flex;
+    gap: 4px;
+}
+
+.omnigrid-popup-control {
+    position: relative;
+}
+
+.omnigrid-control-button,
+.omnigrid-popup-option {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
     cursor: pointer;
-    font-size: 12px;
-    line-height: 1.4;
-    padding: 3px 10px;
 }
 
-.omnigrid-pagination-btn:disabled {
+.omnigrid-control-button {
+    white-space: nowrap;
+}
+
+.omnigrid-popup-menu {
+    background: var(--omnigrid-grid-background, #fff);
+    border: 1px solid var(--omnigrid-grid-border, #ccc);
+    border-radius: 4px;
+    bottom: calc(100% + 6px);
+    display: flex;
+    flex-direction: column;
+    left: 0;
+    min-width: 100%;
+    padding: 4px;
+    position: absolute;
+    z-index: 10;
+}
+
+.omnigrid-popup-option {
+    padding: 4px 8px;
+    text-align: left;
+}
+
+.omnigrid-popup-option:hover,
+.omnigrid-popup-option[aria-selected="true"] {
+    background: var(--omnigrid-cell-hover-background, #eee);
+}
+
+.omnigrid-number-input {
+    background: var(--omnigrid-grid-background, #fff);
+    border: 1px solid var(--omnigrid-grid-border, #ccc);
+    border-radius: 3px;
+    color: var(--omnigrid-cell-color, currentColor);
+    font: inherit;
+    padding: 2px 4px;
+}
+
+.omnigrid-icon {
+    display: block;
+    flex: 0 0 auto;
+}
+
+.omnigrid-icon-button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 3px;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    justify-content: center;
+    line-height: 1;
+    padding: 4px;
+}
+
+.omnigrid-icon-button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 1px;
+}
+
+.omnigrid-icon-button:disabled {
     cursor: default;
     opacity: 0.5;
 }

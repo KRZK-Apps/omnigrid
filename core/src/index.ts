@@ -1,5 +1,7 @@
 export { DomPool } from "./dom-pool";
 export { EventBus } from "./events";
+export { IconRegistry } from "./icons";
+export type { IconDefinition, IconName } from "./icons";
 export { Grid } from "./grid";
 export { Grid as GridCore } from "./grid";
 export { SlotManager } from "./slots";
@@ -39,6 +41,7 @@ export type {
     SlotMountOptions,
     SlotName,
     SlotNodeContent,
+    SlotNodeEvent,
     SlotNodeEventName,
     SlotPosition,
     SlotProvider,

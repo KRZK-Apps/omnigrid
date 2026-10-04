@@ -66,6 +66,8 @@ const SLOT_NODE_ATTRS: Record<string, string> = {
     readonly: "readOnly",
 };
 
+const VOID_TAGS = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
+
 function slotNodeToReact<T>(node: SlotNodeContent<T>, bridge: ContentBridge<T>): ReactNode {
     const context = bridge.context();
     const props: Record<string, unknown> = {};
@@ -82,12 +84,19 @@ function slotNodeToReact<T>(node: SlotNodeContent<T>, bridge: ContentBridge<T>):
     for (const [eventName, handler] of Object.entries(node.on ?? {})) {
         const reactEvent = SLOT_NODE_EVENTS[eventName];
         if (!reactEvent || !handler) continue;
-        props[reactEvent] = (nativeEvent: { preventDefault: () => void; stopPropagation: () => void }) => {
-            nativeEvent.preventDefault();
+        props[reactEvent] = (nativeEvent: {
+            preventDefault: () => void;
+            stopPropagation: () => void;
+            key?: string;
+            currentTarget: { value?: string };
+        }) => {
+            if (eventName === "click") nativeEvent.preventDefault();
             nativeEvent.stopPropagation();
-            handler(context);
+            handler(context, { value: nativeEvent.currentTarget.value, key: nativeEvent.key });
         };
     }
+
+    if (VOID_TAGS.has(node.tag)) return createElement(node.tag, props);
 
     const children = (node.children ?? []).map((child, index) => {
         const rendered = contentToReactNode(child, bridge);

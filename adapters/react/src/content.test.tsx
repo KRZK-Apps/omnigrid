@@ -1,5 +1,6 @@
 import { Fragment, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ContentBridge } from "./content";
 import { contentToReactNode } from "./content";
@@ -21,15 +22,15 @@ describe("contentToReactNode", () => {
         const html = render({
             type: "node",
             tag: "div",
-            attrs: { class: "omnigrid-pagination" },
+            attrs: { class: "omnigrid-control-bar" },
             children: [
-                { type: "node", tag: "button", attrs: { class: "omnigrid-pagination-btn" }, on: { click: () => {} }, children: ["Previous"] },
+                { type: "node", tag: "button", attrs: { class: "omnigrid-icon-button" }, on: { click: () => {} }, children: ["Previous"] },
                 { type: "html", html: "Page <b>1</b> of 3" },
-                { type: "node", tag: "button", attrs: { class: "omnigrid-pagination-btn" }, on: { click: () => {} }, children: ["Next"] },
+                { type: "node", tag: "button", attrs: { class: "omnigrid-icon-button" }, on: { click: () => {} }, children: ["Next"] },
             ],
         });
 
-        expect(html).toContain("omnigrid-pagination");
+        expect(html).toContain("omnigrid-control-bar");
         expect(html).toContain("Previous");
         expect(html).toContain("Next");
         expect(html).toContain("<b>1</b>");
@@ -73,5 +74,34 @@ describe("contentToReactNode", () => {
 
         expect(html).toContain('type="checkbox"');
         expect(html).toContain('class="omnigrid-checkbox"');
+    });
+
+    it("forwards values and keyboard keys to slot node handlers", () => {
+        const onChange = vi.fn();
+        const element = contentToReactNode<Row>(
+            { type: "node", tag: "select", on: { change: onChange } },
+            bridge(),
+        ) as { props: { onChange: (event: unknown) => void } };
+
+        element.props.onChange({
+            preventDefault: vi.fn(),
+            stopPropagation: vi.fn(),
+            key: "Enter",
+            currentTarget: { value: "100" },
+        });
+
+        expect(onChange).toHaveBeenCalledWith(expect.anything(), { value: "100", key: "Enter" });
+    });
+
+    it("renders void slot nodes without passing children", () => {
+        expect(() =>
+            render({
+                type: "node",
+                tag: "input",
+                attrs: { type: "number", value: 2 },
+                children: ["must not be rendered"],
+            }),
+        ).not.toThrow();
+        expect(render({ type: "node", tag: "input", attrs: { type: "number", value: 2 } })).toContain('<input type="number"');
     });
 });

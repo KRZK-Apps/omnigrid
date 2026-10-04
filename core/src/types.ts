@@ -1,4 +1,5 @@
 import type { SlotManager } from "./slots";
+import type { IconRegistry } from "./icons";
 
 export type RowId = string | number;
 export type SortDirection = "asc" | "desc";
@@ -270,6 +271,11 @@ export type SlotName = "top" | "bottom" | "left" | "right";
 export type SlotPosition = "start" | "center" | "end";
 export type SlotNodeEventName = "click" | "change" | "keydown";
 
+export interface SlotNodeEvent {
+    value?: string;
+    key?: string;
+}
+
 /**
  * Context passed to the slot content provider. Headless: the plugin
  * works only with the core API and state — no DOM or framework code.
@@ -295,7 +301,7 @@ export interface SlotNodeContent<T> {
     type: "node";
     tag: string;
     attrs?: Record<string, string | number | boolean | undefined>;
-    on?: Partial<Record<SlotNodeEventName, (context: SlotRenderContext<T>) => void>>;
+    on?: Partial<Record<SlotNodeEventName, (context: SlotRenderContext<T>, event: SlotNodeEvent) => void>>;
     children?: SlotContent[];
 }
 
@@ -363,6 +369,7 @@ export interface GridApi<T> {
     rowClick(row: RowClickEvent<T>): void;
     rowHover(row: RowHoverEvent<T>): void;
     readonly slots: SlotManager<T>;
+    readonly icons: IconRegistry<T>;
     getSlotMounts(slot: SlotName): SlotMount<T>[];
     /** Monotonic counter for structural changes (refresh / data / columns). */
     getRevision(): number;
