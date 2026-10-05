@@ -264,11 +264,26 @@ export interface GridPlugin<T> {
 }
 
 /* ------------------------------------------------------------------ */
-/* Slot Architecture — panels where plugins mount their widgets       */
+/* Slot Architecture — blocks where plugins mount their widgets       */
 /* ------------------------------------------------------------------ */
 
 export type SlotName = "top" | "bottom" | "left" | "right";
 export type SlotPosition = "start" | "center" | "end";
+
+/**
+ * Placement of a single UI block that a plugin mounts into a slot.
+ *
+ * Generic over `Name` so every plugin can restrict the accepted block names,
+ * e.g. `BlockConfig<"rowInfo" | "pageSize" | "navigation">` in the pagination
+ * plugin, while still being able to target any slot / position.
+ */
+export interface BlockConfig<Name extends string = string> {
+    name: Name;
+    slot?: SlotName;
+    position?: SlotPosition;
+    priority?: number;
+}
+
 export type SlotNodeEventName = "click" | "change" | "keydown";
 
 export interface SlotNodeEvent {

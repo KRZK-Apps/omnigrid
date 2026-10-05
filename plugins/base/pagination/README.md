@@ -4,7 +4,8 @@ Headless pagination plugin for OmniGrid. Mounts a pager into the bottom slot.
 
 ## What it provides
 
-- Client-side pagination with configurable page sizes
+- Client-side pagination with configurable page sizes and automatic viewport-based sizing
+- Server-side pagination that requests page changes without slicing supplied data
 - Pager component rendered into the bottom slot
 - API to navigate pages, set page size, and read current pagination state
 - Accessible icon-only first, previous, next, and last page controls
@@ -14,11 +15,34 @@ Headless pagination plugin for OmniGrid. Mounts a pager into the bottom slot.
 ## Usage
 
 ```ts
-import { paginationPlugin } from "@omnigrid/pagination-plugin";
+import { PaginationPlugin } from "@omnigrid/pagination-plugin";
 
 const grid = new Grid({
-  plugins: [paginationPlugin({ pageSize: 50 })],
+  plugins: [new PaginationPlugin({ pageSize: 50 })],
   // ...
+});
+```
+
+Set `pageSize: 0` to automatically fit whole rows into the grid's row area.
+Auto subtracts the leaf header and all visible column-group header rows from
+the viewport height before calculating the page size, with a minimum of one
+row. The page-size selector always includes `Auto` as its first option;
+`pageSizes` continues to configure the numeric options.
+
+For server-side pagination, set `mode: "server"` and provide `onChange`. The
+plugin leaves data unchanged and calls `onChange({ page, pageSize })` when the
+requested page or size changes. Provide the server's total row count with
+`totalRows` and update it as responses arrive with `setTotalRows(totalRows)`.
+Pass the server response's current page slice to the grid separately:
+when `pageSize` is `0` (`Auto`), the callback receives the calculated number of
+rows that fit in the viewport.
+
+```ts
+const pagination = new PaginationPlugin({
+  mode: "server",
+  pageSize: 50,
+  totalRows: 1200,
+  onChange: ({ page, pageSize }) => fetchPage(page, pageSize),
 });
 ```
 
@@ -27,7 +51,7 @@ Pagination controls use the core SVG icon registry by default (`chevron-first`,
 through the plugin options with a declarative slot node or a factory:
 
 ```ts
-paginationPlugin({
+new PaginationPlugin({
   icons: {
     prev: {
       type: "node",
@@ -37,17 +61,17 @@ paginationPlugin({
     },
   },
   pageSizes: [20, 50, 100],
-  panels: ["rowInfo", "navigation", "pageSize"],
+  blocks: ["rowInfo", "navigation", "pageSize"],
   quickJump: true,
   pageInputCharacters: 2,
 });
 ```
 
-`panels` selects and orders the visible sections; by default it is
-`["navigation"]`. The available panels are `"rowInfo"`, `"pageSize"`, and
+`blocks` selects and orders the visible sections; by default it is
+`["navigation"]`. The available blocks are `"rowInfo"`, `"pageSize"`, and
 `"navigation"`. The default page-size choices are `[20, 50, 100]`. The size
 menu opens above its control. A custom
-`pageSize` not in `pageSizes` is added to the choices automatically. The row
+numeric `pageSize` not in `pageSizes` is added to the choices automatically. The row
 range message can be localized with `labels.rowInfo(from, to, totalRows)`, and
 the selector labels with `labels.pageSizeLabel` and `labels.pageSizesLabel`.
 Quick page navigation is disabled by default; set `quickJump: true` to show a
@@ -56,7 +80,8 @@ page-number input. Its width is controlled by `pageInputCharacters` (default
 the current page and total pages use the `labels.pageInfo` formatter. The
 quick-jump counter text can be localized with `labels.pageCount(totalPages)`.
 The page-size control is labeled `Page Size:` by default. `setPageSize(size)`
-changes the page size and returns to the first page.
+changes the page size and returns to the first page; use `setPageSize(0)` for
+automatic sizing.
 
 The grid also exposes `api.icons` for registering/replacing shared core icons.
 The core registry includes common chevrons and up/down sorting arrows, and has

@@ -101,21 +101,79 @@
 
 .omnigrid-slot {
     display: flex;
+    box-sizing: border-box;
 }
 
 .omnigrid-slot-top,
 .omnigrid-slot-bottom {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
     width: 100%;
     padding: 4px 8px;
     background: var(--omnigrid-slot-background);
 }
 
+.omnigrid-slot-top .omnigrid-slot-pos-start,
+.omnigrid-slot-bottom .omnigrid-slot-pos-start {
+    flex: 1 1 0;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.omnigrid-slot-top .omnigrid-slot-pos-center,
+.omnigrid-slot-bottom .omnigrid-slot-pos-center {
+    flex: 1 1 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.omnigrid-slot-top .omnigrid-slot-pos-end,
+.omnigrid-slot-bottom .omnigrid-slot-pos-end {
+    flex: 1 1 0;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
 .omnigrid-slot-left,
 .omnigrid-slot-right {
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
     flex-shrink: 0;
-    padding: 0 8px;
+    padding: 8px 4px;
     background: var(--omnigrid-slot-background);
     align-self: stretch;
+}
+
+.omnigrid-slot-left .omnigrid-slot-pos-start,
+.omnigrid-slot-right .omnigrid-slot-pos-start {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.omnigrid-slot-left .omnigrid-slot-pos-center,
+.omnigrid-slot-right .omnigrid-slot-pos-center {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.omnigrid-slot-left .omnigrid-slot-pos-end,
+.omnigrid-slot-right .omnigrid-slot-pos-end {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
 }
 
 .omnigrid-slot-item-group {
@@ -123,12 +181,9 @@
     gap: 8px;
 }
 
-.omnigrid-slot-pos-center {
-    justify-content: center;
-}
-
-.omnigrid-slot-pos-end {
-    justify-content: flex-end;
+.omnigrid-slot-left .omnigrid-slot-item-group,
+.omnigrid-slot-right .omnigrid-slot-item-group {
+    flex-direction: column;
 }
 
 .omnigrid-slot-item {

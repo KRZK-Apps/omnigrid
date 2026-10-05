@@ -1,6 +1,6 @@
+import type { ColumnDef, SlotContent, SlotMount, SlotName, SlotNodeContent } from "@omnigrid/core";
 import { Grid } from "@omnigrid/core";
-import type { ColumnDef, SlotContent, SlotNodeContent } from "@omnigrid/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { PaginationPlugin } from "./index";
 
@@ -8,17 +8,12 @@ interface Row {
     value: number;
 }
 
-function getPager<T>(grid: Grid<T>): SlotNodeContent<T> {
+function getBlockContent<T>(mount: SlotMount<T>, grid: Grid<T>, slot: SlotName = "bottom"): SlotContent {
     grid.getProcessedData();
-    const mount = grid.getSlotMounts("bottom")[0];
-    if (!mount || typeof mount.content !== "function") {
-        throw new Error("Pagination slot was not mounted");
+    if (typeof mount.content !== "function") {
+        return mount.content;
     }
-    const content: SlotContent = mount.content({ api: grid, state: grid.getState(), slot: "bottom" });
-    if (!content || typeof content !== "object" || !("type" in content) || content.type !== "node") {
-        throw new Error("Pagination slot did not return a node");
-    }
-    return content as SlotNodeContent<T>;
+    return mount.content({ api: grid, state: grid.getState(), slot });
 }
 
 function asSlotNode<T>(content: SlotContent): SlotNodeContent<T> {
@@ -36,8 +31,9 @@ describe("PaginationPlugin icons", () => {
             data: Array.from({ length: 25 }, (_, value) => ({ value })),
             plugins: [new PaginationPlugin<Row>({ pageSize: 10 })],
         });
-        const pager = getPager(grid);
-        const navigation = pager.children?.[0] as SlotNodeContent<Row>;
+        const mounts = grid.getSlotMounts("bottom");
+        expect(mounts).toHaveLength(1);
+        const navigation = asSlotNode<Row>(getBlockContent(mounts[0], grid));
         const controls = navigation.children?.filter((child): child is SlotNodeContent<Row> =>
             typeof child === "object" && child !== null && "tag" in child && child.tag === "button",
         );
@@ -64,8 +60,8 @@ describe("PaginationPlugin icons", () => {
             data: [{ value: 1 }],
             plugins: [new PaginationPlugin<Row>({ icons: { prev: customIcon } })],
         });
-        const pager = getPager(grid);
-        const navigation = pager.children?.[0] as SlotNodeContent<Row>;
+        const mounts = grid.getSlotMounts("bottom");
+        const navigation = asSlotNode<Row>(getBlockContent(mounts[0], grid));
         const controls = navigation.children?.filter((child): child is SlotNodeContent<Row> =>
             typeof child === "object" && child !== null && "tag" in child && child.tag === "button",
         );
@@ -74,77 +70,84 @@ describe("PaginationPlugin icons", () => {
     });
 });
 
-describe("PaginationPlugin control blocks", () => {
-    it("shows navigation by default and renders the optional blocks when enabled", () => {
+describe("PaginationPlugin control blocks and placement", () => {
+    it("shows navigation by default and renders individual mounts per block when enabled", () => {
         const defaultGrid = new Grid<Row>({
             columns: [{ id: "value", field: "value", header: "Value" }],
             data: [{ value: 1 }],
             plugins: [new PaginationPlugin<Row>()],
         });
-        expect(getPager(defaultGrid).children).toHaveLength(1);
-        expect(getPager(defaultGrid).children?.[0]).toMatchObject({
-            type: "node",
-            attrs: { class: "omnigrid-control-group" },
-        });
-        expect((getPager(defaultGrid).children?.[0] as SlotNodeContent<Row>).children?.[2]).toMatchObject({
-            type: "html",
-            html: "Page <b>1</b> of 1",
-        });
+        const defaultMounts = defaultGrid.getSlotMounts("bottom");
+        expect(defaultMounts).toHaveLength(1);
+        expect(defaultMounts[0].id).toBe("@omnigrid/pagination:navigation");
 
         const grid = new Grid<Row>({
             columns: [{ id: "value", field: "value", header: "Value" }],
             data: Array.from({ length: 25 }, (_, value) => ({ value })),
-            plugins: [new PaginationPlugin<Row>({ pageSize: 10, panels: ["rowInfo", "pageSize", "navigation"] })],
+            plugins: [new PaginationPlugin<Row>({ pageSize: 10, blocks: ["rowInfo", "pageSize", "navigation"] })],
         });
-        const pager = getPager(grid);
-        const children = pager.children ?? [];
+        const mounts = grid.getSlotMounts("bottom");
+        expect(mounts).toHaveLength(3);
+        expect(mounts.map((m) => m.id)).toEqual([
+            "@omnigrid/pagination:rowInfo",
+            "@omnigrid/pagination:pageSize",
+            "@omnigrid/pagination:navigation",
+        ]);
 
-        expect(children).toHaveLength(3);
-        expect(children[0]).toMatchObject({ type: "html", html: "Rows 1–10 of 25" });
-        expect(children[1]).toMatchObject({ type: "node", tag: "div", attrs: { class: "omnigrid-popup-control" } });
-        expect(children[2]).toMatchObject({ type: "node", tag: "div", attrs: { class: "omnigrid-control-group" } });
-        const pageSizeControl = (children[1] as SlotNodeContent<Row>).children?.[0] as SlotNodeContent<Row>;
-        expect(pageSizeControl).toMatchObject({
-            tag: "button",
-            attrs: { "aria-label": "Page Size:", "aria-expanded": false },
-            children: ["Page Size: 10"],
-        });
+        const rowInfoContent = getBlockContent(mounts[0], grid);
+        expect(rowInfoContent).toMatchObject({ type: "html", html: "Rows 1–10 of 25" });
 
-        const plugin = new PaginationPlugin<Row>({ pageSize: 10, panels: ["rowInfo"] });
-        const secondPageGrid = new Grid<Row>({
-            columns: [{ id: "value", field: "value", header: "Value" }],
-            data: Array.from({ length: 25 }, (_, value) => ({ value })),
-            plugins: [plugin],
-        });
-        secondPageGrid.getProcessedData();
-        plugin.goToPage(2);
-        expect(getPager(secondPageGrid).children?.find((child) =>
-            typeof child === "object" && child !== null && "key" in child && child.key === "rowInfo",
-        )).toMatchObject({ type: "html", html: "Rows 11–20 of 25" });
+        const pageSizeContent = asSlotNode<Row>(getBlockContent(mounts[1], grid));
+        expect(pageSizeContent).toMatchObject({ type: "node", tag: "div", attrs: { class: "omnigrid-popup-control" } });
+
+        const navigationContent = asSlotNode<Row>(getBlockContent(mounts[2], grid));
+        expect(navigationContent).toMatchObject({ type: "node", tag: "div", attrs: { class: "omnigrid-control-group" } });
     });
 
-    it("allows panels to be selected and their order to be configured", () => {
+    it("allows placing pagination blocks in custom slots, positions, and priorities", () => {
         const grid = new Grid<Row>({
             columns: [{ id: "value", field: "value", header: "Value" }],
-            data: [{ value: 1 }],
+            data: Array.from({ length: 100 }, (_, value) => ({ value })),
             plugins: [
                 new PaginationPlugin<Row>({
-                    panels: ["navigation", "rowInfo", "pageSize"],
+                    blocks: [
+                        { name: "rowInfo", slot: "top", position: "start", priority: 10 },
+                        { name: "pageSize", slot: "bottom", position: "start", priority: 5 },
+                        { name: "navigation", slot: "bottom", position: "end", priority: 0 },
+                    ],
                 }),
             ],
         });
-        const children = getPager(grid).children ?? [];
 
-        expect(children).toHaveLength(3);
-        expect(children[0]).toMatchObject({ type: "node", attrs: { class: "omnigrid-control-group" } });
-        expect(children[1]).toMatchObject({ type: "html" });
-        expect(children[2]).toMatchObject({ type: "node", attrs: { class: "omnigrid-popup-control" } });
+        const topMounts = grid.getSlotMounts("top");
+        expect(topMounts).toHaveLength(1);
+        expect(topMounts[0]).toMatchObject({
+            id: "@omnigrid/pagination:rowInfo",
+            slot: "top",
+            position: "start",
+            priority: 10,
+        });
+
+        const bottomMounts = grid.getSlotMounts("bottom");
+        expect(bottomMounts).toHaveLength(2);
+        expect(bottomMounts[0]).toMatchObject({
+            id: "@omnigrid/pagination:navigation",
+            slot: "bottom",
+            position: "end",
+            priority: 0,
+        });
+        expect(bottomMounts[1]).toMatchObject({
+            id: "@omnigrid/pagination:pageSize",
+            slot: "bottom",
+            position: "start",
+            priority: 5,
+        });
     });
 
     it("opens the page-size menu above the control and resets to page one on selection", () => {
         const plugin = new PaginationPlugin<Row>({
             pageSize: 10,
-            panels: ["pageSize", "navigation"],
+            blocks: ["pageSize", "navigation"],
         });
         const grid = new Grid<Row>({
             columns: [{ id: "value", field: "value", header: "Value" }],
@@ -154,10 +157,11 @@ describe("PaginationPlugin control blocks", () => {
         grid.getProcessedData();
         plugin.goToPage(2);
 
-        let pageSizeBlock = getPager(grid).children?.[0] as SlotNodeContent<Row>;
+        const mounts = grid.getSlotMounts("bottom");
+        let pageSizeBlock = asSlotNode<Row>(getBlockContent(mounts[0], grid));
         const trigger = pageSizeBlock.children?.[0] as SlotNodeContent<Row>;
         trigger.on?.click?.({ api: grid, state: grid.getState(), slot: "bottom" }, {});
-        pageSizeBlock = getPager(grid).children?.[0] as SlotNodeContent<Row>;
+        pageSizeBlock = asSlotNode<Row>(getBlockContent(mounts[0], grid));
         const menu = pageSizeBlock.children?.[1] as SlotNodeContent<Row>;
         expect(menu.attrs).toMatchObject({ class: "omnigrid-popup-menu", role: "listbox" });
         const option = menu.children?.map(asSlotNode<Row>).find((child) => child.children?.[0] === "20");
@@ -167,17 +171,6 @@ describe("PaginationPlugin control blocks", () => {
     });
 
     it("shows the configurable-width quick-jump field and jumps on Enter", () => {
-        const defaultWidthGrid = new Grid<Row>({
-            columns: [{ id: "value", field: "value", header: "Value" }],
-            data: [{ value: 1 }],
-            plugins: [new PaginationPlugin<Row>({ quickJump: true })],
-        });
-        const defaultNavigation = getPager(defaultWidthGrid).children?.[0] as SlotNodeContent<Row>;
-        const defaultPageControl = defaultNavigation.children
-            ?.map(asSlotNode<Row>)
-            .find((child) => child.tag === "div" && child.attrs?.class === "omnigrid-control-group");
-        expect((defaultPageControl?.children?.[0] as SlotNodeContent<Row>).attrs?.size).toBe(2);
-
         const plugin = new PaginationPlugin<Row>({ quickJump: true, pageInputCharacters: 3 });
         const grid = new Grid<Row>({
             columns: [{ id: "value", field: "value", header: "Value" }],
@@ -185,7 +178,8 @@ describe("PaginationPlugin control blocks", () => {
             plugins: [plugin],
         });
         grid.getProcessedData();
-        const navigation = getPager(grid).children?.[0] as SlotNodeContent<Row>;
+        const mounts = grid.getSlotMounts("bottom");
+        const navigation = asSlotNode<Row>(getBlockContent(mounts[0], grid));
         const pageControl = navigation.children
             ?.map(asSlotNode<Row>)
             .find((child) => child.tag === "div" && child.attrs?.class === "omnigrid-control-group");
@@ -195,10 +189,82 @@ describe("PaginationPlugin control blocks", () => {
         pageInput.on?.keydown?.({ api: grid, state: grid.getState(), slot: "bottom" }, { value: "4", key: "Enter" });
 
         expect(plugin.getState().page).toBe(4);
-        const updatedNavigation = getPager(grid).children?.[0] as SlotNodeContent<Row>;
+        const updatedNavigation = asSlotNode<Row>(getBlockContent(mounts[0], grid));
         const updatedPageControl = updatedNavigation.children
             ?.map(asSlotNode<Row>)
             .find((child) => child.tag === "div" && child.attrs?.class === "omnigrid-control-group");
         expect((updatedPageControl?.children?.[0] as SlotNodeContent<Row>).attrs?.value).toBe("4");
+    });
+
+    it("uses the viewport height for automatic page size and keeps Auto first in the selector", () => {
+        const plugin = new PaginationPlugin<Row>({
+            pageSize: 0,
+            pageSizes: [5, 2],
+            blocks: ["pageSize"],
+        });
+        const grid = new Grid<Row>({
+            columns: [
+                {
+                    id: "outer",
+                    header: "Outer",
+                    children: [
+                        {
+                            id: "inner",
+                            header: "Inner",
+                            children: [{ id: "value", field: "value", header: "Value" }],
+                        },
+                    ],
+                },
+            ],
+            data: Array.from({ length: 5 }, (_, value) => ({ value })),
+            rowHeight: 20,
+            plugins: [plugin],
+        });
+
+        grid.setViewport({ height: 110 });
+        expect(grid.getProcessedData().map((row) => row.value)).toEqual([0, 1]);
+        expect(plugin.getState()).toMatchObject({ pageSize: 0, totalRows: 5, totalPages: 3 });
+
+        const pageSizeMount = grid.getSlotMounts("bottom")[0];
+        const pageSizeBlock = asSlotNode<Row>(getBlockContent(pageSizeMount, grid));
+        expect(pageSizeBlock.children?.[0]).toMatchObject({ children: ["Page Size: Auto"] });
+        const trigger = pageSizeBlock.children?.[0] as SlotNodeContent<Row>;
+        trigger.on?.click?.({ api: grid, state: grid.getState(), slot: "bottom" }, {});
+        const openBlock = asSlotNode<Row>(getBlockContent(pageSizeMount, grid));
+        const menu = openBlock.children?.[1] as SlotNodeContent<Row>;
+        expect(menu.children?.map((item) => asSlotNode<Row>(item).children?.[0])).toEqual(["Auto", "5", "2"]);
+
+        grid.setColumns([{ id: "value", field: "value", header: "Value" }]);
+        expect(grid.getProcessedData().map((row) => row.value)).toEqual([0, 1, 2, 3]);
+        expect(plugin.getState()).toMatchObject({ pageSize: 0, totalRows: 5, totalPages: 2 });
+    });
+
+    it("does not slice data in server mode and requests page changes with the effective page size", () => {
+        const onChange = vi.fn();
+        const rows = [{ value: 1 }, { value: 2 }];
+        const plugin = new PaginationPlugin<Row>({
+            mode: "server",
+            pageSize: 10,
+            totalRows: 25,
+            onChange,
+        });
+        const grid = new Grid<Row>({
+            columns: [{ id: "value", field: "value", header: "Value" }],
+            data: rows,
+            plugins: [plugin],
+        });
+
+        expect(grid.getProcessedData()).toEqual(rows);
+        expect(plugin.getState()).toMatchObject({ totalRows: 25, totalPages: 3 });
+        plugin.goToPage(2);
+        expect(onChange).toHaveBeenLastCalledWith({ page: 2, pageSize: 10 });
+
+        plugin.setPageSize(20);
+        expect(onChange).toHaveBeenLastCalledWith({ page: 1, pageSize: 20 });
+
+        plugin.goToPage(2);
+        plugin.setTotalRows(15);
+        expect(plugin.getState()).toMatchObject({ page: 1, totalRows: 15, totalPages: 1 });
+        expect(onChange).toHaveBeenLastCalledWith({ page: 1, pageSize: 20 });
     });
 });

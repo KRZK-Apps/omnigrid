@@ -7,6 +7,7 @@ export { Grid as GridCore } from "./grid";
 export { SlotManager } from "./slots";
 export { Store } from "./store";
 export type {
+    BlockConfig,
     CellAlign,
     CellRenderParams,
     CellClassRules,
