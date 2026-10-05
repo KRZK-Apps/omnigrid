@@ -608,7 +608,12 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                             <span className="omnigrid-header-tools">
                                 {item.column.sortState && (
                                     <span className="omnigrid-sort-indicator" aria-hidden="true">
-                                        {item.column.sortState === "asc" ? "▲" : "▼"}
+                                        {contentToReactNode(
+                                            item.column.sortState === "asc"
+                                                ? grid.icons.get("arrow-up")
+                                                : grid.icons.get("arrow-down"),
+                                            { registry: slotComponentsRef.current, context: buildRenderContext },
+                                        )}
                                     </span>
                                 )}
                             </span>
