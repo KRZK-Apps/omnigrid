@@ -205,6 +205,12 @@
 }
 
 .omnigrid-popup-control {
+    align-items: center;
+    display: inline-flex;
+    gap: 6px;
+}
+
+.omnigrid-popup-anchor {
     position: relative;
 }
 
@@ -218,7 +224,31 @@
 }
 
 .omnigrid-control-button {
+    align-items: center;
+    border: 1px solid var(--omnigrid-grid-border, #ccc);
+    border-radius: 3px;
+    display: inline-flex;
+    gap: 8px;
+    padding: 3px 8px;
     white-space: nowrap;
+}
+
+.omnigrid-control-button::after {
+    border-bottom: 1px solid currentColor;
+    border-right: 1px solid currentColor;
+    content: "";
+    height: 5px;
+    transform: translateY(-1px) rotate(45deg);
+    width: 5px;
+}
+
+.omnigrid-control-button:hover {
+    background: var(--omnigrid-cell-hover-background, #eee);
+}
+
+.omnigrid-control-button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 1px;
 }
 
 .omnigrid-popup-menu {
@@ -229,10 +259,15 @@
     display: flex;
     flex-direction: column;
     left: 0;
-    min-width: 100%;
+    min-width: 50px;
     padding: 4px;
     position: absolute;
     z-index: 10;
+}
+
+.omnigrid-popup-menu-below {
+    bottom: auto;
+    top: calc(100% + 6px);
 }
 
 .omnigrid-popup-option {

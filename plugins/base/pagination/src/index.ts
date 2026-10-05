@@ -6,7 +6,6 @@ import type {
     IconDefinition,
     SlotContent,
     SlotMount,
-    SlotName,
     SlotNodeContent,
     SlotNodeEvent,
     SlotPosition,
@@ -39,9 +38,12 @@ export type PaginationBlockName = "rowInfo" | "pageSize" | "navigation";
  * Placement of a pagination block inside a slot. Based on the generic core
  * `BlockConfig`, restricted to the blocks this plugin can render.
  */
-export type PaginationBlockConfig = BlockConfig<PaginationBlockName>;
+export type PaginationBlockConfig = Omit<BlockConfig<PaginationBlockName>, "slot"> & {
+    slot?: PaginationSlotName;
+};
 
 export type PaginationBlockOption = PaginationBlockName | PaginationBlockConfig;
+export type PaginationSlotName = "top" | "bottom";
 
 export interface PaginationPluginOptions<T> {
     pageSize?: number;
@@ -50,7 +52,7 @@ export interface PaginationPluginOptions<T> {
     totalRows?: number;
     onChange?: (params: { page: number; pageSize: number }) => void;
     initialPage?: number;
-    slot?: SlotName;
+    slot?: PaginationSlotName;
     position?: SlotPosition;
     priority?: number;
     blocks?: PaginationBlockOption[];
@@ -117,6 +119,7 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
     private page: number;
     private pageSize: number;
     private readonly pageSizes: number[];
+    private readonly autoPageSizeEnabled: boolean;
     private totalRows = 0;
     private pageSizesOpen = false;
     private pageInputValue: string | undefined;
@@ -145,6 +148,7 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
         if (!Number.isInteger(this.pageSize) || this.pageSize < 0) {
             throw new Error("Pagination pageSize must be a non-negative integer");
         }
+        this.autoPageSizeEnabled = this.pageSize === 0;
         if (this.pageSize > 0 && !this.pageSizes.includes(this.pageSize)) {
             this.pageSizes.push(this.pageSize);
             this.pageSizes.sort((left, right) => left - right);
@@ -193,6 +197,9 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
         const blockNames = this.blockConfigs.map((config) => config.name);
         if (new Set(blockNames).size !== blockNames.length || blockNames.some((block) => !ALL_BLOCKS.includes(block))) {
             throw new Error("Pagination blocks must contain unique valid block names");
+        }
+        if (this.blockConfigs.some((config) => ["left", "right"].includes(config.slot ?? ""))) {
+            throw new Error("Pagination blocks can only be placed in the top or bottom slot");
         }
     }
 
@@ -264,6 +271,9 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
     }
 
     public setPageSize(pageSize: number): void {
+        if (pageSize === 0 && !this.autoPageSizeEnabled) {
+            throw new Error("Automatic pagination requires pageSize: 0 in the plugin options");
+        }
         if (pageSize !== 0 && !this.pageSizes.includes(pageSize)) {
             throw new Error(`Unsupported pagination page size: ${pageSize}`);
         }
@@ -368,43 +378,58 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
                 children: [
                     {
                         type: "node",
-                        tag: "button",
-                        attrs: {
-                            type: "button",
-                            class: "omnigrid-control-button",
-                            "aria-haspopup": "listbox",
-                            "aria-expanded": this.pageSizesOpen,
-                            "aria-label": this.labels.pageSizeLabel,
-                        },
-                        on: {
-                            click: () => {
-                                this.pageSizesOpen = !this.pageSizesOpen;
-                                if (this.api && !this.api.isDestroyed()) this.api.refresh();
-                            },
-                        },
-                        children: [`${this.labels.pageSizeLabel} ${state.pageSize === 0 ? "Auto" : state.pageSize}`],
+                        tag: "span",
+                        attrs: { class: "omnigrid-popup-label" },
+                        children: [this.labels.pageSizeLabel],
                     },
-                    ...(this.pageSizesOpen ? [{
-                        type: "node" as const,
+                    {
+                        type: "node",
                         tag: "div",
                         attrs: {
-                            class: "omnigrid-popup-menu",
-                            role: "listbox",
-                            "aria-label": this.labels.pageSizesLabel,
+                            class: "omnigrid-popup-anchor",
                         },
-                        children: [0, ...this.pageSizes].map((size) => ({
-                            type: "node" as const,
-                            tag: "button",
-                            attrs: {
-                                type: "button",
-                                class: "omnigrid-popup-option",
-                                role: "option",
-                                "aria-selected": size === state.pageSize,
+                        children: [
+                            {
+                                type: "node",
+                                tag: "button",
+                                attrs: {
+                                    type: "button",
+                                    class: "omnigrid-control-button",
+                                    "aria-haspopup": "listbox",
+                                    "aria-expanded": this.pageSizesOpen,
+                                    "aria-label": `${this.labels.pageSizeLabel} ${state.pageSize === 0 ? "Auto" : state.pageSize}`,
+                                },
+                                on: {
+                                    click: () => {
+                                        this.pageSizesOpen = !this.pageSizesOpen;
+                                        if (this.api && !this.api.isDestroyed()) this.api.refresh();
+                                    },
+                                },
+                                children: [state.pageSize === 0 ? "Auto" : String(state.pageSize)],
                             },
-                            on: { click: () => this.setPageSize(size) },
-                            children: [size === 0 ? "Auto" : String(size)],
-                        })),
-                    }] : []),
+                            ...(this.pageSizesOpen ? [{
+                                type: "node" as const,
+                                tag: "div",
+                                attrs: {
+                                    class: `omnigrid-popup-menu${context.slot === "top" ? " omnigrid-popup-menu-below" : ""}`,
+                                    role: "listbox",
+                                    "aria-label": this.labels.pageSizesLabel,
+                                },
+                                children: [...(this.autoPageSizeEnabled ? [0] : []), ...this.pageSizes].map((size) => ({
+                                    type: "node" as const,
+                                    tag: "button",
+                                    attrs: {
+                                        type: "button",
+                                        class: "omnigrid-popup-option",
+                                        role: "option",
+                                        "aria-selected": size === state.pageSize,
+                                    },
+                                    on: { click: () => this.setPageSize(size) },
+                                    children: [size === 0 ? "Auto" : String(size)],
+                                })),
+                            }] : []),
+                        ],
+                    },
                 ],
             };
         }

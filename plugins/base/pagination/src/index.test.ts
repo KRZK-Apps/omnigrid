@@ -144,7 +144,7 @@ describe("PaginationPlugin control blocks and placement", () => {
         });
     });
 
-    it("opens the page-size menu above the control and resets to page one on selection", () => {
+    it("opens the page-size menu above bottom controls and resets to page one on selection", () => {
         const plugin = new PaginationPlugin<Row>({
             pageSize: 10,
             blocks: ["pageSize", "navigation"],
@@ -159,15 +159,48 @@ describe("PaginationPlugin control blocks and placement", () => {
 
         const mounts = grid.getSlotMounts("bottom");
         let pageSizeBlock = asSlotNode<Row>(getBlockContent(mounts[0], grid));
-        const trigger = pageSizeBlock.children?.[0] as SlotNodeContent<Row>;
+        const triggerContainer = pageSizeBlock.children?.[1] as SlotNodeContent<Row>;
+        const trigger = triggerContainer.children?.[0] as SlotNodeContent<Row>;
         trigger.on?.click?.({ api: grid, state: grid.getState(), slot: "bottom" }, {});
         pageSizeBlock = asSlotNode<Row>(getBlockContent(mounts[0], grid));
-        const menu = pageSizeBlock.children?.[1] as SlotNodeContent<Row>;
+        const menu = (pageSizeBlock.children?.[1] as SlotNodeContent<Row>).children?.[1] as SlotNodeContent<Row>;
         expect(menu.attrs).toMatchObject({ class: "omnigrid-popup-menu", role: "listbox" });
+        expect(menu.children?.map((item) => asSlotNode<Row>(item).children?.[0])).not.toContain("Auto");
         const option = menu.children?.map(asSlotNode<Row>).find((child) => child.children?.[0] === "20");
         option?.on?.click?.({ api: grid, state: grid.getState(), slot: "bottom" }, {});
 
         expect(plugin.getState()).toMatchObject({ page: 1, pageSize: 20, totalPages: 2 });
+        expect(() => plugin.setPageSize(0)).toThrow("Automatic pagination requires pageSize: 0 in the plugin options");
+    });
+
+    it("opens the page-size menu below controls in the top slot", () => {
+        const plugin = new PaginationPlugin<Row>({ pageSize: 10, slot: "top", blocks: ["pageSize"] });
+        const grid = new Grid<Row>({
+            columns: [{ id: "value", field: "value", header: "Value" }],
+            data: Array.from({ length: 25 }, (_, value) => ({ value })),
+            plugins: [plugin],
+        });
+        const mount = grid.getSlotMounts("top")[0];
+        const closedMenu = asSlotNode<Row>(getBlockContent(mount, grid, "top"));
+        const anchor = closedMenu.children?.[1] as SlotNodeContent<Row>;
+        (anchor.children?.[0] as SlotNodeContent<Row>).on?.click?.(
+            { api: grid, state: grid.getState(), slot: "top" },
+            {},
+        );
+
+        const openAnchor = asSlotNode<Row>(getBlockContent(mount, grid, "top")).children?.[1] as SlotNodeContent<Row>;
+        const openMenu = openAnchor.children?.[1] as SlotNodeContent<Row>;
+        expect(openMenu.attrs).toMatchObject({
+            class: "omnigrid-popup-menu omnigrid-popup-menu-below",
+            role: "listbox",
+        });
+    });
+
+    it("rejects pagination blocks configured in a side slot", () => {
+        // @ts-expect-error Side slots are intentionally unavailable for pagination.
+        expect(() => new PaginationPlugin<Row>({ slot: "left" })).toThrow(
+            "Pagination blocks can only be placed in the top or bottom slot",
+        );
     });
 
     it("shows the configurable-width quick-jump field and jumps on Enter", () => {
@@ -227,11 +260,18 @@ describe("PaginationPlugin control blocks and placement", () => {
 
         const pageSizeMount = grid.getSlotMounts("bottom")[0];
         const pageSizeBlock = asSlotNode<Row>(getBlockContent(pageSizeMount, grid));
-        expect(pageSizeBlock.children?.[0]).toMatchObject({ children: ["Page Size: Auto"] });
-        const trigger = pageSizeBlock.children?.[0] as SlotNodeContent<Row>;
+        expect(pageSizeBlock.children?.[0]).toMatchObject({ tag: "span", children: ["Page Size:"] });
+        const pageSizeAnchor = pageSizeBlock.children?.[1] as SlotNodeContent<Row>;
+        expect(pageSizeAnchor.attrs).toMatchObject({ class: "omnigrid-popup-anchor" });
+        expect(pageSizeAnchor.children?.[0]).toMatchObject({
+            tag: "button",
+            attrs: { "aria-label": "Page Size: Auto" },
+            children: ["Auto"],
+        });
+        const trigger = pageSizeAnchor.children?.[0] as SlotNodeContent<Row>;
         trigger.on?.click?.({ api: grid, state: grid.getState(), slot: "bottom" }, {});
         const openBlock = asSlotNode<Row>(getBlockContent(pageSizeMount, grid));
-        const menu = openBlock.children?.[1] as SlotNodeContent<Row>;
+        const menu = (openBlock.children?.[1] as SlotNodeContent<Row>).children?.[1] as SlotNodeContent<Row>;
         expect(menu.children?.map((item) => asSlotNode<Row>(item).children?.[0])).toEqual(["Auto", "5", "2"]);
 
         grid.setColumns([{ id: "value", field: "value", header: "Value" }]);

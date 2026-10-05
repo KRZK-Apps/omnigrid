@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, type UIEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { CellRenderParams, ColumnLeafDef, GridOptions, RowRenderParams, RowStyle, SlotMount, SlotName, SlotPosition, SlotRenderContext } from "@omnigrid/core";
 import { DomPool } from "@omnigrid/core";
@@ -135,7 +135,6 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const buildRenderContext = useCallback(() => renderContext, [renderContext]);
 
     const autoHeight = style?.height === undefined;
-    const verticalScrollbarGutter = autoHeight ? "auto" : "stable";
     const rowHeight = grid.getState().rowHeight;
 
     // Column-group header stack: `headerRowCount` group rows (one per depth) above
@@ -161,6 +160,8 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
      */
 
     const measuredHeight = viewportData.totalHeight + headerHeight;
+    const hasVerticalOverflow = !autoHeight && measuredHeight > state.viewport.height;
+    const verticalScrollbarGutter = hasVerticalOverflow ? "stable" : "auto";
     const viewportStyle = { ...style, height: autoHeight ? measuredHeight : style?.height };
     const suppressRowHoverHighlight = options.suppressRowHoverHighlight ?? false;
     const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null].filter(Boolean).join(" ");
@@ -418,6 +419,13 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         measureViewport();
         return () => observer.disconnect();
     }, [grid, measureViewport]);
+
+    useLayoutEffect(() => {
+        if (!isMeasured || autoHeight) return;
+        // Gutter changes alter clientWidth; sync it before paint so columns
+        // cannot render underneath a newly visible vertical scrollbar.
+        measureViewport();
+    }, [autoHeight, hasVerticalOverflow, isMeasured, measureViewport]);
 
     /**
      * Sync the DomPool after every structural re-render.

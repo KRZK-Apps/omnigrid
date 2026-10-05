@@ -26,8 +26,9 @@ const grid = new Grid({
 Set `pageSize: 0` to automatically fit whole rows into the grid's row area.
 Auto subtracts the leaf header and all visible column-group header rows from
 the viewport height before calculating the page size, with a minimum of one
-row. The page-size selector always includes `Auto` as its first option;
-`pageSizes` continues to configure the numeric options.
+row. When the plugin is configured with `pageSize: 0`, the page-size selector
+includes `Auto` as its first option; `pageSizes` continues to configure the
+numeric options.
 
 For server-side pagination, set `mode: "server"` and provide `onChange`. The
 plugin leaves data unchanged and calls `onChange({ page, pageSize })` when the
@@ -69,8 +70,10 @@ new PaginationPlugin({
 
 `blocks` selects and orders the visible sections; by default it is
 `["navigation"]`. The available blocks are `"rowInfo"`, `"pageSize"`, and
-`"navigation"`. The default page-size choices are `[20, 50, 100]`. The size
-menu opens above its control. A custom
+`"navigation"`. Pagination blocks can be mounted in the `"top"` or `"bottom"`
+slot, but not the side slots. The page-size dropdown opens above controls in
+the bottom slot and below controls in the top slot. The default page-size
+choices are `[20, 50, 100]`. A custom
 numeric `pageSize` not in `pageSizes` is added to the choices automatically. The row
 range message can be localized with `labels.rowInfo(from, to, totalRows)`, and
 the selector labels with `labels.pageSizeLabel` and `labels.pageSizesLabel`.
@@ -80,8 +83,8 @@ page-number input. Its width is controlled by `pageInputCharacters` (default
 the current page and total pages use the `labels.pageInfo` formatter. The
 quick-jump counter text can be localized with `labels.pageCount(totalPages)`.
 The page-size control is labeled `Page Size:` by default. `setPageSize(size)`
-changes the page size and returns to the first page; use `setPageSize(0)` for
-automatic sizing.
+changes the page size and returns to the first page. `setPageSize(0)` is
+available only when the plugin was initially configured with `pageSize: 0`.
 
 The grid also exposes `api.icons` for registering/replacing shared core icons.
 The core registry includes common chevrons and up/down sorting arrows, and has
