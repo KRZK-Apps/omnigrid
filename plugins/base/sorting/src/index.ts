@@ -1,12 +1,12 @@
 import type { ColumnDef, ColumnLeafDef, GridApi, GridPlugin, SortDirection } from "@omnigrid/core";
 import { flattenColumns, isColumnGroup } from "@omnigrid/core";
+import type { SortModelItem } from "./types";
+export type { SortModelItem } from "./types";
 
-export interface SortModelItem {
-    columnId: string;
-    direction: SortDirection;
-}
-
+/** Configuration for the sorting plugin. */
 export interface SortingPluginOptions<T> {
+    /** Compares two cell values; defaults to a type-aware comparator. */
+    /** @default built-in type-aware comparator */
     compare?: (left: unknown, right: unknown, column: ColumnLeafDef<T>) => number;
 }
 
@@ -23,6 +23,7 @@ function defaultCompare(left: unknown, right: unknown): number {
     });
 }
 
+/** Adds column-header sorting and programmatic sort controls to a grid. */
 export class SortingPlugin<T> implements GridPlugin<T> {
     public readonly name = "@omnigrid/sorting-plugin";
     private api?: GridApi<T>;
@@ -65,16 +66,28 @@ export class SortingPlugin<T> implements GridPlugin<T> {
         }
     }
 
+    /**
+     * Returns the current sort descriptors in priority order.
+     * @api
+     */
     public getSortModel(): SortModelItem[] {
         return this.sortModel.map((item) => ({ ...item }));
     }
 
+    /**
+     * Sets the sort model. Passing an empty array clears all sorting.
+     * @api
+     */
     public setSortModel(sortModel: SortModelItem[]): void {
         this.sortModel = sortModel.map((item) => ({ ...item }));
         this.updateColumnMetadata();
         this.api?.setData(this.api.getState().data);
     }
 
+    /**
+     * Removes all sort descriptors and restores the original row order.
+     * @api
+     */
     public clearSort(): void {
         this.setSortModel([]);
     }

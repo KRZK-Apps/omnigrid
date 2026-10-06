@@ -1,5 +1,6 @@
 import type { CheckboxRenderParams, ColumnDef, GridApi, GridPlugin, RowClickEvent, RowId, RowRenderParams } from "@omnigrid/core";
 
+/** Selection behavior supported by the plugin. */
 export type SelectionMode = "single" | "multiple";
 
 /**
@@ -12,30 +13,50 @@ export const SELECTED_ROW_CLASS = "omnigrid-row-selected";
 /** Applied to rows rejected by `isRowSelectable`; themes supply muted colors. */
 export const UNSELECTABLE_ROW_CLASS = "omnigrid-row-unselectable";
 
+/** Values provided to a custom checkbox renderer. */
 export interface SelectionRendererParams<T> extends CheckboxRenderParams {
+    /** Row data for a row checkbox; absent for the header checkbox. */
     data?: T;
+    /** Row identifier for a row checkbox. */
     rowId?: RowId;
+    /** Row index for a row checkbox. */
     index?: number;
+    /** Whether the renderer is being called for the header checkbox. */
     header: boolean;
 }
 
+/** Renderer used to customize selection checkboxes. */
 export type SelectionRenderer<T> = (params: SelectionRendererParams<T>) => unknown;
 
+/** Configuration for the selection plugin. */
 export interface SelectionPluginOptions<T> {
+    /** Supports selecting one row or multiple rows. @default "single" */
     mode?: SelectionMode;
+    /** Restricts selection changes to checkbox interaction. @default false */
     checkboxOnly?: boolean;
+    /** In multiple mode, clicking a row replaces the current selection. @default false */
     replaceSelectionOnClick?: boolean;
+    /** Adds a checkbox to each row. @default false */
     showRowCheckboxes?: boolean;
+    /** Adds a select-all checkbox to the selection column header. @default false */
     showHeaderCheckbox?: boolean;
+    /** Determines whether a row can be selected. */
     isRowSelectable?: (row: T, index: number) => boolean;
+    /** Renders checkbox UI; defaults to the OmniGrid checkbox renderer. */
     checkboxRenderer?: SelectionRenderer<T>;
+    /** Called when the selected rows change. */
     onSelectionChange?: (state: SelectionState<T>) => void;
+    /** ID for the automatically inserted checkbox column. @default "__omnigrid_selection__" */
     selectionColumnId?: string;
+    /** Width in pixels of the automatically inserted checkbox column. @default 44 */
     selectionColumnWidth?: number;
 }
 
+/** Selected row identifiers and their corresponding row data. */
 export interface SelectionState<T> {
+    /** IDs of selected rows. */
     selectedRowIds: RowId[];
+    /** Data objects for selected rows. */
     selectedRows: T[];
 }
 
@@ -45,6 +66,7 @@ function defaultCheckboxRenderer(params: CheckboxRenderParams): unknown {
     return { type: "@omnigrid/checkbox", ...params };
 }
 
+/** Adds row selection and optional checkbox controls to a grid. */
 export class SelectionPlugin<T> implements GridPlugin<T> {
     public readonly name = "@omnigrid/selection-plugin";
     private api?: GridApi<T>;
@@ -87,33 +109,61 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         };
     }
 
+    /**
+     * Returns the IDs of all currently selected rows.
+     * @api
+     */
     public getSelectedRowIds(): RowId[] {
         return [...this.selectedRowIds];
     }
 
+    /**
+     * Returns the data objects of all currently selected rows.
+     * @api
+     */
     public getSelectedRows(): T[] {
         if (!this.api) return [];
         return this.api.getProcessedData().filter((row, index) => this.selectedRowIds.has(this.api!.getRowId(row, index)));
     }
 
+    /**
+     * Returns selected row IDs and row data together.
+     * @api
+     */
     public getSelectionState(): SelectionState<T> {
         return { selectedRowIds: this.getSelectedRowIds(), selectedRows: this.getSelectedRows() };
     }
 
+    /**
+     * Checks whether a row ID is currently selected.
+     * @api
+     */
     public isSelected(rowId: RowId): boolean {
         return this.selectedRowIds.has(rowId);
     }
 
+    /**
+     * Replaces the current selection with the supplied row IDs.
+     * @api
+     */
     public setSelectedRowIds(rowIds: RowId[]): void {
         this.selectedRowIds.clear();
         rowIds.forEach((rowId) => this.selectedRowIds.add(rowId));
         this.refresh();
     }
 
+    /**
+     * Clears all selected rows.
+     * @api
+     */
     public clearSelection(): void {
         this.setSelectedRowIds([]);
     }
 
+    /**
+     * Toggles a row's selection. Shift and Ctrl modifiers control range and additive selection.
+     * @api
+     */
     public toggleRow(rowId: RowId, index: number, modifiers: { shiftKey?: boolean; ctrlKey?: boolean } = {}): void {
         if (!this.api) return;
         const row = this.api.getProcessedData()[index];
@@ -127,6 +177,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         this.applySelection(rowId, index, modifiers);
     }
 
+    /** Returns selection-related CSS classes for a row. */
     public getRowClass({ id, index, data }: RowRenderParams<T>): string | undefined {
         const classes: string[] = [];
         if (this.selectedRowIds.has(id)) classes.push(SELECTED_ROW_CLASS);
@@ -291,6 +342,10 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         }
     }
 
+    /**
+     * Updates plugin options at runtime.
+     * @api
+     */
     public updateOptions(newOptions: Partial<SelectionPluginOptions<T>>): void {
         if (newOptions.mode !== undefined) (this as any).mode = newOptions.mode;
         if (newOptions.checkboxOnly !== undefined) (this as any).checkboxOnly = newOptions.checkboxOnly;

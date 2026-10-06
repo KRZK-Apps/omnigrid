@@ -1,6 +1,6 @@
 {
     "name": "@omnigrid/pagination-plugin",
-    "version": "0.1.5",
+    "version": "0.1.6",
     "description": "Headless pagination plugin for OmniGrid. Mounts a pager into the bottom slot.",
     "keywords": [
         "omnigrid",

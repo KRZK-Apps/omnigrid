@@ -1,6 +1,6 @@
 {
     "name": "@omnigrid/sorting-plugin",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Headless sorting plugin for OmniGrid",
     "keywords": [
         "omnigrid",
