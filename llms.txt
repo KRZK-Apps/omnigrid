@@ -1,0 +1,86 @@
+> LLMS.txt
+
+# OmniGrid
+
+OmniGrid is a high-performance, framework-agnostic **headless data grid** for TypeScript. This repository (`omnigrid`) is the source of the installable `@omnigrid/*` packages: a pure-TS core that owns data, state, geometry, and 2D virtualization (never touching the DOM), a thin React adapter that renders it into a UI, free Base plugins, shared styles, and themes. Commercial **Pro** plugins ship from a separate private repository.
+
+## Packages in this repository
+
+- `core/` — `@omnigrid/core`: framework-agnostic engine (MIT, zero runtime deps).
+- `adapters/react/` — `@omnigrid/react`: React adapter/renderer; the only DOM-touching layer.
+- `plugins/base/sorting/` — `@omnigrid/sorting-plugin` (free, MIT).
+- `plugins/base/selection/` — `@omnigrid/selection-plugin` (free, MIT).
+- `plugins/base/pagination/` — `@omnigrid/pagination-plugin` (free, MIT).
+- `plugins/pro/` — empty public stub; commercial features ship in the private `omnigrid-pro` repo.
+- `style/` — `@omnigrid/style`: required structural CSS built on theme CSS variables.
+- `themes/default/`, `themes/mint/` — `@omnigrid/default-theme`, `@omnigrid/mint-theme`: colors via `--omnigrid-*` variables (light + dark).
+
+Sibling repos in the workspace (NOT part of this repo): `omnigrid-demo/` (Next.js demo site) and `omnigrid-pro/` (private, `@omnigrid/plugin-pro`).
+
+## Core concepts
+
+- **Headless Core (`@omnigrid/core`)** — zero runtime dependencies, no DOM, no framework imports. Provides the state store, typed event bus, data pipeline, 2D virtualizer, DOM-pool row mapping, slot manager, icons, and plugin manager. Entry point: `new Grid<T>(options)`.
+- **2D Virtualization** — only rows/columns intersecting the viewport (plus overscan) are rendered. Row nodes are reused from a fixed DOM pool and repositioned with `transform: translateY(...)`; nothing is created/destroyed while scrolling. `Grid#getViewportData()` returns the virtual window with absolute table-space offsets for rows, scrollable columns, and left/right pinned columns.
+- **Scroll is not state** — `scrollTop`/`scrollLeft` are ephemeral (not in the observable Store); scroll-only `setViewport` calls never notify subscribers, so adapters do not re-render per scroll frame.
+- **Data Pipeline** — `raw data → filter → sort → group → paginate → virtual viewport`. Plugins attach pure transforms (`T[] → T[]`) via `api.registerDataProcessor(fn)`.
+- **Plugin System** — plugins implement `{ name, register(api): () => void }`. Base plugins: sorting, selection, pagination (free, MIT). Pro plugins (`@omnigrid/plugin-pro`, private repo): grouping/aggregation, tree data, export, advanced selection.
+- **Slot Architecture** — plugins mount headless widgets into named zones `top | bottom | left | right` via `api.slots.mount(slot, content, options)`. Content is framework-agnostic (text, declarative `SlotNodeContent` nodes, HTML, or native adapter components); order via `priority`, alignment via `position`.
+- **React bindings (`@omnigrid/react`)** — a thin adapter: `<OmniGrid columns={...} data={...} plugins={[...]}/>` and a `useGrid()` hook. Renders pooled rows, `transform`-based positioning, `createRoot` cell portals, and CSS-variable column widths.
+- **License verification (Pro)** — offline, local cryptographic validation. Pro plugin constructors accept a `licenseKey`; the package verifies an Ed25519-signed license token against an embedded public key (Web Crypto). No network calls at runtime. Invalid or missing keys make the plugin refuse to register — the grid stays functional.
+
+## Quick start — Core (headless)
+
+```ts
+import { Grid } from "@omnigrid/core";
+import type { ColumnDef } from "@omnigrid/core";
+import { SortingPlugin } from "@omnigrid/sorting-plugin";
+import { SelectionPlugin } from "@omnigrid/selection-plugin";
+
+interface Row { id: string; name: string; group: string }
+
+const columns: ColumnDef<Row>[] = [
+    { id: "name", field: "name", header: "Name", width: 220, sortable: true },
+    { id: "group", field: "group", header: "Group", width: 140 },
+];
+
+const grid = new Grid<Row>({
+    data: rows,                       // T[]
+    columns,
+    getRowId: (row) => row.id,        // stable RowId — DOM recycling, selection
+    plugins: [new SortingPlugin<Row>(), new SelectionPlugin<Row>()],
+});
+
+grid.on("rowClick", (event) => console.log(event.id)); // returns unsubscribe fn
+grid.setViewport({ width: 800, height: 400 });         // adapter feeds geometry
+const viewport = grid.getViewportData();               // virtualized window + offsets
+grid.refresh();
+grid.destroy();
+```
+
+## Quick start — React adapter
+
+```tsx
+import { useMemo } from "react";
+import { OmniGrid } from "@omnigrid/react";
+import { SortingPlugin } from "@omnigrid/sorting-plugin";
+
+const sorting = useMemo(() => new SortingPlugin<Row>(), []); // one instance per grid
+
+<OmniGrid
+    columns={columns}
+    data={rows}
+    getRowId={(row) => row.id}
+    plugins={[sorting]}
+    style={{ height: 480 }}   // fixed height ⇒ scrollable, virtualized viewport
+/>;
+```
+
+## Docs
+
+- [README.md](README.md) — repository overview: packages, install, quick starts.
+- [AI_INSTRUCTIONS.md](AI_INSTRUCTIONS.md) — rules for editing this repo; each package adds its own
+  package-specific `AI_INSTRUCTIONS.md` (e.g. [core/AI_INSTRUCTIONS.md](core/AI_INSTRUCTIONS.md)).
+- [core/README.md](core/README.md) — core API contracts: `GridApi`, `ColumnDef`, `GridOptions`, events.
+- [adapters/react/README.md](adapters/react/README.md), [plugins/base/sorting/README.md](plugins/base/sorting/README.md), [style/README.md](style/README.md).
+- Full architecture docs live in the workspace `doc/` folder (sibling repo).
+- Demo site: https://omnigrid-demo.vercel.app/

@@ -1,0 +1,40 @@
+# OmniGrid — Workspace rules (pointer)
+
+Full guidelines live in `AI_INSTRUCTIONS.md` at this repository's root — read it before editing.
+Each package also carries its own `AI_INSTRUCTIONS.md`. This file keeps the essential invariants
+close at hand for Cursor.
+
+## Non-negotiable architecture
+
+1. `omnigrid/core` is HEADLESS and framework-agnostic: no DOM globals, no React/Vue/Svelte,
+   no DOM mutations, zero runtime dependencies. It must run in Node without a browser.
+2. Adapters (e.g. `adapters/react`) are the ONLY layer that touches the DOM — and they
+   must NOT re-implement core logic (sorting, filtering, grouping, pagination, virtualization).
+3. Styling is CSS-variable + absolute-positioning based (`transform: translateY(...)` for row
+   recycling); the core never emits styles or DOM.
+4. Scroll position is ephemeral: scroll-only `setViewport({ scrollTop, scrollLeft })` must NOT
+   notify the Store / re-render adapters. Structural changes bump `getRevision()`.
+
+## Plugins
+
+5. Plugin logic is framework-agnostic. Implement `GridPlugin<T>`: `name` + `register(api)` that
+   returns a full cleanup function.
+6. Mount UI through the Slot Architecture: `api.slots.mount(slot, content, options)` with headless
+   `SlotContent` declarations — never manual DOM inside a plugin.
+7. Hook the pipeline via `api.registerDataProcessor((data: T[]) => T[])`, subscribe via
+   `api.on(...)`, read state via `api.getState()`.
+
+## Pro & licensing
+
+8. Pro plugins live in the private `omnigrid-pro/` repo (`@omnigrid/plugin-pro`);
+   `plugins/pro/` in this repo is an empty stub. Base plugins are MIT in `plugins/base/*`.
+9. Validate `licenseKey` LOCALLY: Ed25519 signature checked with an embedded public key via Web
+   Crypto — no runtime network calls. Invalid/missing → throw and never enable the feature;
+   the grid stays functional. Never put license logic in `omnigrid/core`.
+
+## Workflow
+
+10. Run `npm test` after changes and follow the existing Prettier/ESLint config and test patterns
+    (vitest, headless for core/plugins). Use `@api` doc comments on public plugin APIs.
+11. Update package READMEs / `AI_INSTRUCTIONS.md` files when public contracts change; search
+    existing types before designing new APIs.
