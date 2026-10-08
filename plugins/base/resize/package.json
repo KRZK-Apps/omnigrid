@@ -1,0 +1,42 @@
+{
+  "name": "@omnigrid/resize-plugin",
+  "version": "0.1.0",
+  "description": "Headless column resize plugin for OmniGrid",
+  "keywords": [
+    "omnigrid",
+    "grid",
+    "resize",
+    "plugin"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KRZK-Apps/omnigrid.git",
+    "directory": "plugins/base/resize"
+  },
+  "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/resize#readme",
+  "bugs": {
+    "url": "https://github.com/KRZK-Apps/omnigrid/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npx tsc -p tsconfig.json",
+    "lint": "npx tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@omnigrid/core": "^0.1.0"
+  }
+}

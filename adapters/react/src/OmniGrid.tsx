@@ -566,6 +566,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             const deepestDepth = hasGroups ? (viewportData.columnGroupDepth.get(item.index) ?? -1) : -1;
             const gapRows = headerRowCount - 1 - deepestDepth;
             const fullHeight = gapRows > 0;
+
             return (
                 <div
                     key={item.column.id}
@@ -594,6 +595,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                         left: Math.round(item.offset - originX),
                         top: fullHeight ? -(gapRows * rowHeight) : 0,
                         bottom: 0,
+                        touchAction: "none",
                         whiteSpace: "nowrap",
                         width: item.width,
                     }}

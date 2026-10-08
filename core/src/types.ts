@@ -316,11 +316,14 @@ export interface BlockConfig<Name extends string = string> {
     priority?: number;
 }
 
-export type SlotNodeEventName = "click" | "change" | "keydown";
+export type SlotNodeEventName = "click" | "change" | "keydown" | "pointerdown" | "pointermove" | "pointerup" | "dblclick";
 
 export interface SlotNodeEvent {
     value?: string;
     key?: string;
+    clientX?: number;
+    clientY?: number;
+    button?: number;
 }
 
 /**

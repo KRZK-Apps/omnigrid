@@ -58,6 +58,10 @@ const SLOT_NODE_EVENTS: Record<string, string> = {
     click: "onClick",
     change: "onChange",
     keydown: "onKeyDown",
+    pointerdown: "onPointerDown",
+    pointermove: "onPointerMove",
+    pointerup: "onPointerUp",
+    dblclick: "onDoubleClick",
 };
 
 const SLOT_NODE_ATTRS: Record<string, string> = {
@@ -88,11 +92,22 @@ function slotNodeToReact<T>(node: SlotNodeContent<T>, bridge: ContentBridge<T>):
             preventDefault: () => void;
             stopPropagation: () => void;
             key?: string;
+            clientX?: number;
+            clientY?: number;
+            button?: number;
             currentTarget: { value?: string };
         }) => {
-            if (eventName === "click") nativeEvent.preventDefault();
+            if (["click", "pointerdown", "pointermove", "pointerup", "dblclick"].includes(eventName)) {
+                nativeEvent.preventDefault();
+            }
             nativeEvent.stopPropagation();
-            handler(context, { value: nativeEvent.currentTarget.value, key: nativeEvent.key });
+            handler(context, {
+                value: nativeEvent.currentTarget.value,
+                key: nativeEvent.key,
+                clientX: nativeEvent.clientX,
+                clientY: nativeEvent.clientY,
+                button: nativeEvent.button,
+            });
         };
     }
 
