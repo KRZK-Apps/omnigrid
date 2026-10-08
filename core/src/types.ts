@@ -58,44 +58,71 @@ export interface CheckboxControl extends CheckboxRenderParams {
 }
 
 interface BaseColumnDef<T> {
+    /** Stable identifier used by the grid and plugins. */
     id: string;
+    /** Text displayed in the column header. */
     header: string;
+    /** Pins the column to a horizontal edge of the grid. */
     pinned?: "left" | "right";
+    /** Custom renderer for this column's header. */
     headerRenderer?: (column: ColumnDef<T>) => unknown;
 }
 
 export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
+    /** Row property used as the cell value source. */
     field?: keyof T | string;
+    /** Hides this column without removing it from the column definitions. */
     hidden?: boolean;
+    /** Relative width factor used to distribute available space. */
     flex?: number;
+    /** Fixed column width in pixels. */
     width?: number;
+    /** Minimum column width in pixels. */
     minWidth?: number;
+    /** Maximum column width in pixels. */
     maxWidth?: number;
+    /** Whether this column can be sorted. */
     sortable?: boolean;
+    /** Horizontal alignment of cell content. */
     align?: CellAlign;
+    /** Initial sort direction used by SortingPlugin. */
     sortState?: SortDirection;
     /** 1-based sort priority, set only while multiple columns are sorted. */
     sortIndex?: number;
     /** Compares values for this column, overriding the sorting plugin default. */
     comparator?: (left: unknown, right: unknown, column: ColumnLeafDef<T>) => number;
+    /** Prevents clicks in this column's cells from triggering row-click behavior. */
     stopRowClick?: boolean;
+    /** Prevents clicks on this column's header from triggering header-click behavior. */
     stopHeaderClick?: boolean;
+    /** Computes the cell value from the row; takes precedence over `field`. */
     valueGetter?: (row: T) => unknown;
+    /** Formats the raw cell value for display. */
     valueFormatter?: (value: unknown) => string;
+    /** Replaces the default cell content with custom content. */
     cellRenderer?: (params: CellRenderParams<T>) => unknown;
+    /** Static inline styles applied to cells in this column. */
     cellStyle?: RowStyle;
+    /** Computes inline styles for each rendered cell. */
     getCellStyle?: (params: CellRenderParams<T>) => RowStyle | undefined;
+    /** Static CSS class applied to cells in this column. */
     cellClass?: string | ((params: CellRenderParams<T>) => string | undefined);
+    /** Computes a CSS class for each rendered cell. */
     getCellClass?: (params: CellRenderParams<T>) => string | undefined;
+    /** Maps CSS class names to predicates evaluated for each rendered cell. */
     cellClassRules?: CellClassRules<T>;
 }
 
 export interface ColumnGroupDef<T> extends BaseColumnDef<T> {
+    /** Child column definitions nested under this group. */
     children: ColumnDef<T>[];
+    /** Allows users to collapse and expand this group. */
     collapsible?: boolean;
+    /** Whether this group starts expanded when it is collapsible. */
     defaultExpanded?: boolean;
 }
 
+/** Leaf or grouped column definition accepted by the grid. */
 export type ColumnDef<T> = ColumnLeafDef<T> | ColumnGroupDef<T>;
 
 export interface GridOptions<T> {
