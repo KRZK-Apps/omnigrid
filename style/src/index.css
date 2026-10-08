@@ -318,7 +318,28 @@
 }
 
 .omnigrid-sort-indicator {
+    align-items: center;
+    display: inline-flex;
     font-size: 10px;
+    justify-content: center;
+    position: relative;
+}
+
+.omnigrid-sort-priority {
+    align-items: center;
+    background: var(--omnigrid-header-background);
+    border: 1px solid var(--omnigrid-header-border);
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 8px;
+    height: 10px;
+    justify-content: center;
+    line-height: 1;
+    min-width: 10px;
+    position: absolute;
+    right: -2px;
+    top: -5px;
+    z-index: 1;
 }
 
 .omnigrid-header-label {

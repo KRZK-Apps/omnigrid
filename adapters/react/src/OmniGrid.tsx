@@ -572,6 +572,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     role="columnheader"
                     className={`omnigrid-header-cell${fullHeight ? " omnigrid-header-cell-full-height" : ""}`}
                     data-sort={item.column.sortState}
+                    data-sort-index={item.column.sortIndex}
                     data-sortable={item.column.sortable === true ? "true" : undefined}
                     aria-sort={item.column.sortState === "asc" ? "ascending" : item.column.sortState === "desc" ? "descending" : "none"}
                     onClick={(event) =>
@@ -613,6 +614,9 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                                                 ? grid.icons.get("arrow-up")
                                                 : grid.icons.get("arrow-down"),
                                             { registry: slotComponentsRef.current, context: buildRenderContext },
+                                        )}
+                                        {item.column.sortIndex !== undefined && (
+                                            <span className="omnigrid-sort-priority">{item.column.sortIndex}</span>
                                         )}
                                     </span>
                                 )}

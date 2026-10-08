@@ -74,6 +74,10 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     sortable?: boolean;
     align?: CellAlign;
     sortState?: SortDirection;
+    /** 1-based sort priority, set only while multiple columns are sorted. */
+    sortIndex?: number;
+    /** Compares values for this column, overriding the sorting plugin default. */
+    comparator?: (left: unknown, right: unknown, column: ColumnLeafDef<T>) => number;
     stopRowClick?: boolean;
     stopHeaderClick?: boolean;
     valueGetter?: (row: T) => unknown;
@@ -200,6 +204,7 @@ export interface GridEvents<T> {
     viewportChange: ViewportState;
     dataChange: T[];
     headerClick: { columnId: string; multiSort: boolean };
+    sortingChanged: Array<{ columnId: string; direction: SortDirection }>;
     rowClick: RowClickEvent<T>;
     rowHover: RowHoverEvent<T>;
     slotsChange: { slot: SlotName; mounts: SlotMount<T>[] };
@@ -377,6 +382,8 @@ export interface GridApi<T> {
     refresh(): void;
     subscribe(listener: () => void): () => void;
     on<EventName extends keyof GridEvents<T>>(event: EventName, listener: (payload: GridEvents<T>[EventName]) => void): () => void;
+    /** Emits a typed grid event for plugin-to-plugin and adapter notifications. */
+    emit<EventName extends keyof GridEvents<T>>(event: EventName, payload: GridEvents<T>[EventName]): void;
     registerPlugin(plugin: GridPlugin<T>): () => void;
     registerDataProcessor(processor: DataProcessor<T>): () => void;
     setColumns(columns: ColumnDef<T>[]): void;

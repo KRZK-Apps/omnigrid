@@ -8,6 +8,12 @@ export interface SortingPluginOptions<T> {
     /** Compares two cell values; defaults to a type-aware comparator. */
     /** @default built-in type-aware comparator */
     compare?: (left: unknown, right: unknown, column: ColumnLeafDef<T>) => number;
+    /** Runs sorting locally or leaves row ordering to the data source. @default "client" */
+    mode?: "client" | "server";
+    /** Called with a copy of the sort model whenever it changes. */
+    onChange?: (sortModel: SortModelItem[]) => void;
+    /** Enables the `asc -> desc -> none` header-click cycle. @default true */
+    tristate?: boolean;
 }
 
 function defaultCompare(left: unknown, right: unknown): number {
@@ -31,14 +37,22 @@ export class SortingPlugin<T> implements GridPlugin<T> {
     private unregisterProcessor?: () => void;
     private unregisterHeaderClick?: () => void;
     private readonly compare: (left: unknown, right: unknown, column: ColumnLeafDef<T>) => number;
+    private readonly mode: "client" | "server";
+    private readonly onChange?: (sortModel: SortModelItem[]) => void;
+    private tristate: boolean;
 
     public constructor(options: SortingPluginOptions<T> = {}) {
         this.compare = options.compare ?? ((left, right) => defaultCompare(left, right));
+        this.mode = options.mode ?? "client";
+        this.onChange = options.onChange;
+        this.tristate = options.tristate ?? true;
     }
 
     public register(api: GridApi<T>): () => void {
         this.api = api;
-        this.unregisterProcessor = api.registerDataProcessor((data) => this.sortData(data));
+        if (this.mode === "client") {
+            this.unregisterProcessor = api.registerDataProcessor((data) => this.sortData(data));
+        }
         this.unregisterHeaderClick = api.on("headerClick", ({ columnId, multiSort }) => {
             this.toggle(columnId, multiSort);
         });
@@ -60,9 +74,7 @@ export class SortingPlugin<T> implements GridPlugin<T> {
         const columns = flattenColumns(this.api.getState().columns);
         const initialSort = columns.filter((column) => column.sortState !== undefined).map((column) => ({ columnId: column.id, direction: column.sortState! }));
         if (initialSort.length > 0) {
-            this.sortModel = initialSort;
-            this.updateColumnMetadata();
-            this.api.setData(this.api.getState().data);
+            this.setSortModel(initialSort);
         }
     }
 
@@ -81,7 +93,12 @@ export class SortingPlugin<T> implements GridPlugin<T> {
     public setSortModel(sortModel: SortModelItem[]): void {
         this.sortModel = sortModel.map((item) => ({ ...item }));
         this.updateColumnMetadata();
-        this.api?.setData(this.api.getState().data);
+        if (this.mode === "client") {
+            this.api?.setData(this.api.getState().data);
+        }
+        const model = this.getSortModel();
+        this.api?.emit("sortingChanged", model);
+        this.onChange?.(this.getSortModel());
     }
 
     /**
@@ -92,13 +109,21 @@ export class SortingPlugin<T> implements GridPlugin<T> {
         this.setSortModel([]);
     }
 
+    /**
+     * Updates whether header clicks can clear the active sort.
+     * @api
+     */
+    public setTristate(tristate: boolean): void {
+        this.tristate = tristate;
+    }
+
     private toggle(columnId: string, multiSort: boolean): void {
         const column = flattenColumns(this.api?.getState().columns ?? []).find((item) => item.id === columnId);
         if (!column || column.sortable === false) return;
 
         const currentIndex = this.sortModel.findIndex((item) => item.columnId === columnId);
         const current = currentIndex >= 0 ? this.sortModel[currentIndex].direction : undefined;
-        const next: SortDirection | undefined = current === undefined ? "asc" : current === "asc" ? "desc" : undefined;
+        const next: SortDirection | undefined = current === undefined ? "asc" : current === "asc" ? "desc" : this.tristate ? undefined : "asc";
         const nextModel = multiSort ? [...this.sortModel] : [];
 
         if (currentIndex >= 0) nextModel.splice(multiSort ? currentIndex : 0, 1);
@@ -116,7 +141,8 @@ export class SortingPlugin<T> implements GridPlugin<T> {
                 for (const sort of this.sortModel) {
                     const column = columns.find((item) => item.id === sort.columnId);
                     if (!column) continue;
-                    const result = this.compare(this.getValue(left.value, column), this.getValue(right.value, column), column);
+                    const compare = column.comparator ?? this.compare;
+                    const result = compare(this.getValue(left.value, column), this.getValue(right.value, column), column);
                     if (result !== 0) return sort.direction === "asc" ? result : -result;
                 }
                 return left.index - right.index;
@@ -134,6 +160,9 @@ export class SortingPlugin<T> implements GridPlugin<T> {
     private updateColumnMetadata(): void {
         if (!this.api) return;
         const model = new Map(this.sortModel.map((item) => [item.columnId, item.direction]));
+        const sortIndices = this.sortModel.length > 1
+            ? new Map(this.sortModel.map((item, index) => [item.columnId, index + 1]))
+            : new Map<string, number>();
         // Rebuild the hierarchy: leaf definitions at any nesting depth get the
         // updated sort metadata; group definitions pass through with their
         // children recursively updated.
@@ -146,6 +175,7 @@ export class SortingPlugin<T> implements GridPlugin<T> {
                     ...column,
                     sortable: column.sortable === false ? false : true,
                     sortState: model.get(column.id),
+                    sortIndex: sortIndices.get(column.id),
                 };
             });
         this.api.setColumns(updateColumns(this.api.getState().columns));

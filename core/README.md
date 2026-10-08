@@ -61,6 +61,7 @@ interface ColumnLeafDef<T> {
     pinned?: "left" | "right";               // fixed column in horizontal viewport
     sortable?: boolean;                      // read by SortingPlugin
     sortState?: SortDirection;               // "asc" | "desc" — initial sort for SortingPlugin
+    sortIndex?: number;                       // runtime 1-based priority when multi-sorted
     align?: "left" | "center" | "right";
     cellRenderer?: (params: CellRenderParams<T>) => unknown;   // opaque content, adapter materializes
     cellStyle?: RowStyle;

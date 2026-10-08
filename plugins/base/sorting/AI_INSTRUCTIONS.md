@@ -4,19 +4,20 @@ Read the repository-root [`../../../AI_INSTRUCTIONS.md`](../../../AI_INSTRUCTION
 
 ## Purpose
 
-Headless column sorting: registers a pure data processor and subscribes to `headerClick`.
+Headless column sorting: optionally registers a data processor and subscribes to `headerClick`.
 This plugin is the **reference implementation** of the plugin contract — copy its structure.
 
 ## Reference pattern (applicable to all plugins)
 
 - `register(api)` returns a cleanup that unregisters the processor and the event listener
   (see `src/index.ts`); never mutate core internals.
-- The transform is pure and synchronous:
-  `api.registerDataProcessor((data) => this.sortData(data))`.
-- Sorting metadata lives on **leaf** columns (`sortable`, `sortState`); a column can be a group —
+- Client mode registers a pure synchronous transform:
+  `api.registerDataProcessor((data) => this.sortData(data))`; server mode must not
+  register a processor and instead reports changes through `sortingChanged` and `onChange`.
+- Sorting metadata lives on **leaf** columns (`sortable`, `sortState`, `sortIndex`); a column can be a group —
   always narrow with `flattenColumns` / `isColumnGroup` from `@omnigrid/core`.
-- Header interaction: `api.on("headerClick", ({ columnId, multiSort }) => …)`; cycle state
-  `asc → desc → none`, `multiSort` composes a model of multiple columns.
+- Header interaction: `api.on("headerClick", ({ columnId, multiSort }) => …)`; `tristate`
+  controls whether the cycle includes `none`, and `multiSort` composes a model of multiple columns.
 - Public API (`getSortModel()`, `setSortModel()`, `clearSort()`) is annotated with `@api` doc
   comments (demo plugin docs are generated from them).
 - Types for the sort model live in `src/types.ts` and are re-exported.

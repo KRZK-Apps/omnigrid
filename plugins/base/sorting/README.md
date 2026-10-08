@@ -6,19 +6,33 @@ Headless column sorting plugin for OmniGrid.
 
 - Single- and multi-column sorting (Shift+Click headers)
 - Configurable sort directions (`asc`, `desc`, `none`)
-- Accessor-based or custom comparator support
+- Accessor-based sorting and global or per-column custom comparators
+- Client-side or server-side sorting
+- Sort-priority badges for multi-column sorting
 - Visual sort indicators via slot system
 
 ## Usage
 
 ```ts
-import { sortingPlugin } from "@omnigrid/sorting-plugin";
+import { SortingPlugin } from "@omnigrid/sorting-plugin";
 
 const grid = new Grid({
-  plugins: [sortingPlugin()],
+  plugins: [new SortingPlugin({
+    mode: "server",
+    onChange: (sortModel) => fetchRows({ sortModel }),
+    tristate: false,
+  })],
   // ...
 });
 ```
+
+The default mode is `"client"` and sorts processed rows locally. In `"server"`
+mode, the plugin updates each column's `sortState` but leaves row order intact;
+use `onChange` or the grid's `sortingChanged` event to request server data.
+Set `tristate: false` to toggle between ascending and descending without a
+third click clearing the sort. A leaf column's `comparator` overrides the
+plugin-wide `compare` option. To change the cycle after registration, call
+`sortingPlugin.setTristate(false)` (or `true`).
 
 ## Links
 

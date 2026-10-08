@@ -306,6 +306,11 @@ export class Grid<T> implements GridApi<T> {
         return this.events.on(event, listener);
     }
 
+    public emit<EventName extends keyof GridEvents<T>>(event: EventName, payload: GridEvents<T>[EventName]): void {
+        this.assertActive();
+        this.events.emit(event, payload);
+    }
+
     public registerPlugin(plugin: GridPlugin<T>): () => void {
         this.assertActive();
         const cleanup = plugin.register(this);
