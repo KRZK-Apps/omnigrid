@@ -61,6 +61,24 @@ describe("contentToReactNode", () => {
         expect(element.props.children.every((child) => child.key !== null)).toBe(true);
     });
 
+    it("converts inline style strings into a React style object", () => {
+        const element = contentToReactNode<Row>(
+            {
+                type: "node",
+                tag: "span",
+                attrs: { style: "display: block; width: 8px; background: rgba(0,0,0,0.5);" },
+                children: ["x"],
+            },
+            bridge(),
+        ) as { props: { style: Record<string, string> } };
+
+        expect(element.props.style).toMatchObject({
+            display: "block",
+            width: "8px",
+            background: "rgba(0,0,0,0.5)",
+        });
+    });
+
     it("renders checkbox controls", () => {
         const html = render({
             type: "@omnigrid/checkbox",

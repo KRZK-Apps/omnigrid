@@ -43,6 +43,76 @@ describe("ColumnResizePlugin", () => {
     grid.destroy();
   });
 
+  it("starts flex resizing from the current calculated width", () => {
+    const grid = new Grid({
+      columns: [
+        { id: "first", header: "First", flex: 1, minWidth: 80 },
+        { id: "second", header: "Second", flex: 1, minWidth: 80 },
+      ],
+      data: [{ first: "a", second: "b" }],
+    });
+    grid.setViewport({ width: 600, height: 400 });
+
+    const plugin = new ColumnResizePlugin();
+    plugin.register(grid);
+
+    expect(plugin.getColumnWidth("first")).toBe(300);
+    plugin.beginResize("first", 200);
+    expect(plugin.resizeTo(220)).toBe(320);
+    expect(grid.getViewportData().columns.map((item) => item.width)).toEqual([320, 280]);
+
+    grid.destroy();
+  });
+
+  it("freezes flex columns to the left and redistributes width only to the right", () => {
+    const grid = new Grid({
+      columns: [
+        { id: "first", header: "First", flex: 1 },
+        { id: "resized", header: "Resized", flex: 1 },
+        { id: "last", header: "Last", flex: 1 },
+      ],
+      data: [{ first: "a", resized: "b", last: "c" }],
+    });
+    grid.setViewport({ width: 600, height: 400 });
+
+    const plugin = new ColumnResizePlugin();
+    plugin.register(grid);
+
+    plugin.beginResize("resized", 200);
+    expect(plugin.resizeTo(240)).toBe(240);
+    expect(grid.getViewportData().columns.map((item) => item.width)).toEqual([200, 240, 160]);
+    const [first, resized, last] = grid.getState().columns;
+    expect(first).toMatchObject({ id: "first", width: 200 });
+    expect(first).not.toHaveProperty("flex");
+    expect(resized).toMatchObject({ id: "resized", width: 240 });
+    expect(resized).not.toHaveProperty("flex");
+    expect(last).toMatchObject({ id: "last", flex: 1 });
+    expect(last).not.toHaveProperty("width");
+
+    grid.destroy();
+  });
+
+  it("resizes right-pinned columns in the direction of their left-edge handle", () => {
+    const grid = new Grid({
+      columns: [{ id: "pinned", header: "Pinned", width: 120, pinned: "right" }],
+      data: [{ pinned: "value" }],
+    });
+    grid.setViewport({ width: 600, height: 400 });
+
+    const plugin = new ColumnResizePlugin();
+    plugin.register(grid);
+
+    plugin.beginResize("pinned", 200);
+    expect(plugin.resizeTo(180)).toBe(140);
+    expect(grid.getViewportData().pinnedRightColumns[0].width).toBe(140);
+
+    expect(plugin.resizeTo(220)).toBe(100);
+    expect(grid.getViewportData().pinnedRightColumns[0].width).toBe(100);
+
+    plugin.endResize();
+    grid.destroy();
+  });
+
   it("injects a resize handle into the header renderer without adapter-specific resize hooks", () => {
     const grid = new Grid({
       columns: [
@@ -63,6 +133,42 @@ describe("ColumnResizePlugin", () => {
         expect.objectContaining({ type: "node", tag: "span" }),
       ]),
     );
+
+    grid.destroy();
+  });
+
+  it("places the resize handle on the left edge of right-pinned columns", () => {
+    const grid = new Grid({
+      columns: [{ id: "pinned", header: "Pinned", width: 120, pinned: "right" }],
+      data: [{ pinned: "value" }],
+    });
+
+    const plugin = new ColumnResizePlugin();
+    plugin.register(grid);
+
+    const column = grid.getState().columns[0];
+    const rendered = column.headerRenderer?.(column) as any;
+    const handle = rendered.children[1];
+    expect(handle.attrs.class).toContain("omnigrid-column-resize-handle-left");
+
+    grid.destroy();
+  });
+
+  it("supports opting a column out of resizing via resizable: false", () => {
+    const grid = new Grid({
+      columns: [
+        { id: "locked", header: "Locked", width: 120, resizable: false },
+      ],
+      data: [{ locked: "x" }],
+    });
+
+    const plugin = new ColumnResizePlugin();
+    plugin.register(grid);
+
+    const column = grid.getState().columns[0] as any;
+    expect(column.resizable).toBe(false);
+    expect(column.headerRenderer).toBeUndefined();
+    expect(plugin.setColumnWidth("locked", 200)).toBe(120);
 
     grid.destroy();
   });

@@ -28,9 +28,9 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         columnId: string;
         startX: number;
         startWidth: number;
+        direction: 1 | -1;
     };
     private guide: ColumnResizeGuide = { columnId: "", x: 0, visible: false };
-    private guideElement: HTMLDivElement | null = null;
     private readonly onResize?: (columnId: string, width: number) => void;
     private readonly onResizeStart?: (columnId: string, width: number) => void;
     private readonly onResizeEnd?: (columnId: string, width: number) => void;
@@ -58,7 +58,15 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
     public getColumnWidth(columnId: string): number | undefined {
         const column = this.findLeafColumn(columnId);
         if (!column) return undefined;
-        return column.width ?? 120;
+        if (column.width !== undefined) return column.width;
+
+        if (this.api) return this.api.getColumnWidth(columnId) ?? column.minWidth ?? 40;
+
+        return 120;
+    }
+
+    private canResizeColumn(column: ColumnLeafDef<T> | undefined): boolean {
+        return !!column && column.resizable !== false;
     }
 
     /** Alias for `getColumnWidth`. */
@@ -70,10 +78,31 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
     public setColumnWidth(columnId: string, width: number): number {
         if (!this.api) return width;
         const column = this.findLeafColumn(columnId);
-        if (!column) return width;
+        if (!column || !this.canResizeColumn(column)) return this.getColumnWidth(columnId) ?? width;
 
         const nextWidth = this.clampWidth(column, width);
-        const updated = this.updateColumns(this.api.getState().columns, columnId, (leaf) => ({ ...leaf, width: nextWidth }));
+        const columns = this.api.getState().columns;
+        const fixedFlexWidths = new Map<string, number>();
+        if (!column.pinned) {
+            const visibleScrollable = flattenColumns(columns).filter((leaf) => !leaf.hidden && !leaf.pinned);
+            const targetIndex = visibleScrollable.findIndex((leaf) => leaf.id === columnId);
+            for (const leaf of targetIndex > 0 ? visibleScrollable.slice(0, targetIndex) : []) {
+                if (leaf.flex && leaf.flex > 0 && leaf.width === undefined) {
+                    const currentWidth = this.api.getColumnWidth(leaf.id);
+                    if (currentWidth !== undefined) fixedFlexWidths.set(leaf.id, currentWidth);
+                }
+            }
+        }
+
+        const updated = this.updateColumns(columns, (leaf) => {
+            if (leaf.id === columnId) {
+                return leaf.flex && leaf.flex > 0 && leaf.width === undefined
+                    ? this.withFixedWidth(leaf, nextWidth)
+                    : { ...leaf, width: nextWidth };
+            }
+            const fixedWidth = fixedFlexWidths.get(leaf.id);
+            return fixedWidth === undefined ? leaf : this.withFixedWidth(leaf, fixedWidth);
+        });
         this.api.setColumns(updated);
         this.onResize?.(columnId, nextWidth);
         return nextWidth;
@@ -98,10 +127,18 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
 
     /** Starts an interactive resize using the pointer x-coordinate. */
     public beginResize(columnId: string, clientX: number): number {
+        const column = this.findLeafColumn(columnId);
+        if (!this.canResizeColumn(column)) return this.getColumnWidth(columnId) ?? 0;
+
         const currentWidth = this.getColumnWidth(columnId);
         if (currentWidth === undefined) return 0;
 
-        this.activeResize = { columnId, startX: clientX, startWidth: currentWidth };
+        this.activeResize = {
+            columnId,
+            startX: clientX,
+            startWidth: currentWidth,
+            direction: column?.pinned === "right" ? -1 : 1,
+        };
         this.guide = { columnId, x: clientX, visible: true };
         this.onResizeStart?.(columnId, currentWidth);
         return currentWidth;
@@ -117,7 +154,7 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         const active = this.activeResize;
         if (!active) return 0;
 
-        const delta = clientX - active.startX;
+        const delta = (clientX - active.startX) * active.direction;
         this.guide = { columnId: active.columnId, x: clientX, visible: true };
         return this.resizeBy(delta);
     }
@@ -156,7 +193,7 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
     /** Calculates the best-fit width from header text and visible row content. */
     public autoSizeColumn(columnId: string): number {
         const column = this.findLeafColumn(columnId);
-        if (!column || !this.api) return 0;
+        if (!column || !this.canResizeColumn(column) || !this.api) return this.getColumnWidth(columnId) ?? 0;
 
         const data = this.api.getProcessedData();
         const headerLength = String(column.header ?? "").length;
@@ -177,24 +214,24 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return this.autoSizeColumn(columnId);
     }
 
-    /** Returns the current visual guide line state for a UI overlay. */
+    /** Returns the current drag guide state for integrations. */
     public getResizeGuide(): ColumnResizeGuide {
         return { ...this.guide };
     }
 
-    /** Clears the current guide overlay and resets the active pointer state. */
+    /** Resets the current drag guide state. */
     public clearGuide(): void {
         this.guide = { columnId: "", x: 0, visible: false };
-        if (this.guideElement && this.guideElement.parentNode) {
-            this.guideElement.parentNode.removeChild(this.guideElement);
-        }
-        this.guideElement = null;
     }
 
     private attachResizeHandles(columns: ColumnDef<T>[]): ColumnDef<T>[] {
         return columns.map((column) => {
             if (isColumnGroup(column)) {
                 return { ...column, children: this.attachResizeHandles(column.children) };
+            }
+
+            if (column.resizable === false) {
+                return column;
             }
 
             const originalHeaderRenderer = column.headerRenderer;
@@ -209,17 +246,32 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
     }
 
     private createResizeHandleNode(column: ColumnLeafDef<T>, content: unknown): SlotNodeContent<T> {
+        const handleClass = column.pinned === "right"
+            ? "omnigrid-column-resize-handle omnigrid-column-resize-handle-left"
+            : "omnigrid-column-resize-handle";
+        const contentStyle = column.pinned === "right"
+            ? "position:relative; display:flex; align-items:center; width:calc(100% + 12px); margin-left:-12px; padding-left:12px; min-width:0;"
+            : "position:relative; display:flex; align-items:center; width:calc(100% + 12px); margin-right:-12px; min-width:0;";
+
         return {
             type: "node",
             tag: "span",
-            attrs: { class: "omnigrid-header-content" },
+            attrs: {
+                class: "omnigrid-header-content",
+                style: contentStyle,
+            },
             children: [
-                content,
+                {
+                    type: "node",
+                    tag: "span",
+                    attrs: { class: "omnigrid-header-label", style: "overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" },
+                    children: [content],
+                },
                 {
                     type: "node",
                     tag: "span",
                     attrs: {
-                        class: "omnigrid-column-resize-handle",
+                        class: handleClass,
                         "aria-hidden": true,
                         title: "Resize column",
                     },
@@ -245,9 +297,7 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
 
         const handlePointerMove = (event: PointerEvent) => {
             if (!this.activeResize) return;
-            const nextX = event.clientX;
-            this.resizeTo(nextX);
-            this.showGuide(nextX);
+            this.resizeTo(event.clientX);
         };
 
         const handlePointerUp = () => {
@@ -266,25 +316,6 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         };
     }
 
-    private showGuide(clientX: number): void {
-        if (typeof document === "undefined") return;
-        if (!this.guideElement) {
-            const guide = document.createElement("div");
-            guide.setAttribute("aria-hidden", "true");
-            guide.style.position = "fixed";
-            guide.style.top = "0px";
-            guide.style.width = "2px";
-            guide.style.background = "rgba(74, 144, 226, 0.8)";
-            guide.style.pointerEvents = "none";
-            guide.style.zIndex = "9999";
-            document.body.appendChild(guide);
-            this.guideElement = guide;
-        }
-
-        this.guideElement.style.left = `${clientX}px`;
-        this.guideElement.style.height = `${Math.max(window.innerHeight, document.body.scrollHeight, document.documentElement.scrollHeight)}px`;
-    }
-
     private findLeafColumn(columnId: string): ColumnLeafDef<T> | undefined {
         if (!this.api) return undefined;
         return flattenColumns(this.api.getState().columns).find((column) => column.id === columnId);
@@ -296,6 +327,12 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return Math.min(Math.max(width, minimum), maximum);
     }
 
+    private withFixedWidth(column: ColumnLeafDef<T>, width: number): ColumnLeafDef<T> {
+        const fixedColumn = { ...column, width };
+        delete fixedColumn.flex;
+        return fixedColumn;
+    }
+
     private resolveCellValue(row: T, column: ColumnLeafDef<T>): unknown {
         if (column.valueGetter) return column.valueGetter(row);
         if (!column.field) return undefined;
@@ -304,17 +341,13 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
 
     private updateColumns(
         columns: ColumnDef<T>[],
-        columnId: string,
         updater: (column: ColumnLeafDef<T>) => ColumnLeafDef<T>,
     ): ColumnDef<T>[] {
         return columns.map((column) => {
             if (isColumnGroup(column)) {
-                return { ...column, children: this.updateColumns(column.children, columnId, updater) };
+                return { ...column, children: this.updateColumns(column.children, updater) };
             }
-            if (column.id === columnId) {
-                return updater(column);
-            }
-            return column;
+            return updater(column);
         });
     }
 }

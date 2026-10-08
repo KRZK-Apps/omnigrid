@@ -17,6 +17,7 @@
     --omnigrid-header-background: #e9eef5;
     --omnigrid-header-border: #c5cfdd;
     --omnigrid-header-color: #334155;
+    --omnigrid-column-resize-color: #2563eb;
     --omnigrid-slot-background: #f4f7fb;
     --omnigrid-button-background: #ffffff;
     --omnigrid-button-border: #c5cfdd;
@@ -41,6 +42,7 @@
     --omnigrid-header-background: #2a2f30;
     --omnigrid-header-border: #3a3f40;
     --omnigrid-header-color: #e8ebe9;
+    --omnigrid-column-resize-color: #60a5fa;
     --omnigrid-slot-background: #1a1d1e;
     --omnigrid-button-background: #2a2f30;
     --omnigrid-button-border: #3a3f40;

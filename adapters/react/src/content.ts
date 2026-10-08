@@ -72,12 +72,40 @@ const SLOT_NODE_ATTRS: Record<string, string> = {
 
 const VOID_TAGS = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
 
+function parseStyleAttribute(rawValue: string | number | boolean | undefined): Record<string, string | number> | undefined {
+    if (rawValue === undefined || rawValue === null || typeof rawValue === "boolean") return undefined;
+    const value = String(rawValue).trim();
+    if (!value) return undefined;
+
+    const style: Record<string, string | number> = {};
+    for (const entry of value.split(";")) {
+        const trimmed = entry.trim();
+        if (!trimmed) continue;
+        const index = trimmed.indexOf(":");
+        if (index === -1) continue;
+        const cssName = trimmed.slice(0, index).trim();
+        const cssValue = trimmed.slice(index + 1).trim();
+        if (!cssName || !cssValue) continue;
+        const camelName = cssName
+            .split("-")
+            .map((part, idx) => (idx === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+            .join("");
+        style[camelName] = cssValue;
+    }
+    return Object.keys(style).length ? style : undefined;
+}
+
 function slotNodeToReact<T>(node: SlotNodeContent<T>, bridge: ContentBridge<T>): ReactNode {
     const context = bridge.context();
     const props: Record<string, unknown> = {};
 
     for (const [name, rawValue] of Object.entries(node.attrs ?? {})) {
         const key = SLOT_NODE_ATTRS[name] ?? name;
+        if (name === "style") {
+            const parsedStyle = parseStyleAttribute(rawValue);
+            if (parsedStyle) props.style = parsedStyle;
+            continue;
+        }
         if (typeof rawValue === "boolean") {
             if (rawValue) props[key] = true;
         } else if (rawValue !== undefined) {

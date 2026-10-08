@@ -129,7 +129,9 @@ export class Virtualizer<T> {
 
     private getColumnWidths(columns: ColumnLeafDef<T>[], viewportWidth: number): number[] {
         const widths = columns.map((column) => this.getBaseColumnWidth(column));
-        const flexIndexes = columns.map((column, index) => (column.flex && column.flex > 0 ? index : -1)).filter((index) => index >= 0);
+        const flexIndexes = columns
+            .map((column, index) => (column.flex && column.flex > 0 && column.width === undefined ? index : -1))
+            .filter((index) => index >= 0);
 
         if (flexIndexes.length === 0) return widths;
 
@@ -202,7 +204,12 @@ export class Virtualizer<T> {
     }
 
     private getBaseColumnWidth(column: ColumnLeafDef<T>): number {
-        if (column.flex && column.flex > 0) return this.getMinColumnWidth(column);
+        if (column.flex && column.flex > 0) {
+            if (column.width !== undefined) {
+                return Math.min(this.getMaxColumnWidth(column), Math.max(this.getMinColumnWidth(column), column.width));
+            }
+            return this.getMinColumnWidth(column);
+        }
         const width = column.width ?? 120;
         return Math.min(this.getMaxColumnWidth(column), Math.max(this.getMinColumnWidth(column), width));
     }

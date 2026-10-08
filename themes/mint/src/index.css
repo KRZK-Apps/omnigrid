@@ -17,6 +17,7 @@ html:root {
     --omnigrid-header-background: #d7eee5;
     --omnigrid-header-border: #b8d9ce;
     --omnigrid-header-color: #174b40;
+    --omnigrid-column-resize-color: #059669;
     --omnigrid-slot-background: #effaf6;
     --omnigrid-button-background: #f7fffb;
     --omnigrid-button-border: #9bcbbc;
@@ -42,6 +43,7 @@ html .dark {
     --omnigrid-header-background: #203c33;
     --omnigrid-header-border: #35584d;
     --omnigrid-header-color: #d9f2e9;
+    --omnigrid-column-resize-color: #5eead4;
     --omnigrid-slot-background: #10231f;
     --omnigrid-button-background: #203c33;
     --omnigrid-button-border: #456d60;

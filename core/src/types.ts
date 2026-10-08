@@ -64,6 +64,8 @@ interface BaseColumnDef<T> {
     header: string;
     /** Pins the column to a horizontal edge of the grid. */
     pinned?: "left" | "right";
+    /** Whether this column may be resized by the resize plugin. */
+    resizable?: boolean;
     /** Custom renderer for this column's header. */
     headerRenderer?: (column: ColumnDef<T>) => unknown;
 }
@@ -405,6 +407,7 @@ export interface GridApi<T> {
     getState(): GridState<T>;
     getScrollPosition(): ScrollPosition;
     getViewportData(): ViewportData<T>;
+    getColumnWidth(columnId: string): number | undefined;
     getProcessedData(): T[];
     getRowId(row: T, index: number): RowId;
     setData(data: T[]): void;

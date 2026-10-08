@@ -60,6 +60,20 @@ describe("Grid.getViewportData — pinned columns", () => {
         expect(vd.columnRange).toEqual({ start: 0, end: 2 });
         expect(vd.columns.every((c) => c.column.pinned === undefined)).toBe(true);
     });
+
+    it("respects an explicit width on a flex column while preserving relative sizing for the remaining flex columns", () => {
+        const grid = makeGrid(
+            [
+                { id: "a", flex: 1, minWidth: 80, width: 140 },
+                { id: "b", flex: 1, minWidth: 80 },
+                { id: "c", flex: 1, minWidth: 80 },
+            ],
+            600,
+        );
+
+        const vd = grid.getViewportData();
+        expect(vd.columns.map((item) => item.width)).toEqual([140, 230, 230]);
+    });
 });
 
 describe("Grid.getViewportData — horizontal windowing of scrollable columns", () => {
@@ -129,6 +143,22 @@ describe("Grid.getRevision — structural change detection", () => {
         const before = grid.getRevision();
         grid.setViewport({ scrollLeft: 50 });
         expect(grid.getRevision()).toBe(before);
+    });
+});
+
+describe("Grid.getColumnWidth", () => {
+    it("returns calculated widths for columns outside the current virtual window", () => {
+        const columns: ColumnDef<Row>[] = Array.from({ length: 8 }, (_, index) => ({
+            id: `c${index}`,
+            flex: 1,
+        }));
+        const grid = makeGrid(columns, 800, 500, 400);
+        const viewportData = grid.getViewportData();
+
+        expect(viewportData.columns.some((item) => item.column.id === "c0")).toBe(false);
+        expect(grid.getColumnWidth("c0")).toBe(100);
+        expect(grid.getColumnWidth("c7")).toBe(100);
+        expect(grid.getColumnWidth("missing")).toBeUndefined();
     });
 });
 

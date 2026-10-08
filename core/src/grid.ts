@@ -70,6 +70,30 @@ export class Grid<T> implements GridApi<T> {
         options.plugins?.forEach((plugin) => this.registerPlugin(plugin));
     }
 
+    /** Returns the calculated width for a visible column, including off-screen columns. */
+    public getColumnWidth(columnId: string): number | undefined {
+        const state = this.getState();
+        const visibleColumns = flattenColumns(state.columns).filter((column) => !column.hidden);
+        if (!visibleColumns.some((column) => column.id === columnId)) return undefined;
+
+        const pinnedLeft = visibleColumns.filter((column) => column.pinned === "left");
+        const scrollable = visibleColumns.filter((column) => !column.pinned);
+        const pinnedRight = visibleColumns.filter((column) => column.pinned === "right");
+        const pinnedLeftOffsets = this.virtualizer.getColumnOffsets(pinnedLeft, state.viewport.width);
+        const pinnedRightOffsets = this.virtualizer.getColumnOffsets(pinnedRight, state.viewport.width);
+        const pinnedLeftWidth = pinnedLeftOffsets.reduce((sum, item) => sum + item.size, 0);
+        const pinnedRightWidth = pinnedRightOffsets.reduce((sum, item) => sum + item.size, 0);
+        const scrollableWidth = Math.max(0, state.viewport.width - pinnedLeftWidth - pinnedRightWidth);
+        const scrollableOffsets = this.virtualizer.getColumnOffsets(scrollable, scrollableWidth);
+
+        const pinnedLeftIndex = pinnedLeft.findIndex((column) => column.id === columnId);
+        if (pinnedLeftIndex >= 0) return pinnedLeftOffsets[pinnedLeftIndex].size;
+        const pinnedRightIndex = pinnedRight.findIndex((column) => column.id === columnId);
+        if (pinnedRightIndex >= 0) return pinnedRightOffsets[pinnedRightIndex].size;
+        const scrollableIndex = scrollable.findIndex((column) => column.id === columnId);
+        return scrollableOffsets[scrollableIndex]?.size;
+    }
+
     public getState(): GridState<T> {
         return this.store.getState();
     }

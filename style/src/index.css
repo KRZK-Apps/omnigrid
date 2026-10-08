@@ -76,6 +76,42 @@
     color: var(--omnigrid-header-color);
 }
 
+.omnigrid-column-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -8px;
+    width: 16px;
+    height: 100%;
+    cursor: col-resize;
+    opacity: 0;
+    pointer-events: auto;
+    transition: opacity 120ms ease, background-color 120ms ease;
+    background: color-mix(in srgb, var(--omnigrid-column-resize-color, #2563eb) 14%, transparent);
+}
+
+.omnigrid-column-resize-handle-left {
+    left: -8px;
+    right: auto;
+}
+
+.omnigrid-column-resize-handle::before {
+    background: var(--omnigrid-column-resize-color, #2563eb);
+    bottom: 0;
+    content: "";
+    display: block;
+    height: 100%;
+    left: 8px;
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    width: 2px;
+}
+
+.omnigrid-column-resize-handle:hover,
+.omnigrid-column-resize-handle:active {
+    opacity: 1;
+}
+
 /* Pinned panes have no border so their contents stay aligned to core-computed offsets. */
 .omnigrid-pinned-right [role="cell"]:first-child,
 .omnigrid-pinned-right [role="columnheader"]:first-child {
