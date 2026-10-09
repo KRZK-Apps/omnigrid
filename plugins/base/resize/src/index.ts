@@ -252,6 +252,26 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         const contentStyle = column.pinned === "right"
             ? "position:relative; display:flex; align-items:center; width:calc(100% + 12px); margin-left:-12px; padding-left:12px; min-width:0;"
             : "position:relative; display:flex; align-items:center; width:calc(100% + 12px); margin-right:-12px; min-width:0;";
+        const sortIndicator = column.sortState && this.api
+            ? {
+                  type: "node" as const,
+                  tag: "span",
+                  attrs: { class: "omnigrid-sort-indicator", "aria-hidden": true },
+                  children: [
+                      this.api.icons.get(column.sortState === "asc" ? "arrow-up" : "arrow-down"),
+                      ...(column.sortIndex !== undefined
+                          ? [
+                                {
+                                    type: "node" as const,
+                                    tag: "span",
+                                    attrs: { class: "omnigrid-sort-priority" },
+                                    children: [String(column.sortIndex)],
+                                },
+                            ]
+                          : []),
+                  ],
+              }
+            : undefined;
 
         return {
             type: "node",
@@ -267,6 +287,16 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
                     attrs: { class: "omnigrid-header-label", style: "overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" },
                     children: [content],
                 },
+                ...(sortIndicator
+                    ? [
+                          {
+                              type: "node" as const,
+                              tag: "span",
+                              attrs: { class: "omnigrid-header-tools" },
+                              children: [sortIndicator],
+                          },
+                      ]
+                    : []),
                 {
                     type: "node",
                     tag: "span",
@@ -284,6 +314,7 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
                         dblclick: (_context: SlotRenderContext<T>) => {
                             this.autoSizeColumn(column.id);
                         },
+                        click: () => undefined,
                     },
                 },
             ],

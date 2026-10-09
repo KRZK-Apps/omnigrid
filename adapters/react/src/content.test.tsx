@@ -111,6 +111,26 @@ describe("contentToReactNode", () => {
         expect(onChange).toHaveBeenCalledWith(expect.anything(), { value: "100", key: "Enter" });
     });
 
+    it("prevents slot-node clicks from bubbling to parent handlers", () => {
+        const onClick = vi.fn();
+        const element = contentToReactNode<Row>(
+            { type: "node", tag: "span", on: { click: onClick } },
+            bridge(),
+        ) as { props: { onClick: (event: unknown) => void } };
+        const preventDefault = vi.fn();
+        const stopPropagation = vi.fn();
+
+        element.props.onClick({
+            preventDefault,
+            stopPropagation,
+            currentTarget: {},
+        });
+
+        expect(preventDefault).toHaveBeenCalledOnce();
+        expect(stopPropagation).toHaveBeenCalledOnce();
+        expect(onClick).toHaveBeenCalledOnce();
+    });
+
     it("renders void slot nodes without passing children", () => {
         expect(() =>
             render({

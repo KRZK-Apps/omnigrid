@@ -395,7 +395,6 @@
     cursor: pointer;
 }
 
-.omnigrid:not(:has(.omnigrid-pinned-right)) .omnigrid-scrollable [role="columnheader"]:last-child,
 .omnigrid-pinned-right [role="columnheader"]:last-child {
     border-right: 0;
 }

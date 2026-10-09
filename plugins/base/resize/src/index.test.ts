@@ -126,13 +126,38 @@ describe("ColumnResizePlugin", () => {
 
     const column = grid.getState().columns[0];
     expect(typeof column.headerRenderer).toBe("function");
-    const rendered = column.headerRenderer?.(column);
+    const rendered = column.headerRenderer?.(column) as any;
     expect(rendered).toMatchObject({ type: "node", tag: "span" });
-    expect((rendered as any).children).toEqual(
+    expect(rendered.children).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "node", tag: "span" }),
       ]),
     );
+    expect(rendered.children[1].on.click).toEqual(expect.any(Function));
+
+    grid.destroy();
+  });
+
+  it("keeps the sort direction and priority visible in the resized header", () => {
+    const grid = new Grid({
+      columns: [{ id: "status", header: "Status", width: 120, sortState: "desc", sortIndex: 2 }],
+      data: [{ status: "pending" }],
+    });
+
+    const plugin = new ColumnResizePlugin();
+    plugin.register(grid);
+
+    const column = grid.getState().columns[0];
+    const rendered = column.headerRenderer?.(column) as any;
+    const sortIndicator = rendered.children[1].children[0];
+
+    expect(sortIndicator.attrs.class).toBe("omnigrid-sort-indicator");
+    expect(sortIndicator.children[0].attrs.class).toContain("omnigrid-icon-arrow-down");
+    expect(sortIndicator.children[1]).toMatchObject({
+      tag: "span",
+      attrs: { class: "omnigrid-sort-priority" },
+      children: ["2"],
+    });
 
     grid.destroy();
   });
