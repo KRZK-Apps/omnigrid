@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, type UIEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import type { CellRenderParams, ColumnLeafDef, GridOptions, RowRenderParams, RowStyle, SlotMount, SlotName, SlotPosition, SlotRenderContext } from "@omnigrid/core";
 import { DomPool } from "@omnigrid/core";
@@ -338,7 +339,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
      * React effects (structural changes) and directly from the scroll rAF
      * handler (imperative, no React re-render).
      */
-    const syncPool = (): void => {
+    const syncPool = (synchronousColumnWindow = false): void => {
         const state = grid.getState();
         const currentViewportData = grid.getViewportData();
 
@@ -373,8 +374,17 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         const columnWindowKey = `${currentViewportData.columnRange.start}:${currentViewportData.columnRange.end}:${state.viewport.width}:${pinnedLeftWidth}:${pinnedRightWidth}`;
         if (columnWindowKey !== columnWindowKeyRef.current) {
             columnWindowKeyRef.current = columnWindowKey;
-            for (const pane of layers.central.panes) pane.updateColumns(layers.central.columns, layers.central.originX);
-            setColumnWindowVersion((v) => v + 1);
+            const updateColumnWindow = (): void => {
+                for (const pane of layers.central.panes) pane.updateColumns(layers.central.columns, layers.central.originX);
+                setColumnWindowVersion((v) => v + 1);
+            };
+            if (synchronousColumnWindow) {
+                // Keep React-rendered cell content and headers in step with the
+                // imperative cell repositioning before the browser paints.
+                flushSync(updateColumnWindow);
+            } else {
+                updateColumnWindow();
+            }
         }
     };
 
@@ -492,7 +502,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             // so this does NOT trigger a React re-render. The DomPool is
             // updated imperatively below.
             grid.setViewport({ scrollTop, scrollLeft });
-            syncPool();
+            syncPool(true);
         });
     };
 
