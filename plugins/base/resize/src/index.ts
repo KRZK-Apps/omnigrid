@@ -1,15 +1,27 @@
 import type { ColumnDef, ColumnLeafDef, GridApi, GridPlugin, SlotNodeContent, SlotNodeEvent, SlotRenderContext } from "@omnigrid/core";
 import { flattenColumns, isColumnGroup } from "@omnigrid/core";
 
+/**
+ * Live drag-guide state for the currently resizing column.
+ */
 export interface ColumnResizeGuide {
+    /** ID of the column being resized. */
     columnId: string;
+    /** Current pointer x-coordinate, in viewport pixels. */
     x: number;
+    /** Whether the guide is currently visible. */
     visible: boolean;
 }
 
+/**
+ * Configuration for the column resize plugin.
+ */
 export interface ColumnResizePluginOptions<T> {
+    /** Called with the column id and clamped width each time the width changes during a drag. */
     onResize?: (columnId: string, width: number) => void;
+    /** Called when a drag begins, with the column id and its starting width. */
     onResizeStart?: (columnId: string, width: number) => void;
+    /** Called when a drag completes, with the column id and its final width. */
     onResizeEnd?: (columnId: string, width: number) => void;
 }
 
@@ -54,7 +66,11 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         };
     }
 
-    /** Returns the current width of a leaf column. */
+    /**
+     * Returns the current width of a leaf column.
+     *
+     * @api
+     */
     public getColumnWidth(columnId: string): number | undefined {
         const column = this.findLeafColumn(columnId);
         if (!column) return undefined;
@@ -65,16 +81,11 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return 120;
     }
 
-    private canResizeColumn(column: ColumnLeafDef<T> | undefined): boolean {
-        return !!column && column.resizable !== false;
-    }
-
-    /** Alias for `getColumnWidth`. */
-    public getWidth(columnId: string): number | undefined {
-        return this.getColumnWidth(columnId);
-    }
-
-    /** Sets a column width and clamps it to the configured min/max constraints. */
+    /**
+     * Sets a column width and clamps it to the configured min/max constraints.
+     *
+     * @api
+     */
     public setColumnWidth(columnId: string, width: number): number {
         if (!this.api) return width;
         const column = this.findLeafColumn(columnId);
@@ -108,24 +119,40 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return nextWidth;
     }
 
-    /** Alias for `setColumnWidth`. */
+    /**
+     * Alias for `setColumnWidth`.
+     *
+     * @api
+     */
     public setWidth(columnId: string, width: number): number {
         return this.setColumnWidth(columnId, width);
     }
 
-    /** Changes the width by a delta in pixels. */
+    /**
+     * Changes the width by a delta in pixels.
+     *
+     * @api
+     */
     public resizeColumn(columnId: string, delta: number): number {
         const current = this.getColumnWidth(columnId);
         if (current === undefined) return delta;
         return this.setColumnWidth(columnId, current + delta);
     }
 
-    /** Alias for `resizeColumn`. */
+    /**
+     * Alias for `resizeColumn`.
+     *
+     * @api
+     */
     public resize(columnId: string, delta: number): number {
         return this.resizeColumn(columnId, delta);
     }
 
-    /** Starts an interactive resize using the pointer x-coordinate. */
+    /**
+     * Starts an interactive resize using the pointer x-coordinate.
+     *
+     * @api
+     */
     public beginResize(columnId: string, clientX: number): number {
         const column = this.findLeafColumn(columnId);
         if (!this.canResizeColumn(column)) return this.getColumnWidth(columnId) ?? 0;
@@ -144,12 +171,20 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return currentWidth;
     }
 
-    /** Adapter-friendly alias for pointer-down events. */
+    /**
+     * Adapter-friendly alias for pointer-down events.
+     *
+     * @api
+     */
     public handlePointerDown(columnId: string, clientX: number): number {
         return this.beginResize(columnId, clientX);
     }
 
-    /** Updates the current resize using the new pointer x-coordinate. */
+    /**
+     * Updates the current resize using the new pointer x-coordinate.
+     *
+     * @api
+     */
     public resizeTo(clientX: number): number {
         const active = this.activeResize;
         if (!active) return 0;
@@ -159,12 +194,20 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return this.resizeBy(delta);
     }
 
-    /** Adapter-friendly alias for pointer-move events. */
+    /**
+     * Adapter-friendly alias for pointer-move events.
+     *
+     * @api
+     */
     public handlePointerMove(clientX: number): number {
         return this.resizeTo(clientX);
     }
 
-    /** Updates the current resize using an already-calculated delta. */
+    /**
+     * Updates the current resize using an already-calculated delta.
+     *
+     * @api
+     */
     public resizeBy(delta: number): number {
         if (!this.activeResize) return 0;
 
@@ -174,7 +217,11 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return nextWidth;
     }
 
-    /** Completes the active pointer drag and hides the resize guide. */
+    /**
+     * Completes the active pointer drag and hides the resize guide.
+     *
+     * @api
+     */
     public endResize(): number {
         const active = this.activeResize;
         if (!active) return 0;
@@ -185,12 +232,20 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return width;
     }
 
-    /** Adapter-friendly alias for double-click auto-fit. */
+    /**
+     * Adapter-friendly alias for double-click auto-fit.
+     *
+     * @api
+     */
     public handleDoubleClick(columnId: string): number {
         return this.autoSizeColumn(columnId);
     }
 
-    /** Calculates the best-fit width from header text and visible row content. */
+    /**
+     * Calculates the best-fit width from header text and visible row content.
+     *
+     * @api
+     */
     public autoSizeColumn(columnId: string): number {
         const column = this.findLeafColumn(columnId);
         if (!column || !this.canResizeColumn(column) || !this.api) return this.getColumnWidth(columnId) ?? 0;
@@ -209,19 +264,35 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return this.setColumnWidth(columnId, Math.min(Math.max(estimatedWidth, minimum), maximum));
     }
 
-    /** Alias for `autoSizeColumn`. */
+    /**
+     * Alias for `autoSizeColumn`.
+     *
+     * @api
+     */
     public autoFitColumn(columnId: string): number {
         return this.autoSizeColumn(columnId);
     }
 
-    /** Returns the current drag guide state for integrations. */
+    /**
+     * Returns the current drag guide state for integrations.
+     *
+     * @api
+     */
     public getResizeGuide(): ColumnResizeGuide {
         return { ...this.guide };
     }
 
-    /** Resets the current drag guide state. */
+    /**
+     * Resets the current drag guide state.
+     *
+     * @api
+     */
     public clearGuide(): void {
         this.guide = { columnId: "", x: 0, visible: false };
+    }
+
+    private canResizeColumn(column: ColumnLeafDef<T> | undefined): boolean {
+        return !!column && column.resizable !== false;
     }
 
     private attachResizeHandles(columns: ColumnDef<T>[]): ColumnDef<T>[] {
@@ -383,5 +454,12 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
     }
 }
 
+/**
+ * {@link ColumnResizePlugin} with the `Column` prefix stripped for ergonomic construction.
+ */
 export const ResizePlugin = ColumnResizePlugin;
+
+/**
+ * Alias of {@link ColumnResizePluginOptions} with the `Column` prefix stripped for ergonomic construction.
+ */
 export type ResizePluginOptions<T> = ColumnResizePluginOptions<T>;
