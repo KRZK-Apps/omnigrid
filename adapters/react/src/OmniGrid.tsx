@@ -500,9 +500,14 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             const scrollLeft = element ? element.scrollLeft : frame.left;
             // setViewport with scroll-only updates does NOT notify the Store,
             // so this does NOT trigger a React re-render. The DomPool is
-            // updated imperatively below.
-            grid.setViewport({ scrollTop, scrollLeft });
-            syncPool(true);
+            // updated imperatively below, and both the row-column rebind and the
+            // header window update must flush in the same React paint to avoid
+            // one-frame horizontal/vertical jumps when custom cell renderers are
+            // mounted into pooled DOM nodes.
+            flushSync(() => {
+                grid.setViewport({ scrollTop, scrollLeft });
+                syncPool(true);
+            });
         });
     };
 
