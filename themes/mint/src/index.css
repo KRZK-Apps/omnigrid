@@ -20,8 +20,11 @@ html:root {
     --omnigrid-column-resize-color: #059669;
     --omnigrid-slot-background: #effaf6;
     --omnigrid-button-background: #f7fffb;
-    --omnigrid-button-border: #9bcbbc;
+    --omnigrid-button-border: #9bcbcb;
     --omnigrid-button-color: #175344;
+    --omnigrid-overlay-spinner-color: #059669;
+    --omnigrid-overlay-icon-color: #5a7d74;
+    --omnigrid-overlay-color: #3e6358;
 }
 
 html.dark,
@@ -48,4 +51,7 @@ html .dark {
     --omnigrid-button-background: #203c33;
     --omnigrid-button-border: #456d60;
     --omnigrid-button-color: #d9f2e9;
+    --omnigrid-overlay-spinner-color: #5eead4;
+    --omnigrid-overlay-icon-color: #6b9080;
+    --omnigrid-overlay-color: #8ba99d;
 }

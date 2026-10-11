@@ -1,5 +1,6 @@
 import { flattenColumns, getColumnGroups } from "./columns";
 import { EventBus } from "./events";
+import { evaluateAutoOverlay } from "./overlays";
 import { IconRegistry } from "./icons";
 import { SlotManager } from "./slots";
 import { Store } from "./store";
@@ -19,6 +20,7 @@ import type {
     ViewportData,
     ViewportState,
 } from "./types";
+import type { OverlayState, OverlayType } from "./overlays";
 import { Virtualizer } from "./virtualizer";
 
 export class Grid<T> implements GridApi<T> {
@@ -33,6 +35,17 @@ export class Grid<T> implements GridApi<T> {
     private processedDataCache: T[] | null = null;
     private revision = 0;
     private destroyed = false;
+
+    /**
+     * Overlay management state:
+     * - `loading`: whether the grid is fetching data (set via setLoading / options.loading)
+     * - `overlayState`: the current active overlay (type + payload)
+     * - `overlayManual`: whether the overlay was set manually (showOverlay), which
+     *   disables auto-evaluation until hideOverlay re-enables it.
+     */
+    private loading = false;
+    private overlayState: OverlayState = { type: null };
+    private overlayManual = false;
 
     /**
      * Separate ephemeral scroll position that is NOT stored in the Store.
@@ -52,9 +65,11 @@ export class Grid<T> implements GridApi<T> {
             rowHeight: options.rowHeight ?? 32,
             rowOverscan: options.rowOverscan ?? 5,
             columnOverscan: options.columnOverscan ?? 2,
+            overlay: { type: null },
         };
         this.store = new Store(state);
         this.resolveRowId = options.getRowId ?? ((_row, index) => index);
+        this.loading = options.loading ?? false;
         this.virtualizer = new Virtualizer({
             rowHeight: state.rowHeight,
             rowOverscan: state.rowOverscan,
@@ -68,6 +83,7 @@ export class Grid<T> implements GridApi<T> {
         });
         this.store.subscribe(() => this.events.emit("stateChange", this.store.getState()));
         options.plugins?.forEach((plugin) => this.registerPlugin(plugin));
+        this.recomputeOverlay();
     }
 
     /** Returns the calculated width for a visible column, including off-screen columns. */
@@ -223,6 +239,7 @@ export class Grid<T> implements GridApi<T> {
         this.revision += 1;
         this.store.setState({ data });
         this.events.emit("dataChange", data);
+        this.recomputeOverlay();
     }
 
     public setViewport(viewport: Partial<ViewportState>): void {
@@ -292,15 +309,18 @@ export class Grid<T> implements GridApi<T> {
         this.processedDataCache = null;
         this.revision += 1;
         this.store.setState({ columns });
+        this.recomputeOverlay();
     }
 
     public registerDataProcessor(processor: DataProcessor<T>): () => void {
         this.assertActive();
         this.dataProcessors.add(processor);
         this.processedDataCache = null;
+        this.recomputeOverlay();
         const unregister = () => {
             this.dataProcessors.delete(processor);
             this.processedDataCache = null;
+            if (!this.destroyed) this.recomputeOverlay();
         };
         return unregister;
     }
@@ -350,6 +370,58 @@ export class Grid<T> implements GridApi<T> {
         return this.slots.getMounts(slot);
     }
 
+    public showOverlay(type: OverlayType, payload?: unknown): void {
+        this.assertActive();
+        this.overlayManual = true;
+        this.overlayState = { type, payload };
+        this.store.setState({ overlay: { ...this.overlayState } });
+        this.events.emit("overlayChange", { ...this.overlayState });
+    }
+
+    public hideOverlay(): void {
+        this.assertActive();
+        this.overlayManual = false;
+        this.recomputeOverlay();
+    }
+
+    public getOverlayState(): OverlayState {
+        return { ...this.overlayState };
+    }
+
+    public setLoading(isLoading: boolean): void {
+        this.assertActive();
+        if (this.loading === isLoading) return;
+        this.loading = isLoading;
+        this.recomputeOverlay();
+    }
+
+    /**
+     * Re-evaluates the overlay based on the current Data Pipeline state.
+     *
+     * Skipped when a manual overlay is active (set via `showOverlay`). The
+     * Store is only updated when the overlay type actually changes — identical
+     * evaluations are a no-op to avoid spurious React re-renders.
+     */
+    private recomputeOverlay(): void {
+        if (this.destroyed) return;
+        if (this.overlayManual) return;
+
+        const state = this.store.getState();
+        const processedData = this.getProcessedData();
+        const type = evaluateAutoOverlay({
+            loading: this.loading,
+            rawData: state.data,
+            processedData,
+        });
+        const next: OverlayState = { type };
+
+        if (next.type !== this.overlayState.type || next.payload !== this.overlayState.payload) {
+            this.overlayState = next;
+            this.store.setState({ overlay: { ...next } });
+            this.events.emit("overlayChange", { ...next });
+        }
+    }
+
     /** Monotonic counter for structural changes (refresh / data / columns). */
     public getRevision(): number {
         return this.revision;
@@ -361,6 +433,8 @@ export class Grid<T> implements GridApi<T> {
         this.cleanupPlugins.clear();
         this.dataProcessors.clear();
         this.processedDataCache = null;
+        this.overlayState = { type: null };
+        this.overlayManual = false;
         this.slots.clear();
         this.store.clear();
         this.events.clear();

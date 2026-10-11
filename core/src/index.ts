@@ -1,11 +1,13 @@
 export { DomPool } from "./dom-pool";
 export { EventBus } from "./events";
+export { evaluateAutoOverlay } from "./overlays";
 export { IconRegistry } from "./icons";
 export type { IconDefinition, IconName } from "./icons";
 export { Grid } from "./grid";
 export { Grid as GridCore } from "./grid";
 export { SlotManager } from "./slots";
 export { Store } from "./store";
+export type { OverlayState, OverlayType } from "./overlays";
 export type {
     BlockConfig,
     CellAlign,

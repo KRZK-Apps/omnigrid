@@ -84,6 +84,19 @@ export function useGrid<T>(options: GridOptions<T>): UseGridResult<T> {
         }
     }, [grid, options.columns]);
 
+    // Sync loading state. When `options.loading` is true, show the loading
+    // overlay; when false, hide it (auto-overlays like noRows take over).
+    const loadingSyncedRef = useRef(false);
+    useEffect(() => {
+        if (grid.isDestroyed()) return;
+        if (!loadingSyncedRef.current) {
+            loadingSyncedRef.current = true;
+            grid.setLoading(!!options.loading);
+            return;
+        }
+        grid.setLoading(!!options.loading);
+    }, [grid, options.loading]);
+
     return {
         grid,
         state,

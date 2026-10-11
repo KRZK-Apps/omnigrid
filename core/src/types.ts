@@ -1,3 +1,4 @@
+import type { OverlayState, OverlayType } from "./overlays";
 import type { SlotManager } from "./slots";
 import type { IconRegistry } from "./icons";
 
@@ -141,6 +142,21 @@ export interface GridOptions<T> {
     getRowClass?: (params: RowRenderParams<T>) => string | undefined;
     rowClassRules?: RowClassRules<T>;
     plugins?: GridPlugin<T>[];
+    /** Whether data is currently being fetched. Triggers an automatic "loading" overlay. @default false */
+    loading?: boolean;
+    /**
+     * Custom overlay content keyed by overlay type. Each function receives an
+     * optional payload and the current grid state, and returns headless content
+     * (SlotContent) materialized by the adapter — the same protocol used by
+     * `cellRenderer` / slot content.
+     */
+    overlayComponents?: Partial<Record<OverlayType, (payload: unknown, state: GridState<T>) => unknown>>;
+    /**
+     * Called with the grid API instance when the grid is ready.
+     * Use this to programmatically control overlays, sorting, scrolling, etc.
+     * @api
+     */
+    onGridReady?: (grid: GridApi<T>) => void;
 }
 
 export interface ViewportState {
@@ -226,6 +242,8 @@ export interface GridState<T> {
     rowHeight: number;
     rowOverscan: number;
     columnOverscan: number;
+    /** Active overlay state — updated automatically by the grid's overlay manager. */
+    overlay: OverlayState;
 }
 
 export interface GridEvents<T> {
@@ -237,6 +255,7 @@ export interface GridEvents<T> {
     rowClick: RowClickEvent<T>;
     rowHover: RowHoverEvent<T>;
     slotsChange: { slot: SlotName; mounts: SlotMount<T>[] };
+    overlayChange: OverlayState;
 }
 
 /* ------------------------------------------------------------------ */
@@ -426,6 +445,33 @@ export interface GridApi<T> {
     readonly slots: SlotManager<T>;
     readonly icons: IconRegistry<T>;
     getSlotMounts(slot: SlotName): SlotMount<T>[];
+    /**
+     * Shows an overlay of the given type, optionally with a payload.
+     *
+     * Calling this disables automatic overlay evaluation until `hideOverlay`
+     * is called — the manual overlay takes precedence over auto-triggered
+     * states (loading, noRows, etc.).
+     * @api
+     */
+    showOverlay(type: OverlayType, payload?: unknown): void;
+    /**
+     * Hides the current overlay and re-enables automatic overlay evaluation
+     * based on the Data Pipeline state.
+     * @api
+     */
+    hideOverlay(): void;
+    /**
+     * Returns the current overlay state (a copy).
+     * @api
+     */
+    getOverlayState(): OverlayState;
+    /**
+     * Marks the grid as loading or not — triggers automatic overlay
+     * re-evaluation. When `true`, the "loading" overlay is shown regardless
+     * of the current data.
+     * @api
+     */
+    setLoading(isLoading: boolean): void;
     /** Monotonic counter for structural changes (refresh / data / columns). */
     getRevision(): number;
     destroy(): void;

@@ -22,6 +22,9 @@
     --omnigrid-button-background: #ffffff;
     --omnigrid-button-border: #c5cfdd;
     --omnigrid-button-color: #334155;
+    --omnigrid-overlay-spinner-color: #2563eb;
+    --omnigrid-overlay-icon-color: #64748b;
+    --omnigrid-overlay-color: #475569;
 }
 
 .dark {
@@ -47,4 +50,7 @@
     --omnigrid-button-background: #2a2f30;
     --omnigrid-button-border: #3a3f40;
     --omnigrid-button-color: #e8ebe9;
+    --omnigrid-overlay-spinner-color: #60a5fa;
+    --omnigrid-overlay-icon-color: #94a3b8;
+    --omnigrid-overlay-color: #94a3b8;
 }

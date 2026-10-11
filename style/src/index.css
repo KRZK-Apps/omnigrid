@@ -398,3 +398,52 @@
 .omnigrid-pinned-right [role="columnheader"]:last-child {
     border-right: 0;
 }
+
+/* ------------------------------------------------------------------ */
+/* Overlay                                                            */
+/* ------------------------------------------------------------------ */
+
+.omnigrid-overlay {
+    align-items: center;
+    background: var(--omnigrid-overlay-background, color-mix(in srgb, var(--omnigrid-grid-background) 72%, transparent));
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.omnigrid-overlay:focus-within {
+    outline: none;
+}
+
+.omnigrid-overlay-content {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.omnigrid-overlay-spinner {
+    animation: omnigrid-overlay-spin 0.8s linear infinite;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    border-top-color: var(--omnigrid-overlay-spinner-color, var(--omnigrid-checkbox-accent));
+    height: 20px;
+    width: 20px;
+}
+
+.omnigrid-overlay-icon {
+    color: var(--omnigrid-overlay-icon-color, var(--omnigrid-cell-color));
+    height: 24px;
+    width: 24px;
+}
+
+.omnigrid-overlay-text {
+    color: var(--omnigrid-overlay-color, var(--omnigrid-header-color));
+    font-size: 13px;
+}
+
+@keyframes omnigrid-overlay-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

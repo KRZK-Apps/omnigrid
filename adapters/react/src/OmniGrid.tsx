@@ -1,13 +1,14 @@
 import { type CSSProperties, type ReactNode, type UIEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
-import type { CellRenderParams, ColumnLeafDef, GridOptions, RowRenderParams, RowStyle, SlotMount, SlotName, SlotPosition, SlotRenderContext } from "@omnigrid/core";
+import type { CellRenderParams, ColumnLeafDef, GridOptions, OverlayState, OverlayType, RowRenderParams, RowStyle, SlotMount, SlotName, SlotPosition, SlotRenderContext } from "@omnigrid/core";
 import { DomPool } from "@omnigrid/core";
 
 import { type ContentBridge, contentToReactNode } from "./content";
 import { computeGroupSegments } from "./groupHeader";
 import { type PooledColumn, type PooledRowCallbacks, PooledRowPane } from "./pooledRow";
 import { createCellRoot } from "./reactRoot";
+import { renderDefaultOverlay } from "./overlays";
 import { useGrid } from "./useGrid";
 
 /**
@@ -134,6 +135,12 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     // re-allocated on every render cycle.
     const renderContext = useMemo<SlotRenderContext<T>>(() => ({ api: grid, state, slot: undefined }), [grid, state]);
     const buildRenderContext = useCallback(() => renderContext, [renderContext]);
+
+    const onGridReadyRef = useRef(options.onGridReady);
+    onGridReadyRef.current = options.onGridReady;
+    useEffect(() => {
+        onGridReadyRef.current?.(grid);
+    }, [grid]);
 
     const autoHeight = style?.height === undefined;
     const rowHeight = grid.getState().rowHeight;
@@ -557,6 +564,35 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         );
     };
 
+    /**
+     * Resolves the active overlay content: a custom renderer (if registered)
+     * takes precedence; otherwise the built-in default overlay is used.
+     *
+     * Custom renderers return headless content (SlotContent) materialized via
+     * `contentToReactNode` — the same protocol as cell/slot renderers.
+     */
+    function renderOverlayContent(overlay: OverlayState | undefined): ReactNode {
+        if (!overlay || !overlay.type) return null;
+
+        const customRenderer = optionsRef.current.overlayComponents?.[overlay.type];
+        if (customRenderer) {
+            return contentToReactNode(customRenderer(overlay.payload, grid.getState()), {
+                registry: slotComponentsRef.current,
+                context: buildRenderContext,
+            });
+        }
+
+        if (overlay.type === "custom") {
+            return contentToReactNode(overlay.payload, {
+                registry: slotComponentsRef.current,
+                context: buildRenderContext,
+            });
+        }
+
+        return renderDefaultOverlay(overlay);
+    }
+
+    const overlayState: OverlayState | undefined = state.overlay;
     const pinnedLeftWidth = viewportData.pinnedLeftColumns.reduce((sum, item) => sum + item.width, 0);
     const pinnedRightWidth = viewportData.pinnedRightColumns.reduce((sum, item) => sum + item.width, 0);
     const scrollableWidth = Math.max(0, viewportData.totalWidth - pinnedLeftWidth - pinnedRightWidth);
@@ -820,6 +856,23 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                             </div>
                         )}
                     </div>
+                    {overlayState?.type && (
+                        <div
+                            className="omnigrid-overlay"
+                            role="status"
+                            style={{
+                                bottom: 0,
+                                left: 0,
+                                pointerEvents: "auto",
+                                position: "absolute",
+                                right: 0,
+                                top: headerHeight,
+                                zIndex: 4,
+                            }}
+                        >
+                            {renderOverlayContent(overlayState)}
+                        </div>
+                    )}
                 </div>
                 {renderSlot("right")}
             </div>
