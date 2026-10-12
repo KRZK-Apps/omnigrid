@@ -22,6 +22,28 @@ const data = [...];
 <OmniGrid columns={columns} data={data} />;
 ```
 
+## Overlays
+
+The adapter renders body-only overlays below the sticky header. While one is active, vertical
+scrolling and its scrollbar are disabled; horizontal scrolling remains available for
+`noMatchingRows` (or when `blockScroll: false`). Use `scope: "full"` to cover the header and
+body as well.
+
+```tsx
+import { OmniGrid, type OverlayComponentProps } from "@omnigrid/react";
+
+function LoadError<T>({ message }: OverlayComponentProps<T>) {
+    return <div role="alert">{message ?? "Unable to load rows"}</div>;
+}
+
+<OmniGrid
+    columns={columns}
+    data={data}
+    overlayComponents={{ error: LoadError }}
+    onGridReady={(grid) => grid.showOverlay({ type: "error", message: "Please retry" })}
+/>;
+```
+
 To customize the table's color style, install a compatible `@omnigrid/*-theme`
 package and import it in the application after `@omnigrid/react`. Theme packages
 include their own light and dark variants; they are not light/dark mode toggles.

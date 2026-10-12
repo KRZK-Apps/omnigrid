@@ -20,6 +20,10 @@ describe("evaluateAutoOverlay", () => {
         expect(evaluateAutoOverlay({ loading: false, rawData: [], processedData: [] })).toBe("noRows");
     });
 
+    it("returns 'error' when a data load failed", () => {
+        expect(evaluateAutoOverlay({ loading: false, error: new Error("offline"), rawData: [], processedData: [] })).toBe("error");
+    });
+
     it("returns 'noMatchingRows' when processed data is empty but raw data exists", () => {
         expect(evaluateAutoOverlay({ loading: false, rawData: [{ name: "a" }, { name: "b" }], processedData: [] })).toBe("noMatchingRows");
     });
@@ -30,6 +34,14 @@ describe("evaluateAutoOverlay", () => {
 });
 
 describe("Grid overlay — automatic evaluation", () => {
+    it("shows loading while initial data is undefined", () => {
+        const grid = new Grid<Row>({ columns: COLUMNS });
+        expect(grid.getOverlayState().type).toBe("loading");
+
+        grid.setData([]);
+        expect(grid.getOverlayState().type).toBe("noRows");
+    });
+
     it("shows noRows overlay when data is initially empty", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [] });
         expect(grid.getOverlayState()).toEqual({ type: "noRows" });
@@ -61,12 +73,29 @@ describe("Grid overlay — automatic evaluation", () => {
         expect(grid.getOverlayState().type).toBe("noRows");
     });
 
+    it("shows an automatic error overlay when loading completes with an error", () => {
+        const grid = new Grid<Row>({ columns: COLUMNS, data: [{ name: "a" }], loading: true });
+        const error: Error = new Error("Network unavailable");
+        grid.setLoading(false, error);
+
+        expect(grid.getOverlayState()).toEqual({ type: "error", payload: error });
+        grid.setData([{ name: "a" }]);
+        expect(grid.getOverlayState().type).toBe(null);
+    });
+
+    it("keeps the loading overlay active while data is null", () => {
+        const grid = new Grid<Row>({ columns: COLUMNS, data: null });
+        expect(grid.getOverlayState().type).toBe("loading");
+        grid.setData(null);
+        expect(grid.getOverlayState().type).toBe("loading");
+    });
+
     it("shows noMatchingRows when a data processor filters everything out", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [{ name: "a" }, { name: "b" }] });
         expect(grid.getOverlayState().type).toBe(null);
 
         grid.registerDataProcessor((data) => data.filter((row) => row.name === "nonexistent"));
-        expect(grid.getOverlayState().type).toBe("noMatchingRows");
+        expect(grid.getOverlayState()).toEqual({ type: "noMatchingRows", blockScroll: false });
     });
 
     it("hides noMatchingRows when the filter is removed and data reappears", () => {
@@ -97,6 +126,26 @@ describe("Grid overlay — manual show/hide", () => {
 
         grid.showOverlay("error", new Error("Something went wrong"));
         expect(grid.getOverlayState()).toEqual({ type: "error", payload: expect.any(Error) });
+    });
+
+    it("showOverlay accepts scope, scroll, message, and component options", () => {
+        const grid = new Grid<Row>({ columns: COLUMNS, data: [{ name: "a" }] });
+        const component: () => null = () => null;
+        grid.showOverlay({
+            type: "custom",
+            scope: "full",
+            blockScroll: false,
+            message: "Unavailable",
+            component,
+        });
+
+        expect(grid.getOverlayState()).toEqual({
+            type: "custom",
+            scope: "full",
+            blockScroll: false,
+            message: "Unavailable",
+            component,
+        });
     });
 
     it("showOverlay disables automatic evaluation", () => {

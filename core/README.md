@@ -26,7 +26,7 @@ not re-render on scroll frames. Read them via `getScrollPosition()`.
 
 ```ts
 interface GridOptions<T> {
-    data?: T[];                        // row data; omit when a plugin provides it (server pagination)
+    data?: T[] | null;                 // row data; null/omitted means initial loading
     columns: ColumnDef<T>[];           // required
     getRowId?: (row: T, index: number) => RowId;            // default: index-based
     rowHeight?: number;                // fixed px row height; default 32 (offset math is O(1))
@@ -39,6 +39,8 @@ interface GridOptions<T> {
     getRowClass?: (params: RowRenderParams<T>) => string | undefined;
     rowClassRules?: RowClassRules<T>;  // class name → predicate
     plugins?: GridPlugin<T>[];         // plugin instances registered at construction
+    loading?: boolean;                 // active fetch; shows loading even with prior rows
+    overlayComponents?: Record<string, OverlayComponent<T>>;
 }
 ```
 
@@ -97,7 +99,7 @@ interface GridApi<T> {
     getViewportData(): ViewportData<T>;                    // virtualized window: rows/columns + absolute offsets
     getProcessedData(): T[];                               // after all registered data processors
     getRowId(row: T, index: number): RowId;
-    setData(data: T[]): void;
+    setData(data: T[] | null | undefined): void;
     setViewport(viewport: Partial<ViewportState>): void;   // width/height/scrollTop/scrollLeft; scroll-only ⇒ no Store notify
     refresh(): void;                                       // repaint hints (rowClassRules), bumps revision
     subscribe(listener: () => void): () => void;
@@ -111,11 +113,37 @@ interface GridApi<T> {
     readonly slots: SlotManager<T>;                        // mount headless widgets
     readonly icons: IconRegistry<T>;                       // declarative SVG icons for plugin UI
     getSlotMounts(slot: SlotName): SlotMount<T>[];
+    showOverlay(options: OverlayOptions): void;
+    hideOverlay(): void;
+    getOverlayState(): OverlayState;
+    setLoading(isLoading: boolean, error?: unknown): void;
     getRevision(): number;                                 // monotonic counter for structural changes
     destroy(): void;
     isDestroyed(): boolean;
 }
 ```
+
+### Overlays
+
+Overlays are managed in core state, so state transitions notify subscribers only when the
+overlay changes (scroll position stays ephemeral). Initial `data: null` or omitted data shows
+loading; an explicit empty array shows the no-rows state. Empty processed results with source
+rows show no-matching-rows and leave horizontal column inspection enabled. Report fetch failures
+through `setLoading(false, error)`; a successful `setData` clears the error.
+
+```ts
+grid.showOverlay({
+    type: "error",
+    scope: "bodyOnly", // or "full" to cover the complete grid
+    blockScroll: false, // keep horizontal scrolling; body overlays always lock vertical scroll
+    message: "Could not load records",
+});
+grid.hideOverlay(); // restores automatic loading / empty-state evaluation
+const overlay = grid.getOverlayState();
+```
+
+`overlayComponents` accepts framework-specific components through the adapter or core render
+callbacks. Component props include `type`, `message`, `payload`, and the current `state`.
 
 `GridEvents<T>`: `stateChange` | `viewportChange` | `dataChange` | `headerClick` | `rowClick` | `rowHover` | `slotsChange`.
 Example: `grid.on("rowClick", (e) => console.log(e.id, e.index, e.data))`.

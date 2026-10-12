@@ -20,7 +20,7 @@ import type {
     ViewportData,
     ViewportState,
 } from "./types";
-import type { OverlayState, OverlayType } from "./overlays";
+import type { OverlayOptions, OverlayState, OverlayType } from "./overlays";
 import { Virtualizer } from "./virtualizer";
 
 export class Grid<T> implements GridApi<T> {
@@ -44,6 +44,8 @@ export class Grid<T> implements GridApi<T> {
      *   disables auto-evaluation until hideOverlay re-enables it.
      */
     private loading = false;
+    private hasData = true;
+    private loadError: unknown;
     private overlayState: OverlayState = { type: null };
     private overlayManual = false;
 
@@ -70,6 +72,7 @@ export class Grid<T> implements GridApi<T> {
         this.store = new Store(state);
         this.resolveRowId = options.getRowId ?? ((_row, index) => index);
         this.loading = options.loading ?? false;
+        this.hasData = options.data !== undefined && options.data !== null;
         this.virtualizer = new Virtualizer({
             rowHeight: state.rowHeight,
             rowOverscan: state.rowOverscan,
@@ -233,12 +236,15 @@ export class Grid<T> implements GridApi<T> {
         return this.resolveRowId(row, index);
     }
 
-    public setData(data: T[]): void {
+    public setData(data: T[] | null | undefined): void {
         this.assertActive();
+        this.loadError = undefined;
+        this.hasData = data !== undefined && data !== null;
+        const nextData: T[] = data ?? [];
         this.processedDataCache = null;
         this.revision += 1;
-        this.store.setState({ data });
-        this.events.emit("dataChange", data);
+        this.store.setState({ data: nextData });
+        this.events.emit("dataChange", nextData);
         this.recomputeOverlay();
     }
 
@@ -370,10 +376,15 @@ export class Grid<T> implements GridApi<T> {
         return this.slots.getMounts(slot);
     }
 
-    public showOverlay(type: OverlayType, payload?: unknown): void {
+    public showOverlay(options: OverlayOptions): void;
+    /** @deprecated Use the options-object overload. */
+    public showOverlay(type: OverlayType, payload?: unknown): void;
+    public showOverlay(optionsOrType: OverlayOptions | OverlayType, payload?: unknown): void {
         this.assertActive();
+        const options: OverlayOptions =
+            typeof optionsOrType === "string" ? { type: optionsOrType, payload } : optionsOrType;
         this.overlayManual = true;
-        this.overlayState = { type, payload };
+        this.overlayState = { ...options };
         this.store.setState({ overlay: { ...this.overlayState } });
         this.events.emit("overlayChange", { ...this.overlayState });
     }
@@ -388,10 +399,12 @@ export class Grid<T> implements GridApi<T> {
         return { ...this.overlayState };
     }
 
-    public setLoading(isLoading: boolean): void {
+    public setLoading(isLoading: boolean, error?: unknown): void {
         this.assertActive();
-        if (this.loading === isLoading) return;
+        const nextError: unknown = isLoading ? undefined : error;
+        if (this.loading === isLoading && this.loadError === nextError) return;
         this.loading = isLoading;
+        this.loadError = nextError;
         this.recomputeOverlay();
     }
 
@@ -408,14 +421,28 @@ export class Grid<T> implements GridApi<T> {
 
         const state = this.store.getState();
         const processedData = this.getProcessedData();
-        const type = evaluateAutoOverlay({
-            loading: this.loading,
+        const type: OverlayType | null = evaluateAutoOverlay({
+            loading: this.loading || !this.hasData,
+            error: this.loadError,
             rawData: state.data,
             processedData,
         });
-        const next: OverlayState = { type };
+        const next: OverlayState = type
+            ? {
+                  type,
+                  ...(type === "error" && this.loadError !== undefined ? { payload: this.loadError } : {}),
+                  ...(type === "noMatchingRows" ? { blockScroll: false } : {}),
+              }
+            : { type };
 
-        if (next.type !== this.overlayState.type || next.payload !== this.overlayState.payload) {
+        if (
+            next.type !== this.overlayState.type ||
+            next.payload !== this.overlayState.payload ||
+            next.scope !== this.overlayState.scope ||
+            next.blockScroll !== this.overlayState.blockScroll ||
+            next.message !== this.overlayState.message ||
+            next.component !== this.overlayState.component
+        ) {
             this.overlayState = next;
             this.store.setState({ overlay: { ...next } });
             this.events.emit("overlayChange", { ...next });

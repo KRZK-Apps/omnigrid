@@ -1,7 +1,7 @@
-import { type CSSProperties, type ReactNode, type UIEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createElement, type ComponentType, type CSSProperties, type ReactNode, type UIEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
-import type { CellRenderParams, ColumnLeafDef, GridOptions, OverlayState, OverlayType, RowRenderParams, RowStyle, SlotMount, SlotName, SlotPosition, SlotRenderContext } from "@omnigrid/core";
+import type { CellRenderParams, ColumnLeafDef, GridOptions, GridState, OverlayComponent as CoreOverlayComponent, OverlayComponentProps as CoreOverlayComponentProps, OverlayScope, OverlayState, OverlayType, RowRenderParams, RowStyle, SlotMount, SlotName, SlotPosition, SlotRenderContext } from "@omnigrid/core";
 import { DomPool } from "@omnigrid/core";
 
 import { type ContentBridge, contentToReactNode } from "./content";
@@ -19,10 +19,17 @@ export interface SlotRendererRegistry<T> {
     [kind: string]: (payload: unknown, context: SlotRenderContext<T>) => ReactNode;
 }
 
-export interface GridProps<T> extends GridOptions<T> {
+export type OverlayComponentProps<T> = CoreOverlayComponentProps<T>;
+
+type OverlayComponent<T> =
+    | ComponentType<CoreOverlayComponentProps<T>>
+    | CoreOverlayComponent<T>;
+
+export interface GridProps<T> extends Omit<GridOptions<T>, "overlayComponents"> {
     className?: string;
     style?: CSSProperties;
     slotComponents?: SlotRendererRegistry<T>;
+    overlayComponents?: Record<string, OverlayComponent<T>>;
 }
 
 function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
@@ -102,7 +109,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const pinnedRightRowsLayerRef = useRef<HTMLDivElement>(null);
     const [isMeasured, setIsMeasured] = useState(false);
     const scrollFrameRef = useRef<{ id: number; top: number; left: number }>({ id: 0, top: 0, left: 0 });
-    const optionsRef = useRef<GridOptions<T>>(options);
+    const optionsRef = useRef<GridProps<T>>(options);
     const columnWindowKeyRef = useRef("");
     const scrollbarWidthRef = useRef(0);
     const slotComponentsRef = useRef<SlotRendererRegistry<T>>({});
@@ -173,6 +180,12 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const viewportStyle = { ...style, height: autoHeight ? measuredHeight : style?.height };
     const suppressRowHoverHighlight = options.suppressRowHoverHighlight ?? false;
     const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null].filter(Boolean).join(" ");
+    const overlayState: OverlayState | undefined = state.overlay;
+    const overlayScope: OverlayScope | undefined = overlayState.type ? (overlayState.scope ?? "bodyOnly") : undefined;
+    const overlayBlocksHorizontalScroll: boolean = overlayState.type
+        ? (overlayState.blockScroll ?? overlayState.type !== "noMatchingRows")
+        : false;
+    const isFullOverlay: boolean = overlayScope === "full";
 
     /**
      * Bridge between the core's headless content and React: a factory for the
@@ -439,10 +452,10 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
 
     useLayoutEffect(() => {
         if (!isMeasured || autoHeight) return;
-        // Gutter changes alter clientWidth; sync it before paint so columns
-        // cannot render underneath a newly visible vertical scrollbar.
+        // Scrollbar and gutter changes alter clientWidth; sync it before paint
+        // so columns remain aligned when an overlay locks vertical scrolling.
         measureViewport();
-    }, [autoHeight, hasVerticalOverflow, isMeasured, measureViewport]);
+    }, [autoHeight, hasVerticalOverflow, isMeasured, measureViewport, overlayScope]);
 
     /**
      * Sync the DomPool after every structural re-render.
@@ -565,24 +578,39 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     };
 
     /**
-     * Resolves the active overlay content: a custom renderer (if registered)
-     * takes precedence; otherwise the built-in default overlay is used.
-     *
-     * Custom renderers return headless content (SlotContent) materialized via
-     * `contentToReactNode` — the same protocol as cell/slot renderers.
+     * Resolves a React component, legacy headless renderer, or built-in overlay
+     * for the active state.
      */
     function renderOverlayContent(overlay: OverlayState | undefined): ReactNode {
         if (!overlay || !overlay.type) return null;
 
-        const customRenderer = optionsRef.current.overlayComponents?.[overlay.type];
-        if (customRenderer) {
-            return contentToReactNode(customRenderer(overlay.payload, grid.getState()), {
+        const registeredRenderer: OverlayComponent<T> | undefined =
+            typeof overlay.component === "string"
+                ? optionsRef.current.overlayComponents?.[overlay.component]
+                : optionsRef.current.overlayComponents?.[overlay.type];
+        const component: unknown =
+            typeof overlay.component === "function" || (typeof overlay.component === "object" && overlay.component !== null)
+                ? overlay.component
+                : registeredRenderer;
+        const isLegacyRenderer: boolean = typeof component === "function" && component.length >= 2;
+        if (component && !isLegacyRenderer) {
+            return createElement(component as ComponentType<CoreOverlayComponentProps<T>>, {
+                type: overlay.type,
+                message: overlay.message,
+                payload: overlay.payload,
+                state: grid.getState(),
+            });
+        }
+
+        const customRenderer: unknown = component ?? registeredRenderer;
+        if (isLegacyRenderer && typeof customRenderer === "function") {
+            return contentToReactNode((customRenderer as (payload: unknown, state: GridState<T>) => unknown)(overlay.payload, grid.getState()), {
                 registry: slotComponentsRef.current,
                 context: buildRenderContext,
             });
         }
 
-        if (overlay.type === "custom") {
+        if (overlay.component !== undefined) {
             return contentToReactNode(overlay.payload, {
                 registry: slotComponentsRef.current,
                 context: buildRenderContext,
@@ -592,7 +620,6 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         return renderDefaultOverlay(overlay);
     }
 
-    const overlayState: OverlayState | undefined = state.overlay;
     const pinnedLeftWidth = viewportData.pinnedLeftColumns.reduce((sum, item) => sum + item.width, 0);
     const pinnedRightWidth = viewportData.pinnedRightColumns.reduce((sum, item) => sum + item.width, 0);
     const scrollableWidth = Math.max(0, viewportData.totalWidth - pinnedLeftWidth - pinnedRightWidth);
@@ -611,6 +638,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     // correctly on the horizontal axis because sticky positioning is not
     // affected by the clip.
     const needsHorizontalScroll = viewportData.totalWidth > grid.getState().viewport.width;
+    const overlayHeight: number = Math.max(0, (autoHeight ? measuredHeight : state.viewport.height) - headerHeight);
 
     const renderHeaderCells = (columns: PooledColumn<T>[], originX: number): ReactNode =>
         columns.map((item) => {
@@ -781,7 +809,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     );
 
     return (
-        <div className="omnigrid-layout" style={style}>
+        <div className="omnigrid-layout" style={{ ...style, position: "relative", ...(isFullOverlay ? { overflow: "hidden" } : {}) }}>
             {renderSlot("top")}
             <div className="omnigrid-layout-body">
                 {renderSlot("left")}
@@ -795,10 +823,10 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                         height: autoHeight ? measuredHeight : "100%",
                         minHeight: 0,
                         minWidth: 0,
-                        overflowX: needsHorizontalScroll ? "auto" : "hidden",
-                        overflowY: autoHeight ? "hidden" : "auto",
+                        overflowX: isFullOverlay || (overlayScope === "bodyOnly" && overlayBlocksHorizontalScroll) ? "hidden" : needsHorizontalScroll ? "auto" : "hidden",
+                        overflowY: isFullOverlay || overlayScope === "bodyOnly" || autoHeight ? "hidden" : "auto",
                         position: "relative",
-                        scrollbarGutter: verticalScrollbarGutter,
+                        scrollbarGutter: overlayScope === "bodyOnly" ? "auto" : verticalScrollbarGutter,
                         width: "100%",
                     }}
                 >
@@ -856,17 +884,22 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                             </div>
                         )}
                     </div>
-                    {overlayState?.type && (
+                    {overlayState.type && overlayScope === "bodyOnly" && (
+                        // Keep the sticky overlay anchored to the body viewport without adding
+                        // its height to the scrollable content's natural dimensions.
                         <div
-                            className="omnigrid-overlay"
+                            className="omnigrid-overlay omnigrid-overlay-body"
                             role="status"
                             style={{
-                                bottom: 0,
+                                height: overlayHeight,
                                 left: 0,
+                                marginBottom: -overlayHeight,
+                                marginTop: -rowTotalHeight,
                                 pointerEvents: "auto",
-                                position: "absolute",
+                                position: "sticky",
                                 right: 0,
                                 top: headerHeight,
+                                width: "100%",
                                 zIndex: 4,
                             }}
                         >
@@ -877,6 +910,11 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 {renderSlot("right")}
             </div>
             {renderSlot("bottom")}
+            {overlayState.type && isFullOverlay && (
+                <div className="omnigrid-overlay omnigrid-overlay-full" role="status">
+                    {renderOverlayContent(overlayState)}
+                </div>
+            )}
         </div>
     );
 }

@@ -1,4 +1,4 @@
-import type { OverlayState, OverlayType } from "./overlays";
+import type { OverlayOptions, OverlayState, OverlayType } from "./overlays";
 import type { SlotManager } from "./slots";
 import type { IconRegistry } from "./icons";
 
@@ -128,8 +128,34 @@ export interface ColumnGroupDef<T> extends BaseColumnDef<T> {
 /** Leaf or grouped column definition accepted by the grid. */
 export type ColumnDef<T> = ColumnLeafDef<T> | ColumnGroupDef<T>;
 
+/**
+ * Props supplied to a framework-specific overlay renderer.
+ *
+ * @api
+ */
+export interface OverlayComponentProps<T> {
+    /** The active overlay state. */
+    type: OverlayType;
+    /** Optional display text override. */
+    message?: string;
+    /** Custom overlay payload. */
+    payload?: unknown;
+    /** Latest public grid state. */
+    state: GridState<T>;
+}
+
+/**
+ * Framework-neutral custom overlay renderer.
+ *
+ * @api
+ */
+export type OverlayComponent<T> =
+    | ((props: OverlayComponentProps<T>) => unknown)
+    | ((payload: unknown, state: GridState<T>) => unknown);
+
 export interface GridOptions<T> {
-    data?: T[];
+    /** Row data; omitted or null means an initial load is pending. */
+    data?: T[] | null;
     columns: ColumnDef<T>[];
     getRowId?: (row: T, index: number) => RowId;
     rowHeight?: number;
@@ -142,15 +168,14 @@ export interface GridOptions<T> {
     getRowClass?: (params: RowRenderParams<T>) => string | undefined;
     rowClassRules?: RowClassRules<T>;
     plugins?: GridPlugin<T>[];
-    /** Whether data is currently being fetched. Triggers an automatic "loading" overlay. @default false */
+    /** Whether data is currently being fetched. Triggers a loading overlay. @default false when data is supplied */
     loading?: boolean;
     /**
-     * Custom overlay content keyed by overlay type. Each function receives an
-     * optional payload and the current grid state, and returns headless content
-     * (SlotContent) materialized by the adapter — the same protocol used by
-     * `cellRenderer` / slot content.
+     * Custom overlay renderers keyed by overlay type or renderer identifier.
+     * A one-argument function receives `OverlayComponentProps`; the legacy
+     * two-argument form receives `(payload, state)`.
      */
-    overlayComponents?: Partial<Record<OverlayType, (payload: unknown, state: GridState<T>) => unknown>>;
+    overlayComponents?: Record<string, unknown>;
     /**
      * Called with the grid API instance when the grid is ready.
      * Use this to programmatically control overlays, sorting, scrolling, etc.
@@ -429,7 +454,7 @@ export interface GridApi<T> {
     getColumnWidth(columnId: string): number | undefined;
     getProcessedData(): T[];
     getRowId(row: T, index: number): RowId;
-    setData(data: T[]): void;
+    setData(data: T[] | null | undefined): void;
     setViewport(viewport: Partial<ViewportState>): void;
     refresh(): void;
     subscribe(listener: () => void): () => void;
@@ -446,13 +471,16 @@ export interface GridApi<T> {
     readonly icons: IconRegistry<T>;
     getSlotMounts(slot: SlotName): SlotMount<T>[];
     /**
-     * Shows an overlay of the given type, optionally with a payload.
+     * Shows an overlay using the supplied options.
      *
-     * Calling this disables automatic overlay evaluation until `hideOverlay`
-     * is called — the manual overlay takes precedence over auto-triggered
-     * states (loading, noRows, etc.).
+     * Manual overlays take precedence over automatic states until `hideOverlay`
+     * is called. Vertical scrolling is locked for body overlays; `blockScroll`
+     * controls whether horizontal scrolling is locked as well.
+     * @param options - Overlay type, scope, message, and custom render payload.
      * @api
      */
+    showOverlay(options: OverlayOptions): void;
+    /** @deprecated Use the options-object overload. */
     showOverlay(type: OverlayType, payload?: unknown): void;
     /**
      * Hides the current overlay and re-enables automatic overlay evaluation
@@ -467,11 +495,12 @@ export interface GridApi<T> {
     getOverlayState(): OverlayState;
     /**
      * Marks the grid as loading or not — triggers automatic overlay
-     * re-evaluation. When `true`, the "loading" overlay is shown regardless
-     * of the current data.
+     * re-evaluation. When loading completes with an error, pass it as the
+     * second argument to show the automatic error overlay. A subsequent
+     * successful `setData` clears the error.
      * @api
      */
-    setLoading(isLoading: boolean): void;
+    setLoading(isLoading: boolean, error?: unknown): void;
     /** Monotonic counter for structural changes (refresh / data / columns). */
     getRevision(): number;
     destroy(): void;

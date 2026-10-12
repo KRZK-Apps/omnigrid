@@ -409,6 +409,19 @@
     display: flex;
     justify-content: center;
     pointer-events: none;
+    animation: omnigrid-overlay-appear 140ms ease-out;
+    text-align: center;
+}
+
+.omnigrid-overlay-body {
+    align-self: stretch;
+}
+
+.omnigrid-overlay-full {
+    inset: 0;
+    pointer-events: auto;
+    position: absolute;
+    z-index: 10;
 }
 
 .omnigrid-overlay:focus-within {
@@ -445,5 +458,15 @@
 @keyframes omnigrid-overlay-spin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+@keyframes omnigrid-overlay-appear {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
     }
 }

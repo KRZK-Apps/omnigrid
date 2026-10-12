@@ -16,45 +16,45 @@ function extractMessage(payload: unknown, fallback: string): string {
     return fallback;
 }
 
-function LoadingOverlay(): ReactNode {
+function LoadingOverlay(_payload?: unknown, message?: string): ReactNode {
     return (
         <div className="omnigrid-overlay-content">
             <div className="omnigrid-overlay-spinner" aria-label="Loading" />
-            <span className="omnigrid-overlay-text">Loading…</span>
+            <span className="omnigrid-overlay-text">{message ?? "Loading…"}</span>
         </div>
     );
 }
 
-function NoRowsOverlay(payload?: unknown): ReactNode {
+function NoRowsOverlay(payload?: unknown, message?: string): ReactNode {
     return (
         <div className="omnigrid-overlay-content">
             <NoRowsIcon />
-            <span className="omnigrid-overlay-text">{extractMessage(payload, "No data to display")}</span>
+            <span className="omnigrid-overlay-text">{message ?? extractMessage(payload, "No data to display")}</span>
         </div>
     );
 }
 
-function NoMatchingRowsOverlay(payload?: unknown): ReactNode {
+function NoMatchingRowsOverlay(payload?: unknown, message?: string): ReactNode {
     return (
         <div className="omnigrid-overlay-content">
             <NoMatchingRowsIcon />
-            <span className="omnigrid-overlay-text">{extractMessage(payload, "No matching rows found")}</span>
+            <span className="omnigrid-overlay-text">{message ?? extractMessage(payload, "No matching rows found")}</span>
         </div>
     );
 }
 
-function ErrorOverlay(payload?: unknown): ReactNode {
+function ErrorOverlay(payload?: unknown, message?: string): ReactNode {
     return (
         <div className="omnigrid-overlay-content">
             <ErrorIcon />
             <span className="omnigrid-overlay-text" role="alert">
-                {extractMessage(payload, "An error occurred")}
+                {message ?? extractMessage(payload, "An error occurred")}
             </span>
         </div>
     );
 }
 
-type OverlayFactory = (payload?: unknown) => ReactNode;
+type OverlayFactory = (payload?: unknown, message?: string) => ReactNode;
 
 const DEFAULT_OVERLAYS: Record<Exclude<OverlayType, "custom">, OverlayFactory> = {
     loading: LoadingOverlay,
@@ -70,13 +70,13 @@ const DEFAULT_OVERLAYS: Record<Exclude<OverlayType, "custom">, OverlayFactory> =
  * directly by `OmniGrid.renderOverlayContent` via `contentToReactNode`.
  */
 export function renderDefaultOverlay(overlay: OverlayState): ReactNode {
-    const { type, payload } = overlay;
+    const { type, payload, message } = overlay;
     if (!type) return null;
     if (type === "custom") return null;
 
     const factory = DEFAULT_OVERLAYS[type];
     if (!factory) return null;
-    return factory(payload);
+    return factory(payload, message);
 }
 
 /** Inline SVG: empty / document icon. */

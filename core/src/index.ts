@@ -7,7 +7,7 @@ export { Grid } from "./grid";
 export { Grid as GridCore } from "./grid";
 export { SlotManager } from "./slots";
 export { Store } from "./store";
-export type { OverlayState, OverlayType } from "./overlays";
+export type { OverlayOptions, OverlayScope, OverlayState, OverlayType } from "./overlays";
 export type {
     BlockConfig,
     CellAlign,
@@ -27,6 +27,8 @@ export type {
     GridOptions,
     GridPlugin,
     GridState,
+    OverlayComponent,
+    OverlayComponentProps,
     PooledRow,
     Range,
     RowClassRules,
