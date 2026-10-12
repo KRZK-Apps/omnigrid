@@ -181,9 +181,11 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const suppressRowHoverHighlight = options.suppressRowHoverHighlight ?? false;
     const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null].filter(Boolean).join(" ");
     const overlayState: OverlayState | undefined = state.overlay;
-    const overlayScope: OverlayScope | undefined = overlayState.type ? (overlayState.scope ?? "bodyOnly") : undefined;
+    const overlayScope: OverlayScope | undefined = overlayState.type
+        ? (overlayState.scope ?? (overlayState.type === "error" ? "full" : "bodyOnly"))
+        : undefined;
     const overlayBlocksHorizontalScroll: boolean = overlayState.type
-        ? (overlayState.blockScroll ?? overlayState.type !== "noMatchingRows")
+        ? (overlayState.blockScroll ?? false)
         : false;
     const isFullOverlay: boolean = overlayScope === "full";
 
@@ -823,10 +825,10 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                         height: autoHeight ? measuredHeight : "100%",
                         minHeight: 0,
                         minWidth: 0,
-                        overflowX: isFullOverlay || (overlayScope === "bodyOnly" && overlayBlocksHorizontalScroll) ? "hidden" : needsHorizontalScroll ? "auto" : "hidden",
-                        overflowY: isFullOverlay || overlayScope === "bodyOnly" || autoHeight ? "hidden" : "auto",
+                        overflowX: overlayBlocksHorizontalScroll ? "hidden" : needsHorizontalScroll ? "auto" : "hidden",
+                        overflowY: overlayScope || autoHeight ? "hidden" : "auto",
                         position: "relative",
-                        scrollbarGutter: overlayScope === "bodyOnly" ? "auto" : verticalScrollbarGutter,
+                        scrollbarGutter: verticalScrollbarGutter,
                         width: "100%",
                     }}
                 >

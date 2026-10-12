@@ -27,9 +27,9 @@ export type OverlayScope = "full" | "bodyOnly";
 export interface OverlayOptions {
     /** Overlay state to display. */
     type: OverlayType;
-    /** Whether the overlay covers the complete grid or only its data body. @default "bodyOnly" */
+    /** Whether the overlay covers the complete grid or only its data body. Defaults to "full" for errors and "bodyOnly" otherwise. */
     scope?: OverlayScope;
-    /** Whether horizontal scrolling is also locked. Vertical scrolling is always locked by an active body overlay. */
+    /** Whether horizontal scrolling is locked. Vertical scrolling is locked for every active overlay. */
     blockScroll?: boolean;
     /** Optional text displayed by the default overlay or passed to a custom component. */
     message?: string;

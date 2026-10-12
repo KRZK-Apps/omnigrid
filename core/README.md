@@ -134,13 +134,17 @@ through `setLoading(false, error)`; a successful `setData` clears the error.
 ```ts
 grid.showOverlay({
     type: "error",
-    scope: "bodyOnly", // or "full" to cover the complete grid
-    blockScroll: false, // keep horizontal scrolling; body overlays always lock vertical scroll
+    // Errors default to "full"; other overlay types default to "bodyOnly".
+    // Set scope explicitly to choose a different placement.
     message: "Could not load records",
 });
 grid.hideOverlay(); // restores automatic loading / empty-state evaluation
 const overlay = grid.getOverlayState();
 ```
+
+Every active overlay locks vertical scrolling while preserving the scrollbar gutter when one
+is present. Horizontal scrolling remains enabled by default and can be locked with
+`blockScroll: true`.
 
 `overlayComponents` accepts framework-specific components through the adapter or core render
 callbacks. Component props include `type`, `message`, `payload`, and the current `state`.

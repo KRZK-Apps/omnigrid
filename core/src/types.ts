@@ -474,8 +474,8 @@ export interface GridApi<T> {
      * Shows an overlay using the supplied options.
      *
      * Manual overlays take precedence over automatic states until `hideOverlay`
-     * is called. Vertical scrolling is locked for body overlays; `blockScroll`
-     * controls whether horizontal scrolling is locked as well.
+     * is called. Vertical scrolling is locked for every active overlay;
+     * `blockScroll` controls whether horizontal scrolling is locked.
      * @param options - Overlay type, scope, message, and custom render payload.
      * @api
      */

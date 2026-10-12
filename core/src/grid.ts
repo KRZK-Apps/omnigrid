@@ -379,7 +379,11 @@ export class Grid<T> implements GridApi<T> {
     public showOverlay(options: OverlayOptions): void {
         this.assertActive();
         this.overlayManual = true;
-        this.overlayState = { ...options };
+        this.overlayState = {
+            ...options,
+            scope: options.scope ?? (options.type === "error" ? "full" : "bodyOnly"),
+            blockScroll: options.blockScroll ?? false,
+        };
         this.store.setState({ overlay: { ...this.overlayState } });
         this.events.emit("overlayChange", { ...this.overlayState });
     }
@@ -425,8 +429,9 @@ export class Grid<T> implements GridApi<T> {
         const next: OverlayState = type
             ? {
                   type,
+                  scope: type === "error" ? "full" : "bodyOnly",
+                  blockScroll: false,
                   ...(type === "error" && this.loadError !== undefined ? { payload: this.loadError } : {}),
-                  ...(type === "noMatchingRows" ? { blockScroll: false } : {}),
               }
             : { type };
 

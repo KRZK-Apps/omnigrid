@@ -44,7 +44,7 @@ describe("Grid overlay — automatic evaluation", () => {
 
     it("shows noRows overlay when data is initially empty", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [] });
-        expect(grid.getOverlayState()).toEqual({ type: "noRows" });
+        expect(grid.getOverlayState()).toEqual({ type: "noRows", scope: "bodyOnly", blockScroll: false });
     });
 
     it("shows no overlay when data is present", () => {
@@ -54,7 +54,7 @@ describe("Grid overlay — automatic evaluation", () => {
 
     it("shows loading overlay when loading option is set", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [], loading: true });
-        expect(grid.getOverlayState()).toEqual({ type: "loading" });
+        expect(grid.getOverlayState()).toEqual({ type: "loading", scope: "bodyOnly", blockScroll: false });
     });
 
     it("shows noRows overlay when data is set to empty after having data", () => {
@@ -78,7 +78,7 @@ describe("Grid overlay — automatic evaluation", () => {
         const error: Error = new Error("Network unavailable");
         grid.setLoading(false, error);
 
-        expect(grid.getOverlayState()).toEqual({ type: "error", payload: error });
+        expect(grid.getOverlayState()).toEqual({ type: "error", scope: "full", blockScroll: false, payload: error });
         grid.setData([{ name: "a" }]);
         expect(grid.getOverlayState().type).toBe(null);
     });
@@ -95,7 +95,7 @@ describe("Grid overlay — automatic evaluation", () => {
         expect(grid.getOverlayState().type).toBe(null);
 
         grid.registerDataProcessor((data) => data.filter((row) => row.name === "nonexistent"));
-        expect(grid.getOverlayState()).toEqual({ type: "noMatchingRows", blockScroll: false });
+        expect(grid.getOverlayState()).toEqual({ type: "noMatchingRows", scope: "bodyOnly", blockScroll: false });
     });
 
     it("hides noMatchingRows when the filter is removed and data reappears", () => {
@@ -125,7 +125,12 @@ describe("Grid overlay — manual show/hide", () => {
         expect(grid.getOverlayState().type).toBe(null);
 
         grid.showOverlay({ type: "error", payload: new Error("Something went wrong") });
-        expect(grid.getOverlayState()).toEqual({ type: "error", payload: expect.any(Error) });
+        expect(grid.getOverlayState()).toEqual({
+            type: "error",
+            scope: "full",
+            blockScroll: false,
+            payload: expect.any(Error),
+        });
     });
 
     it("showOverlay accepts scope, scroll, message, and component options", () => {
@@ -146,6 +151,16 @@ describe("Grid overlay — manual show/hide", () => {
             message: "Unavailable",
             component,
         });
+    });
+
+    it("defaults manual body overlays to bodyOnly and keeps error placement overridable", () => {
+        const grid = new Grid<Row>({ columns: COLUMNS, data: [{ name: "a" }] });
+
+        grid.showOverlay({ type: "custom" });
+        expect(grid.getOverlayState()).toMatchObject({ type: "custom", scope: "bodyOnly", blockScroll: false });
+
+        grid.showOverlay({ type: "error", scope: "bodyOnly" });
+        expect(grid.getOverlayState()).toMatchObject({ type: "error", scope: "bodyOnly" });
     });
 
     it("showOverlay disables automatic evaluation", () => {
@@ -191,9 +206,9 @@ describe("Grid overlay — manual show/hide", () => {
 
         grid.hideOverlay();
 
-        expect(grid.getOverlayState()).toEqual({ type: "noRows" });
-        expect(grid.getState().overlay).toEqual({ type: "noRows" });
-        expect(listener).toHaveBeenCalledWith({ type: "noRows" });
+        expect(grid.getOverlayState()).toEqual({ type: "noRows", scope: "bodyOnly", blockScroll: false });
+        expect(grid.getState().overlay).toEqual({ type: "noRows", scope: "bodyOnly", blockScroll: false });
+        expect(listener).toHaveBeenCalledWith({ type: "noRows", scope: "bodyOnly", blockScroll: false });
     });
 
     it("getOverlayState returns a copy, not the internal reference", () => {
@@ -225,7 +240,7 @@ describe("Grid overlay — events", () => {
         grid.on("overlayChange", listener);
 
         grid.showOverlay({ type: "error", payload: "test error" });
-        expect(listener).toHaveBeenCalledWith({ type: "error", payload: "test error" });
+        expect(listener).toHaveBeenCalledWith({ type: "error", scope: "full", blockScroll: false, payload: "test error" });
     });
 
     it("emits overlayChange when hideOverlay is called", () => {
@@ -236,17 +251,17 @@ describe("Grid overlay — events", () => {
         listener.mockClear();
 
         grid.hideOverlay();
-        expect(listener).toHaveBeenCalledWith({ type: "noRows", payload: undefined });
+        expect(listener).toHaveBeenCalledWith({ type: "noRows", scope: "bodyOnly", blockScroll: false });
     });
 });
 
 describe("Grid overlay — state in GridState", () => {
     it("exposes overlay state via getState()", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [] });
-        expect(grid.getState().overlay).toEqual({ type: "noRows" });
+        expect(grid.getState().overlay).toEqual({ type: "noRows", scope: "bodyOnly", blockScroll: false });
 
         grid.showOverlay({ type: "loading" });
-        expect(grid.getState().overlay).toEqual({ type: "loading", payload: undefined });
+        expect(grid.getState().overlay).toEqual({ type: "loading", scope: "bodyOnly", blockScroll: false });
     });
 });
 

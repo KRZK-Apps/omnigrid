@@ -24,10 +24,13 @@ const data = [...];
 
 ## Overlays
 
-The adapter renders body-only overlays below the sticky header. While one is active, vertical
-scrolling and its scrollbar are disabled; horizontal scrolling remains available for
-`noMatchingRows` (or when `blockScroll: false`). Use `scope: "full"` to cover the header and
-body as well.
+Automatic loading, no-rows, and no-matching-rows overlays cover the body below the sticky
+header. They hide vertical scrolling while preserving its gutter, so columns do not shift;
+horizontal scrolling remains available. Automatic error overlays cover the full grid.
+Any active overlay hides vertical scrolling and preserves its gutter, regardless of scope.
+Manual overlays default to body-only, except errors default to full-grid; set `scope` to
+`"bodyOnly"` or `"full"` to choose the placement. `blockScroll: true` locks horizontal
+scrolling; vertical scrolling is always locked while an overlay is active.
 
 ```tsx
 import { OmniGrid, type OverlayComponentProps } from "@omnigrid/react";
