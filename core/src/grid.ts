@@ -376,13 +376,8 @@ export class Grid<T> implements GridApi<T> {
         return this.slots.getMounts(slot);
     }
 
-    public showOverlay(options: OverlayOptions): void;
-    /** @deprecated Use the options-object overload. */
-    public showOverlay(type: OverlayType, payload?: unknown): void;
-    public showOverlay(optionsOrType: OverlayOptions | OverlayType, payload?: unknown): void {
+    public showOverlay(options: OverlayOptions): void {
         this.assertActive();
-        const options: OverlayOptions =
-            typeof optionsOrType === "string" ? { type: optionsOrType, payload } : optionsOrType;
         this.overlayManual = true;
         this.overlayState = { ...options };
         this.store.setState({ overlay: { ...this.overlayState } });

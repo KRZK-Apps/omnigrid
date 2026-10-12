@@ -124,7 +124,7 @@ describe("Grid overlay — manual show/hide", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [{ name: "a" }] });
         expect(grid.getOverlayState().type).toBe(null);
 
-        grid.showOverlay("error", new Error("Something went wrong"));
+        grid.showOverlay({ type: "error", payload: new Error("Something went wrong") });
         expect(grid.getOverlayState()).toEqual({ type: "error", payload: expect.any(Error) });
     });
 
@@ -150,7 +150,7 @@ describe("Grid overlay — manual show/hide", () => {
 
     it("showOverlay disables automatic evaluation", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [{ name: "a" }] });
-        grid.showOverlay("noRows");
+        grid.showOverlay({ type: "noRows" });
         expect(grid.getOverlayState().type).toBe("noRows");
 
         // Even with data present and not loading, the manual overlay persists
@@ -160,13 +160,13 @@ describe("Grid overlay — manual show/hide", () => {
 
     it("showOverlay with custom type and payload", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [{ name: "a" }] });
-        grid.showOverlay("custom", { message: "Custom content" });
+        grid.showOverlay({ type: "custom", payload: { message: "Custom content" } });
         expect(grid.getOverlayState()).toMatchObject({ type: "custom", payload: { message: "Custom content" } });
     });
 
     it("hideOverlay re-enables automatic evaluation", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [{ name: "a" }] });
-        grid.showOverlay("error", new Error("Oops"));
+        grid.showOverlay({ type: "error", payload: new Error("Oops") });
         expect(grid.getOverlayState().type).toBe("error");
 
         grid.hideOverlay();
@@ -175,7 +175,7 @@ describe("Grid overlay — manual show/hide", () => {
 
     it("hideOverlay re-enables automatic evaluation and detects noRows", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [] });
-        grid.showOverlay("error", "manual error");
+        grid.showOverlay({ type: "error", payload: "manual error" });
         expect(grid.getOverlayState().type).toBe("error");
 
         grid.hideOverlay();
@@ -186,7 +186,7 @@ describe("Grid overlay — manual show/hide", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [] });
         const listener = vi.fn();
         grid.on("overlayChange", listener);
-        grid.showOverlay("noRows", "manual message");
+        grid.showOverlay({ type: "noRows", payload: "manual message" });
         listener.mockClear();
 
         grid.hideOverlay();
@@ -224,7 +224,7 @@ describe("Grid overlay — events", () => {
         const listener = vi.fn();
         grid.on("overlayChange", listener);
 
-        grid.showOverlay("error", "test error");
+        grid.showOverlay({ type: "error", payload: "test error" });
         expect(listener).toHaveBeenCalledWith({ type: "error", payload: "test error" });
     });
 
@@ -232,7 +232,7 @@ describe("Grid overlay — events", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [] });
         const listener = vi.fn();
         grid.on("overlayChange", listener);
-        grid.showOverlay("custom", "manual");
+        grid.showOverlay({ type: "custom", payload: "manual" });
         listener.mockClear();
 
         grid.hideOverlay();
@@ -245,7 +245,7 @@ describe("Grid overlay — state in GridState", () => {
         const grid = new Grid<Row>({ columns: COLUMNS, data: [] });
         expect(grid.getState().overlay).toEqual({ type: "noRows" });
 
-        grid.showOverlay("loading");
+        grid.showOverlay({ type: "loading" });
         expect(grid.getState().overlay).toEqual({ type: "loading", payload: undefined });
     });
 });

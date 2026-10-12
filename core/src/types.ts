@@ -480,8 +480,6 @@ export interface GridApi<T> {
      * @api
      */
     showOverlay(options: OverlayOptions): void;
-    /** @deprecated Use the options-object overload. */
-    showOverlay(type: OverlayType, payload?: unknown): void;
     /**
      * Hides the current overlay and re-enables automatic overlay evaluation
      * based on the Data Pipeline state.
