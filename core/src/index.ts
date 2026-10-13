@@ -15,10 +15,13 @@ export type {
     CellClassRules,
     CheckboxControl,
     CheckboxRenderParams,
+    ColumnClassRules,
     ColumnDef,
     ColumnGroupDef,
     ColumnGroupViewport,
     ColumnLeafDef,
+    ColumnStyle,
+    ColumnStyleParams,
     DataProcessor,
     DomPoolBindings,
     DomPoolUpdate,
@@ -27,6 +30,11 @@ export type {
     GridOptions,
     GridPlugin,
     GridState,
+    HeaderClassRules,
+    HeaderGroupClassRules,
+    HeaderGroupRenderParams,
+    HeaderRenderParams,
+    HeaderStyle,
     OverlayComponent,
     OverlayComponentProps,
     PooledRow,
@@ -56,5 +64,5 @@ export type {
     ViewportState,
     VirtualItem,
 } from "./types";
-export { getColumnGroups, flattenColumns, isColumnGroup, isColumnLeaf } from "./columns";
+export { getColumnGroups, flattenColumns, isColumnGroup, isColumnLeaf, getCellValue } from "./columns";
 export { Virtualizer } from "./virtualizer";

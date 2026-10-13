@@ -46,6 +46,92 @@ export interface CellRenderParams<T> {
 
 export type CellClassRules<T> = Record<string, (params: CellRenderParams<T>) => boolean>;
 
+/**
+ * Inline styles applied to all cells in a column.
+ *
+ * @api
+ */
+export interface ColumnStyle {
+    [property: string]: string | number | undefined;
+}
+
+/**
+ * Context passed to column-level presentation callbacks (`getColumnStyle`,
+ * `getColumnClass`, `columnClassRules`).
+ *
+ * Evaluated once per column across the dataset rather than per individual cell.
+ *
+ * @api
+ */
+export interface ColumnStyleParams<T> {
+    /** The leaf column definition being evaluated. */
+    column: ColumnLeafDef<T>;
+    /** All visible/filtered values for this column. */
+    values: any[];
+    /** The grid API instance. */
+    api: GridApi<T>;
+    /** Current grid state. */
+    state: GridState<T>;
+}
+
+/**
+ * Dynamic rules for assigning CSS classes to a column as a whole.
+ *
+ * @api
+ */
+export type ColumnClassRules<T> = Record<string, (params: ColumnStyleParams<T>) => boolean>;
+
+/**
+ * Context passed to leaf header presentation callbacks.
+ *
+ * @api
+ */
+export interface HeaderRenderParams<T> {
+    /** The leaf column definition being rendered. */
+    column: ColumnLeafDef<T>;
+    /** Zero-based index of the leaf column in the visible layout. */
+    index?: number;
+}
+
+/**
+ * Inline styles applied to a column or group header.
+ *
+ * @api
+ */
+export interface HeaderStyle {
+    [property: string]: string | number | undefined;
+}
+
+/**
+ * Dynamic rules for assigning CSS classes to a leaf column header.
+ *
+ * @api
+ */
+export type HeaderClassRules<T> = Record<string, (params: HeaderRenderParams<T>) => boolean>;
+
+/**
+ * Context passed to column group header presentation callbacks.
+ *
+ * @api
+ */
+export interface HeaderGroupRenderParams<T> {
+    /** The column group definition being rendered. */
+    group: ColumnGroupDef<T>;
+    /** Alias for `group` providing uniform access to the column definition. */
+    column: ColumnGroupDef<T>;
+    /** Depth of the group in the stacked header hierarchy (0 = topmost). */
+    depth?: number;
+    /** Number of leaf columns spanned by this group segment. */
+    columnCount?: number;
+}
+
+/**
+ * Dynamic rules for assigning CSS classes to a column group header.
+ *
+ * @api
+ */
+export type HeaderGroupClassRules<T> = Record<string, (params: HeaderGroupRenderParams<T>) => boolean>;
+
 export interface CheckboxRenderParams {
     checked: boolean;
     indeterminate: boolean;
@@ -114,6 +200,22 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     getCellClass?: (params: CellRenderParams<T>) => string | undefined;
     /** Maps CSS class names to predicates evaluated for each rendered cell. */
     cellClassRules?: CellClassRules<T>;
+    /** Computes inline styles for the entire column body once per column evaluation across dataset. */
+    getColumnStyle?: (params: ColumnStyleParams<T>) => ColumnStyle | undefined;
+    /** Computes a CSS class for the entire column body across dataset. */
+    getColumnClass?: (params: ColumnStyleParams<T>) => string | undefined;
+    /** Maps CSS class names to predicates evaluated once for the entire column body across dataset. */
+    columnClassRules?: ColumnClassRules<T>;
+    /** Static inline styles applied to the leaf header cell of this column. */
+    headerStyle?: HeaderStyle;
+    /** Computes inline styles for the leaf header cell of this column. */
+    getHeaderStyle?: (params: HeaderRenderParams<T>) => HeaderStyle | undefined;
+    /** Static CSS class or resolver applied to the leaf header cell of this column. */
+    headerClass?: string | ((params: HeaderRenderParams<T>) => string | undefined);
+    /** Computes a CSS class for the leaf header cell of this column. */
+    getHeaderClass?: (params: HeaderRenderParams<T>) => string | undefined;
+    /** Maps CSS class names to predicates evaluated for the leaf header cell of this column. */
+    headerClassRules?: HeaderClassRules<T>;
 }
 
 export interface ColumnGroupDef<T> extends BaseColumnDef<T> {
@@ -123,6 +225,16 @@ export interface ColumnGroupDef<T> extends BaseColumnDef<T> {
     collapsible?: boolean;
     /** Whether this group starts expanded when it is collapsible. */
     defaultExpanded?: boolean;
+    /** Static inline styles applied to this group header cell. */
+    headerStyle?: HeaderStyle;
+    /** Computes inline styles for this group header cell. */
+    getHeaderStyle?: (params: HeaderGroupRenderParams<T>) => HeaderStyle | undefined;
+    /** Static CSS class or resolver applied to this group header cell. */
+    headerClass?: string | ((params: HeaderGroupRenderParams<T>) => string | undefined);
+    /** Computes a CSS class for this group header cell. */
+    getHeaderClass?: (params: HeaderGroupRenderParams<T>) => string | undefined;
+    /** Maps CSS class names to predicates evaluated for this group header cell. */
+    headerClassRules?: HeaderGroupClassRules<T>;
 }
 
 /** Leaf or grouped column definition accepted by the grid. */

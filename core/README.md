@@ -71,6 +71,14 @@ interface ColumnLeafDef<T> {
     cellClass?: string | ((params: CellRenderParams<T>) => string | undefined);
     getCellClass?: (params: CellRenderParams<T>) => string | undefined;
     cellClassRules?: CellClassRules<T>;
+    getColumnStyle?: (params: ColumnStyleParams<T>) => ColumnStyle | undefined;
+    getColumnClass?: (params: ColumnStyleParams<T>) => string | undefined;
+    columnClassRules?: ColumnClassRules<T>;
+    headerStyle?: HeaderStyle;
+    getHeaderStyle?: (params: HeaderRenderParams<T>) => HeaderStyle | undefined;
+    headerClass?: string | ((params: HeaderRenderParams<T>) => string | undefined);
+    getHeaderClass?: (params: HeaderRenderParams<T>) => string | undefined;
+    headerClassRules?: HeaderClassRules<T>;
     headerRenderer?: (column: ColumnDef<T>) => unknown;
     stopRowClick?: boolean;
     stopHeaderClick?: boolean;
@@ -83,6 +91,11 @@ interface ColumnGroupDef<T> {
     pinned?: "left" | "right";
     collapsible?: boolean;
     defaultExpanded?: boolean;
+    headerStyle?: HeaderStyle;
+    getHeaderStyle?: (params: HeaderGroupRenderParams<T>) => HeaderStyle | undefined;
+    headerClass?: string | ((params: HeaderGroupRenderParams<T>) => string | undefined);
+    getHeaderClass?: (params: HeaderGroupRenderParams<T>) => string | undefined;
+    headerClassRules?: HeaderGroupClassRules<T>;
     headerRenderer?: (column: ColumnDef<T>) => unknown;
 }
 ```

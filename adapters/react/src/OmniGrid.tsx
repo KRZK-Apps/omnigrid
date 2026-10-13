@@ -1,7 +1,28 @@
 import { createElement, type ComponentType, type CSSProperties, type ReactNode, type UIEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
-import type { CellRenderParams, ColumnLeafDef, GridOptions, GridState, OverlayComponent as CoreOverlayComponent, OverlayComponentProps as CoreOverlayComponentProps, OverlayScope, OverlayState, OverlayType, RowRenderParams, RowStyle, SlotMount, SlotName, SlotPosition, SlotRenderContext } from "@omnigrid/core";
+import type {
+    CellRenderParams,
+    ColumnGroupDef,
+    ColumnLeafDef,
+    ColumnStyleParams,
+    GridOptions,
+    GridState,
+    HeaderGroupRenderParams,
+    HeaderRenderParams,
+    HeaderStyle,
+    OverlayComponent as CoreOverlayComponent,
+    OverlayComponentProps as CoreOverlayComponentProps,
+    OverlayScope,
+    OverlayState,
+    OverlayType,
+    RowRenderParams,
+    RowStyle,
+    SlotMount,
+    SlotName,
+    SlotPosition,
+    SlotRenderContext,
+} from "@omnigrid/core";
 import { DomPool } from "@omnigrid/core";
 
 import { type ContentBridge, contentToReactNode } from "./content";
@@ -9,6 +30,16 @@ import { computeGroupSegments } from "./groupHeader";
 import { type PooledColumn, type PooledRowCallbacks, PooledRowPane } from "./pooledRow";
 import { createCellRoot } from "./reactRoot";
 import { renderDefaultOverlay } from "./overlays";
+import {
+    type ResolvedColumnPresentation,
+    resolveCellClasses,
+    resolveCellStyle,
+    resolveColumnPresentation,
+    resolveGroupHeaderClasses,
+    resolveGroupHeaderStyle,
+    resolveHeaderClasses,
+    resolveHeaderStyle,
+} from "./styling";
 import { useGrid } from "./useGrid";
 
 /**
@@ -200,6 +231,30 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         };
     }
 
+    const columnPresentationCacheRef = useRef<
+        Map<string, { revision: number; data: unknown[] | null; presentation: ResolvedColumnPresentation }>
+    >(new Map());
+
+    const getColumnPresentation = (column: ColumnLeafDef<T>): ResolvedColumnPresentation => {
+        const revision: number = grid.getRevision();
+        const processedData: T[] = grid.getProcessedData();
+        const cached = columnPresentationCacheRef.current.get(column.id);
+        if (cached && cached.revision === revision && cached.data === processedData) {
+            return cached.presentation;
+        }
+
+        const values: unknown[] = processedData.map((row: T): unknown => getCellValue(row, column));
+        const params: ColumnStyleParams<T> = {
+            column,
+            values,
+            api: grid,
+            state: grid.getState(),
+        };
+        const presentation: ResolvedColumnPresentation = resolveColumnPresentation(column, params);
+        columnPresentationCacheRef.current.set(column.id, { revision, data: processedData, presentation });
+        return presentation;
+    };
+
     /** Row panel callbacks: close over grid/options, never over DOM. */
     function buildRowCallbacks(bridgeArg: ContentBridge<T>): PooledRowCallbacks<T> {
         const current = () => optionsRef.current;
@@ -240,21 +295,13 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             },
             resolveCellClasses: (info) => {
                 const cellParams: CellRenderParams<T> = { id: info.rowId, index: info.rowIndex, data: info.data, column: info.column };
-                const column = info.column;
-                const cellClass = typeof column.cellClass === "function" ? column.cellClass(cellParams) : column.cellClass;
-                const dynamicCellClass = column.getCellClass?.(cellParams);
-                const ruleClasses = Object.entries(column.cellClassRules ?? {})
-                    .filter(([, predicate]) => predicate(cellParams))
-                    .map(([ruleClass]) => ruleClass);
-                return [cellClass, ...ruleClasses, dynamicCellClass].filter(Boolean).join(" ");
+                const columnPresentation: ResolvedColumnPresentation = getColumnPresentation(info.column);
+                return resolveCellClasses(info.column, cellParams, columnPresentation.classes);
             },
             resolveCellStyle: (info) => {
                 const cellParams: CellRenderParams<T> = { id: info.rowId, index: info.rowIndex, data: info.data, column: info.column };
-                const column = info.column;
-                return {
-                    ...(column.cellStyle ?? {}),
-                    ...(column.getCellStyle?.(cellParams) ?? {}),
-                };
+                const columnPresentation: ResolvedColumnPresentation = getColumnPresentation(info.column);
+                return resolveCellStyle(info.column, cellParams, columnPresentation.style);
             },
             onRowClick: (row, modifiers) =>
                 grid.rowClick({
@@ -644,15 +691,35 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
 
     const renderHeaderCells = (columns: PooledColumn<T>[], originX: number): ReactNode =>
         columns.map((item) => {
-            const deepestDepth = hasGroups ? (viewportData.columnGroupDepth.get(item.index) ?? -1) : -1;
-            const gapRows = headerRowCount - 1 - deepestDepth;
-            const fullHeight = gapRows > 0;
+            const deepestDepth: number = hasGroups ? (viewportData.columnGroupDepth.get(item.index) ?? -1) : -1;
+            const gapRows: number = headerRowCount - 1 - deepestDepth;
+            const fullHeight: boolean = gapRows > 0;
+
+            const headerParams: HeaderRenderParams<T> = { column: item.column, index: item.index };
+            const className: string = resolveHeaderClasses(item.column, headerParams, fullHeight);
+            const customHeaderStyle: HeaderStyle = resolveHeaderStyle(item.column, headerParams);
+
+            const headerCellLayout: CSSProperties = {
+                alignItems: "center",
+                display: "flex",
+                fontWeight: 600,
+                overflow: "hidden",
+                padding: "0 12px",
+                whiteSpace: "nowrap",
+                ...(customHeaderStyle as CSSProperties),
+                position: "absolute",
+                left: Math.round(item.offset - originX),
+                top: fullHeight ? -(gapRows * rowHeight) : 0,
+                bottom: 0,
+                touchAction: "none",
+                width: item.width,
+            };
 
             return (
                 <div
                     key={item.column.id}
                     role="columnheader"
-                    className={`omnigrid-header-cell${fullHeight ? " omnigrid-header-cell-full-height" : ""}`}
+                    className={className}
                     data-sort={item.column.sortState}
                     data-sort-index={item.column.sortIndex}
                     data-sortable={item.column.sortable === true ? "true" : undefined}
@@ -666,20 +733,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                         if (event.key === "Enter" || event.key === " ") grid.headerClick(item.column.id);
                     }}
                     tabIndex={0}
-                    style={{
-                        alignItems: "center",
-                        display: "flex",
-                        fontWeight: 600,
-                        overflow: "hidden",
-                        padding: "0 12px",
-                        position: "absolute",
-                        left: Math.round(item.offset - originX),
-                        top: fullHeight ? -(gapRows * rowHeight) : 0,
-                        bottom: 0,
-                        touchAction: "none",
-                        whiteSpace: "nowrap",
-                        width: item.width,
-                    }}
+                    style={headerCellLayout}
                 >
                     {item.column.headerRenderer ? (
                         contentToReactNode(item.column.headerRenderer(item.column), {
@@ -711,38 +765,53 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         });
 
     const renderGroupCells = (depth: number, columns: PooledColumn<T>[], originX: number): ReactNode =>
-        computeGroupSegments(viewportData.columnGroups, columns, depth, originX).map((segment, index) => (
-            <div
-                key={`${depth}:${index}:${segment.group.id}`}
-                role="columnheader"
-                className="omnigrid-header-cell omnigrid-header-group-cell"
-                aria-colspan={segment.columnCount}
-                title={segment.group.header ?? segment.group.id}
-                style={{
-                    alignItems: "center",
-                    display: "flex",
-                    fontWeight: 600,
-                    justifyContent: "center",
-                    left: Math.round(segment.left),
-                    overflow: "hidden",
-                    padding: "0 12px",
-                    position: "absolute",
-                    top: 0,
-                    bottom: 0,
-                    whiteSpace: "nowrap",
-                    width: segment.width,
-                }}
-            >
-                {segment.group.headerRenderer ? (
-                    contentToReactNode(segment.group.headerRenderer(segment.group), {
-                        registry: slotComponentsRef.current,
-                        context: buildRenderContext,
-                    })
-                ) : (
-                    <span className="omnigrid-header-label">{segment.group.header ?? segment.group.id}</span>
-                )}
-            </div>
-        ));
+        computeGroupSegments(viewportData.columnGroups, columns, depth, originX).map((segment, index) => {
+            const groupParams: HeaderGroupRenderParams<T> = {
+                group: segment.group,
+                column: segment.group,
+                depth,
+                columnCount: segment.columnCount,
+            };
+
+            const className: string = resolveGroupHeaderClasses(segment.group, groupParams);
+            const customGroupStyle: HeaderStyle = resolveGroupHeaderStyle(segment.group, groupParams);
+
+            const groupCellLayout: CSSProperties = {
+                alignItems: "center",
+                display: "flex",
+                fontWeight: 600,
+                justifyContent: "center",
+                overflow: "hidden",
+                padding: "0 12px",
+                whiteSpace: "nowrap",
+                ...(customGroupStyle as CSSProperties),
+                position: "absolute",
+                left: Math.round(segment.left),
+                top: 0,
+                bottom: 0,
+                width: segment.width,
+            };
+
+            return (
+                <div
+                    key={`${depth}:${index}:${segment.group.id}`}
+                    role="columnheader"
+                    className={className}
+                    aria-colspan={segment.columnCount}
+                    title={segment.group.header ?? segment.group.id}
+                    style={groupCellLayout}
+                >
+                    {segment.group.headerRenderer ? (
+                        contentToReactNode(segment.group.headerRenderer(segment.group), {
+                            registry: slotComponentsRef.current,
+                            context: buildRenderContext,
+                        })
+                    ) : (
+                        <span className="omnigrid-header-label">{segment.group.header ?? segment.group.id}</span>
+                    )}
+                </div>
+            );
+        });
 
     /**
      * Sticky header stack: `headerRowCount` group rows (one per depth) above the

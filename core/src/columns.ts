@@ -88,3 +88,17 @@ export function getColumnGroups<T>(
     walk(columns, 0);
     return result;
 }
+
+/**
+ * Resolves the raw cell value from a row object using `valueGetter` or `field`.
+ *
+ * @param row - The row data object.
+ * @param column - The leaf column definition.
+ * @returns The resolved cell value, or undefined if not accessible.
+ * @api
+ */
+export function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
+    if (column.valueGetter) return column.valueGetter(row);
+    if (column.field) return (row as Record<string, unknown>)[column.field as string];
+    return undefined;
+}
