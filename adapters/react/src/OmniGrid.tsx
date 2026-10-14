@@ -22,6 +22,7 @@ import type {
     SlotName,
     SlotPosition,
     SlotRenderContext,
+    ViewportData,
 } from "@omnigrid/core";
 import { DomPool } from "@omnigrid/core";
 
@@ -139,7 +140,8 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const pinnedLeftRowsLayerRef = useRef<HTMLDivElement>(null);
     const pinnedRightRowsLayerRef = useRef<HTMLDivElement>(null);
     const [isMeasured, setIsMeasured] = useState(false);
-    const scrollFrameRef = useRef<{ id: number; top: number; left: number }>({ id: 0, top: 0, left: 0 });
+    const scrollFrameRef = useRef<{ id: number; top: number; left: number; lastTop: number; lastTime: number }>({ id: 0, top: 0, left: 0, lastTop: 0, lastTime: 0 });
+    const scrollVelocityRef = useRef<number>(0);
     const optionsRef = useRef<GridProps<T>>(options);
     const columnWindowKeyRef = useRef("");
     const scrollbarWidthRef = useRef(0);
@@ -268,6 +270,19 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 }
                 return column.valueFormatter ? column.valueFormatter(value) : String(value ?? "");
             },
+            renderCellPlaceholder: (info) => {
+                // Cheap scalar preview mirroring the renderCellContent pipeline
+                // minus the (possibly expensive) cellRenderer: same value source,
+                // same formatter. Skipped when the raw value is not scalar and no
+                // formatter exists (e.g. CheckboxControl sources) — the cell
+                // stays empty for the one commit rather than showing garbage.
+                const column = info.column;
+                const value = getCellValue(info.data, column);
+                if (column.valueFormatter) return column.valueFormatter(value);
+                const valueType = typeof value;
+                if (valueType === "string" || valueType === "number" || valueType === "boolean") return String(value);
+                return null;
+            },
             resolveRowClasses: (row) => {
                 const rowParams: RowRenderParams<T> = { id: row.rowId, index: row.index, data: row.data };
                 const currentOptions = current();
@@ -376,30 +391,33 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
      * Synchronises a single column-group layer with the grid: lazily creates its
      * DomPool, invalidates on structural changes, then pushes the current row
      * range and per-row width.
+     *
+     * Receives the pre-computed `viewportData` from `syncPool` to avoid redundant
+     * getViewportData() calls — each layer no longer recomputes column geometry.
      */
-    const syncRowLayer = (layer: RowLayerState<T>, rowsLayerRef: React.MutableRefObject<HTMLDivElement | null>): void => {
+    const syncRowLayer = (layer: RowLayerState<T>, viewportData: ViewportData<T>, rowsLayerRef: React.MutableRefObject<HTMLDivElement | null>, skipBind = false): void => {
         const bridge = ensureLayerContext();
         ensureLayerPool(layer, rowsLayerRef.current, bridge);
         const pool = layer.pool;
         if (!pool || grid.isDestroyed()) return;
 
         const state = grid.getState();
-        const currentViewportData = grid.getViewportData();
         const processed = grid.getProcessedData();
 
-        const changed = layer.revision !== grid.getRevision() || layer.totalWidth !== currentViewportData.totalWidth || layer.processed !== processed;
+        const changed = layer.revision !== grid.getRevision() || layer.totalWidth !== viewportData.totalWidth || layer.processed !== processed;
         if (changed) {
             layer.revision = grid.getRevision();
-            layer.totalWidth = currentViewportData.totalWidth;
+            layer.totalWidth = viewportData.totalWidth;
             layer.processed = processed;
             pool.invalidate();
         }
 
         pool.update({
             data: processed,
-            rowRange: currentViewportData.rowRange,
+            rowRange: viewportData.rowRange,
             rowHeight: state.rowHeight,
             rowWidth: layer.rowWidth,
+            skipBind,
         });
     };
 
@@ -407,8 +425,17 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
      * Synchronises the DomPools with the grid. Idempotent — called both from
      * React effects (structural changes) and directly from the scroll rAF
      * handler (imperative, no React re-render).
+     *
+     * @param synchronousColumnWindow — when `true`, the rAF-driven scroll path
+     *   triggers a `flushSync` for the column window header update so headers
+     *   stay in step with the imperatively repositioned cells before paint.
+     * @param skipContentBind — when `true` (fast scroll), row positions are
+     *   updated but `bindRow` is deferred to the next slow-scroll frame. This
+     *   avoids synchronous React commits (~200 cell roots) that exceed the 16ms
+     *   frame budget, causing flicker/frame drops. Rows remain visible with
+     *   previous content at the correct new position.
      */
-    const syncPool = (synchronousColumnWindow = false): void => {
+    const syncPool = (synchronousColumnWindow = false, skipContentBind = false): void => {
         const state = grid.getState();
         const currentViewportData = grid.getViewportData();
 
@@ -431,28 +458,61 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         layers.right.originX = pinnedLeftWidth + scrollableWidth;
         layers.right.rowWidth = pinnedRightWidth;
 
-        syncRowLayer(layers.left, pinnedLeftRowsLayerRef);
-        syncRowLayer(layers.central, rowsLayerRef);
-        syncRowLayer(layers.right, pinnedRightRowsLayerRef);
+        // Cell content rendering (root.render) is async under React concurrent
+        // mode — without flushSync, rows are repositioned but their cell content
+        // stays stale for one frame, causing visible jitter on custom-renderer
+        // cells. Wrap ONLY the DOM binding in flushSync to force cell roots to
+        // commit before paint.
+        //
+        // Velocity-based: during fast scroll (scrollbar thumb drag), many scroll
+        // events fire but rAF throttles to ~60fps. Calling flushSync on every frame
+        // forces a synchronous React commit for ALL cell roots (~200 calls), which
+        // can exceed the 16ms frame budget and cause frame drops — appearing as
+        // flickering/emptying. During fast scroll, we skip flushSync: rows stay
+        // at correct positions with previous content (we don't clear content on
+        // recycle), so the table is never empty — just 1-frame stale, which is
+        // imperceptible during rapid scroll. When velocity drops, flushSync resumes
+        // for frame-perfect content. The structural path (useEffect) always uses
+        // flushSync for correctness.
+        // getViewportData() above runs outside flushSync since column geometry
+        // caching makes it fast, avoiding blocking on computation.
+        const bindLayers = (): void => {
+            syncRowLayer(layers.left, currentViewportData, pinnedLeftRowsLayerRef, skipContentBind);
+            syncRowLayer(layers.central, currentViewportData, rowsLayerRef, skipContentBind);
+            syncRowLayer(layers.right, currentViewportData, pinnedRightRowsLayerRef, skipContentBind);
+        };
+
+        if (synchronousColumnWindow && !skipContentBind) {
+            flushSync(bindLayers);
+        } else {
+            bindLayers();
+        }
 
         // The horizontal column window changes infrequently (only when
         // crossing column boundaries). When it does, update central row cells
         // imperatively AND trigger a targeted React re-render for the header.
         // Pinned panes hold all their columns at once — they only rebind via
         // the structural path above (revision bump).
-        const columnWindowKey = `${currentViewportData.columnRange.start}:${currentViewportData.columnRange.end}:${state.viewport.width}:${pinnedLeftWidth}:${pinnedRightWidth}`;
-        if (columnWindowKey !== columnWindowKeyRef.current) {
-            columnWindowKeyRef.current = columnWindowKey;
-            const updateColumnWindow = (): void => {
-                for (const pane of layers.central.panes) pane.updateColumns(layers.central.columns, layers.central.originX);
-                setColumnWindowVersion((v) => v + 1);
-            };
-            if (synchronousColumnWindow) {
-                // Keep React-rendered cell content and headers in step with the
-                // imperative cell repositioning before the browser paints.
-                flushSync(updateColumnWindow);
-            } else {
-                updateColumnWindow();
+        //
+        // Skip column window updates during fast scroll (skipContentBind) —
+        // the columns themselves haven't changed, and forcing a header re-render
+        // during fast scroll would cause frame drops. The column window will
+        // be updated on the next slow-scroll frame or structural update.
+        if (!skipContentBind) {
+            const columnWindowKey = `${currentViewportData.columnRange.start}:${currentViewportData.columnRange.end}:${state.viewport.width}:${pinnedLeftWidth}:${pinnedRightWidth}`;
+            if (columnWindowKey !== columnWindowKeyRef.current) {
+                columnWindowKeyRef.current = columnWindowKey;
+                const updateColumnWindow = (): void => {
+                    for (const pane of layers.central.panes) pane.updateColumns(layers.central.columns, layers.central.originX);
+                    setColumnWindowVersion((v) => v + 1);
+                };
+                if (synchronousColumnWindow) {
+                    // Keep React-rendered cell content and headers in step with the
+                    // imperative cell repositioning before the browser paints.
+                    flushSync(updateColumnWindow);
+                } else {
+                    updateColumnWindow();
+                }
             }
         }
     };
@@ -508,21 +568,26 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
 
     /**
      * Sync the DomPool after every structural re-render.
-     * This runs only when React actually re-renders (data / columns /
-     * dimensions / column-window changes), never on scroll.
+     *
+     * Depends on `state` (from useSyncExternalStore) — the Store only notifies
+     * on structural changes (data / columns / dimensions / overlay), NOT on
+     * scroll-only updates or column-window version changes. This prevents the
+     * effect from running on horizontal-scroll re-renders, where syncPool(true)
+     * in the rAF already handled the DomPool sync and a redundant invalidate()
+     * here would force-rebind every visible row for no reason.
      *
      * Adapter options (rowClassRules closures, getRowStyle, plugins) can
      * change between renders WITHOUT touching the grid revision or the data
      * reference — e.g. a rule toggled by a useState in the host component.
      * Force-rebind the visible nodes so row classes/styles are re-evaluated
-     * with the fresh options on every render.
+     * with the fresh options on structural re-renders.
      */
     useEffect(() => {
         for (const layer of [layers.left, layers.central, layers.right]) {
             if (layer.pool) layer.pool.invalidate();
         }
-        syncPool();
-    });
+         syncPool(false, false);  // skipContentBind=false: structural changes always bind fully
+    }, [state]);
 
     useEffect(() => {
         return () => {
@@ -567,16 +632,23 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             const element = viewportRef.current;
             const scrollTop = element ? element.scrollTop : frame.top;
             const scrollLeft = element ? element.scrollLeft : frame.left;
+            // Velocity detection: px/ms. Threshold at 2.0 px/ms — mouse wheel
+            // and trackpad scrolls typically range 0.05–0.2 px/ms, while
+            // scrollbar thumb drags and shift-click page jumps can exceed 10 px/ms.
+            // When velocity exceeds the threshold, skipContentBind is passed to
+            // syncPool: rows are repositioned but content binding is deferred,
+            // avoiding synchronous React commits that exceed the 16ms frame budget.
+            const now = performance.now();
+            const deltaT = now - frame.lastTime;
+            scrollVelocityRef.current = deltaT > 8 ? Math.abs(scrollTop - frame.lastTop) / deltaT : 0;
+            frame.lastTop = scrollTop;
+            frame.lastTime = now;
             // setViewport with scroll-only updates does NOT notify the Store,
             // so this does NOT trigger a React re-render. The DomPool is
-            // updated imperatively below, and both the row-column rebind and the
-            // header window update must flush in the same React paint to avoid
-            // one-frame horizontal/vertical jumps when custom cell renderers are
-            // mounted into pooled DOM nodes.
-            flushSync(() => {
-                grid.setViewport({ scrollTop, scrollLeft });
-                syncPool(true);
-            });
+            // updated imperatively below.
+            grid.setViewport({ scrollTop, scrollLeft });
+            const skipContentBind = scrollVelocityRef.current > 2.0;
+            syncPool(true, skipContentBind);
         });
     };
 

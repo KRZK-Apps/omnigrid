@@ -25,6 +25,7 @@ export type {
     DataProcessor,
     DomPoolBindings,
     DomPoolUpdate,
+    DomPoolUpdateOptions,
     GridApi,
     GridEvents,
     GridOptions,

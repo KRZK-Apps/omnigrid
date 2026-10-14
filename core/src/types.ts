@@ -271,7 +271,9 @@ export interface GridOptions<T> {
     columns: ColumnDef<T>[];
     getRowId?: (row: T, index: number) => RowId;
     rowHeight?: number;
+    /** Rows to render beyond the visible viewport (top + bottom buffer). @default 5 */
     rowOverscan?: number;
+    /** Columns to render beyond the visible viewport (left + right buffer). @default 2 */
     columnOverscan?: number;
     suppressRowHoverHighlight?: boolean;
     rowStyle?: RowStyle;
@@ -425,6 +427,31 @@ export interface DomPoolBindings<T> {
     bindRow(host: RowHost<T>, row: PooledRow<T>): void;
     transformRow(host: RowHost<T>, offsetY: number): void;
     recycleRow(host: RowHost<T>): void;
+}
+
+/**
+ * Options passed to `DomPool.update()` to control binding behavior.
+ *
+ * @api
+ */
+export interface DomPoolUpdateOptions<T> {
+    /** Full (post-processing) array of rows. */
+    data: T[];
+    /** Inclusive start, exclusive end of visible rows (from Virtualizer). */
+    rowRange: Range;
+    /** Pixel height of each row. */
+    rowHeight: number;
+    /** Pixel width of each row (sum of all column widths). */
+    rowWidth: number;
+    /**
+     * When `true`, row position (transform) is updated but content binding
+     * (`bindRow`) is skipped — the row displays previous content at the
+     * correct new position. Used during fast scroll to avoid synchronous
+     * React commits that exceed the 16ms frame budget.
+     *
+     * @default false
+     */
+    skipBind?: boolean;
 }
 
 /** Result of a viewport frame update (informational for tests/debugging). */

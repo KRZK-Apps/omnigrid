@@ -170,7 +170,11 @@ export class Grid<T> implements GridApi<T> {
         const totalWidth = pinnedLeftWidth + scrollableWidth + pinnedRightWidth;
 
         // Virtual range for the scrollable section only.
-        const columnRange = scrollable.length ? this.virtualizer.getColumnRange(scrollable, scrollLeft, scrollableViewWidth) : { start: 0, end: 0 };
+
+        // Pass pre-computed scrollableOffsets to avoid a second (iterative)
+        // flex-distribution pass — getColumnRange would otherwise recompute
+        // all column widths from scratch via getColumnOffsets.
+        const columnRange = scrollable.length ? this.virtualizer.getColumnRange(scrollable, scrollLeft, scrollableViewWidth, scrollableOffsets) : { start: 0, end: 0 };
 
         const rowRange = this.virtualizer.getRowRange(processedData.length, this.scrollPosition.scrollTop, state.viewport.height);
 

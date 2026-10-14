@@ -35,6 +35,16 @@ export interface PooledRowCallbacks<T> {
     onRowHover(row: PooledRow<T>, hovered: boolean): void;
     onCellClick(row: PooledRow<T>, column: ColumnLeafDef<T>, modifiers: PooledRowModifiers): void;
     createRoot(container: HTMLDivElement): CellRoot;
+    /**
+     * Returns a cheap scalar preview of the cell value, painted synchronously
+     * into a blank cell while its first React commit (complex content) is
+     * pending — keeps the grid from showing empty cells during fast scroll
+     * ("staging" placeholder; React's first commit replaces it entirely).
+     * Return `null` to skip staging for this cell.
+     *
+     * @api
+     */
+    renderCellPlaceholder?(info: PooledCellRenderInfo<T>): string | null;
 }
 
 const OFFSCREEN_X = -200000;
@@ -161,7 +171,11 @@ export class PooledRowPane<T> {
         this.row = null;
         delete this.host.dataset.rowIndex;
         this.host.classList.remove("omnigrid-row-hover");
-        for (const cell of this.cells) this.clearContent(cell);
+        // Do NOT clear cell content here — React roots stay mounted so the next
+        // bind() re-renders via root.render(newContent) as an in-place update,
+        // avoiding the async gap between clearing and re-rendering that causes
+        // visible jitter on cells with custom renderers. Roots are eventually
+        // GC'd by React when the row host is destroyed.
         this.hide();
     }
 
@@ -263,7 +277,7 @@ export class PooledRowPane<T> {
         };
         this.applyCellPresentation(cell, cellInfo);
         const content = this.callbacks.renderCellContent(cellInfo);
-        this.applyContent(cell, content);
+        this.applyContent(cell, content, cellInfo);
     }
 
     private applyCellPresentation(cell: CellPane<T>, cellInfo: PooledCellRenderInfo<T>): void {
@@ -283,7 +297,7 @@ export class PooledRowPane<T> {
         }
     }
 
-    private applyContent(cell: CellPane<T>, content: unknown): void {
+    private applyContent(cell: CellPane<T>, content: unknown, cellInfo: PooledCellRenderInfo<T>): void {
         if (content == null) {
             this.clearContent(cell);
             return;
@@ -312,8 +326,20 @@ export class PooledRowPane<T> {
 
         // Everything complex (React components, CheckboxControl, SlotNode):
         // render through an isolated root. The cell node is NOT recreated.
-        const root = cell.root ?? (cell.root = this.callbacks.createRoot(cell.element));
-        root.render(contentToReactNode(content, this.bridge));
+        //
+        // The first commit into a fresh root is ASYNC (concurrent mode) — on
+        // fast scroll a newly created cell would be visibly empty for a frame
+        // or two. Staging: synchronously paint a cheap scalar preview first;
+        // React's first commit replaces the container contents entirely (see
+        // createRoot docs), so the placeholder never outlives the real content.
+        // Cells that already hold a committed root keep their (stale) content
+        // instead — never empty, so no placeholder is needed there.
+        if (!cell.root) {
+            const placeholder = this.callbacks.renderCellPlaceholder?.(cellInfo);
+            if (placeholder) cell.element.textContent = placeholder;
+            cell.root = this.callbacks.createRoot(cell.element);
+        }
+        cell.root.render(contentToReactNode(content, this.bridge));
     }
 
     private clearContent(cell: CellPane<T>): void {

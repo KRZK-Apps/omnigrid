@@ -87,16 +87,22 @@ export class Virtualizer<T> {
     /**
      * Column geometry works on the FLAT working set of leaf columns only —
      * groups never reach the Virtualizer (see `Grid.getViewportData()`).
+     *
+     * Pass pre-computed `offsets` (from a prior `getColumnOffsets` call) to skip
+     * the redundant width/offset computation — `getViewportData` already has
+     * them in hand.
      */
-    public getColumnRange(columns: ColumnLeafDef<T>[], scrollLeft: number, viewportWidth: number): Range {
-        const offsets = this.getColumnOffsets(columns, viewportWidth);
-        const start = this.findStart(offsets, scrollLeft);
-        const end = this.findEnd(offsets, scrollLeft + viewportWidth);
+    public getColumnRange(columns: ColumnLeafDef<T>[], scrollLeft: number, viewportWidth: number, offsets?: VirtualItem[]): Range {
+        const computed = offsets ?? this.getColumnOffsets(columns, viewportWidth);
+        const start = this.findStart(computed, scrollLeft);
+        const end = this.findEnd(computed, scrollLeft + viewportWidth);
         return {
             start: Math.max(0, start - this.options.columnOverscan),
             end: Math.min(columns.length, end + 1 + this.options.columnOverscan),
         };
     }
+
+    private readonly widthsCache = new WeakMap<object, { viewportWidth: number; length: number; widths: number[] }>();
 
     public getColumnOffsets(columns: ColumnLeafDef<T>[], viewportWidth = 0): VirtualItem[] {
         const widths = this.getColumnWidths(columns, viewportWidth);
@@ -128,6 +134,18 @@ export class Virtualizer<T> {
     }
 
     private getColumnWidths(columns: ColumnLeafDef<T>[], viewportWidth: number): number[] {
+        // Cache by first column identity + viewportWidth. Column objects are stable
+        // across scroll frames (replaced atomically on setColumns), so this avoids
+        // re-running the expensive flex-distribution loop on every scroll frame
+        // for the three column partitions (pinnedLeft, scrollable, pinnedRight).
+        if (columns.length > 0) {
+            const cacheKey = columns[0];
+            const cached = this.widthsCache.get(cacheKey);
+            if (cached && cached.viewportWidth === viewportWidth && cached.length === columns.length) {
+                return cached.widths;
+            }
+        }
+
         const widths = columns.map((column) => this.getBaseColumnWidth(column));
         const flexIndexes = columns
             .map((column, index) => (column.flex && column.flex > 0 && column.width === undefined ? index : -1))
@@ -163,7 +181,11 @@ export class Virtualizer<T> {
             remaining -= distributed;
         }
 
-        return this.quantizeWidths(widths);
+        const result = this.quantizeWidths(widths);
+        if (columns.length > 0) {
+            this.widthsCache.set(columns[0], { viewportWidth, length: columns.length, widths: result });
+        }
+        return result;
     }
 
     /**
@@ -223,10 +245,12 @@ export class Virtualizer<T> {
     }
 
     private findStart(items: VirtualItem[], offset: number): number {
-        return items.findIndex((item) => item.offset + item.size > offset) === -1 ? items.length : items.findIndex((item) => item.offset + item.size > offset);
+        const index = items.findIndex((item) => item.offset + item.size > offset);
+        return index === -1 ? items.length : index;
     }
 
     private findEnd(items: VirtualItem[], offset: number): number {
-        return items.findIndex((item) => item.offset >= offset) === -1 ? items.length : items.findIndex((item) => item.offset >= offset);
+        const index = items.findIndex((item) => item.offset >= offset);
+        return index === -1 ? items.length : index;
     }
 }
