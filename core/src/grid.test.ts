@@ -146,6 +146,58 @@ describe("Grid.getRevision — structural change detection", () => {
     });
 });
 
+describe("Grid.appendData — chunk-append for incremental loading", () => {
+    it("appends rows to the end of the existing dataset", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const initialLength: number = grid.getState().data.length;
+
+        grid.appendData([{ name: "appended-0" }, { name: "appended-1" }]);
+
+        const data = grid.getState().data;
+        expect(data.length).toBe(initialLength + 2);
+        expect(data[initialLength]).toEqual({ name: "appended-0" });
+        expect(data[initialLength + 1]).toEqual({ name: "appended-1" });
+    });
+
+    it("emits a single dataChange with the combined array", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const listener = vi.fn();
+        grid.on("dataChange", listener);
+
+        grid.appendData([{ name: "appended-0" }]);
+
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener).toHaveBeenCalledWith(grid.getState().data);
+    });
+
+    it("increments the revision and invalidates the processed data cache", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const before = grid.getRevision();
+        const cachedBefore = grid.getProcessedData();
+
+        grid.appendData([{ name: "appended-0" }]);
+
+        expect(grid.getRevision()).toBe(before + 1);
+        expect(grid.getProcessedData()).not.toBe(cachedBefore);
+        expect(grid.getProcessedData().length).toBe(101);
+    });
+
+    it("is a no-op for empty, null, or undefined rows", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const listener = vi.fn();
+        grid.on("dataChange", listener);
+        const before = grid.getRevision();
+
+        grid.appendData([]);
+        grid.appendData(null);
+        grid.appendData(undefined);
+
+        expect(grid.getState().data.length).toBe(100);
+        expect(grid.getRevision()).toBe(before);
+        expect(listener).not.toHaveBeenCalled();
+    });
+});
+
 describe("Grid.getColumnWidth", () => {
     it("returns calculated widths for columns outside the current virtual window", () => {
         const columns: ColumnDef<Row>[] = Array.from({ length: 8 }, (_, index) => ({

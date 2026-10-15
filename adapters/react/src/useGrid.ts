@@ -84,16 +84,15 @@ export function useGrid<T>(options: GridOptions<T>): UseGridResult<T> {
         }
     }, [grid, options.columns]);
 
-    // Sync loading state. When `options.loading` is true, show the loading
-    // overlay; when false, hide it (auto-overlays like noRows take over).
-    const loadingSyncedRef = useRef(false);
+    // Sync loading state. An explicit boolean prop always wins and is applied
+    // on every change (including the first flush — the Grid constructor may
+    // have been created with a stale value). `undefined` means the host does
+    // not manage loading: the core or a plugin (e.g. InfiniteScrollPlugin
+    // during its initial fetch in register()) may own the state, and the prop
+    // must not stomp it with a forced `false`.
     useEffect(() => {
         if (grid.isDestroyed()) return;
-        if (!loadingSyncedRef.current) {
-            loadingSyncedRef.current = true;
-            grid.setLoading(!!options.loading);
-            return;
-        }
+        if (options.loading === undefined) return;
         grid.setLoading(!!options.loading);
     }, [grid, options.loading]);
 

@@ -252,6 +252,26 @@ export class Grid<T> implements GridApi<T> {
         this.recomputeOverlay();
     }
 
+    /**
+     * Chunk-append API for incremental data loading (infinite scroll, live
+     * feeds). Concatenates `rows` onto the existing dataset inside the State
+     * Store — the host does not need to re-send the whole array — then emits
+     * a single `dataChange` with the combined result. A no-op for empty or
+     * missing `rows`.
+     */
+    public appendData(rows: T[] | null | undefined): void {
+        this.assertActive();
+        if (!rows || rows.length === 0) return;
+        const currentData: T[] = this.store.getState().data;
+        const nextData: T[] = [...currentData, ...rows];
+        this.hasData = true;
+        this.processedDataCache = null;
+        this.revision += 1;
+        this.store.setState({ data: nextData });
+        this.events.emit("dataChange", nextData);
+        this.recomputeOverlay();
+    }
+
     public setViewport(viewport: Partial<ViewportState>): void {
         this.assertActive();
         const state = this.store.getState();

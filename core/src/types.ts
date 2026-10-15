@@ -594,6 +594,16 @@ export interface GridApi<T> {
     getProcessedData(): T[];
     getRowId(row: T, index: number): RowId;
     setData(data: T[] | null | undefined): void;
+    /**
+     * Chunk-append API for incremental data loading (infinite scroll, live
+     * feeds): appends `rows` to the end of the existing dataset without
+     * rebuilding it from the host side. Patches the State Store directly and
+     * emits a single `dataChange` with the combined array. Empty or missing
+     * `rows` is a no-op.
+     * @param rows - Chunk of rows appended to the end of the dataset.
+     * @api
+     */
+    appendData(rows: T[] | null | undefined): void;
     setViewport(viewport: Partial<ViewportState>): void;
     refresh(): void;
     subscribe(listener: () => void): () => void;
