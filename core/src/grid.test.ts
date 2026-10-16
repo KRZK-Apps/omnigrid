@@ -144,6 +144,17 @@ describe("Grid.getRevision — structural change detection", () => {
         grid.setViewport({ scrollLeft: 50 });
         expect(grid.getRevision()).toBe(before);
     });
+
+    it("requests native scroll updates through the scrollTo event", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const listener = vi.fn();
+        grid.on("scrollTo", listener);
+
+        grid.scrollTo({ scrollTop: 64 });
+
+        expect(grid.getScrollPosition()).toEqual({ scrollTop: 64, scrollLeft: 0 });
+        expect(listener).toHaveBeenCalledWith({ scrollTop: 64, scrollLeft: 0 });
+    });
 });
 
 describe("Grid.appendData — chunk-append for incremental loading", () => {

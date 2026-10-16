@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ContentBridge } from "./content";
-import { contentToReactNode } from "./content";
+import { contentToReactNode, hasRenderableContent } from "./content";
 
 interface Row {
     id: string;
@@ -76,6 +76,19 @@ describe("contentToReactNode", () => {
             display: "block",
             width: "8px",
             background: "rgba(0,0,0,0.5)",
+        });
+    });
+
+    describe("hasRenderableContent", () => {
+        it("rejects empty slot content and accepts visible scalar or element content", () => {
+            expect(hasRenderableContent(null)).toBe(false);
+            expect(hasRenderableContent(false)).toBe(false);
+            expect(hasRenderableContent("")).toBe(false);
+            expect(hasRenderableContent([null, false, createElement(Fragment)])).toBe(false);
+            expect(hasRenderableContent(0)).toBe(true);
+            expect(hasRenderableContent("Loading")).toBe(true);
+            expect(hasRenderableContent(createElement("span", null, "Loading"))).toBe(true);
+            expect(hasRenderableContent(createElement(Fragment, null, "Loading"))).toBe(true);
         });
     });
 

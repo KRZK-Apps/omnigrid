@@ -43,6 +43,7 @@ export class Grid<T> implements GridApi<T> {
      * - `overlayManual`: whether the overlay was set manually (showOverlay), which
      *   disables auto-evaluation until hideOverlay re-enables it.
      */
+    private readonly licenseKey: string | undefined;
     private loading = false;
     private hasData = true;
     private loadError: unknown;
@@ -70,6 +71,7 @@ export class Grid<T> implements GridApi<T> {
             overlay: { type: null },
         };
         this.store = new Store(state);
+        this.licenseKey = options.licenseKey;
         this.resolveRowId = options.getRowId ?? ((_row, index) => index);
         this.loading = options.loading ?? false;
         this.hasData = options.data !== undefined && options.data !== null;
@@ -120,6 +122,19 @@ export class Grid<T> implements GridApi<T> {
     /** Returns the current ephemeral scroll position (not part of Store state). */
     public getScrollPosition(): ScrollPosition {
         return this.scrollPosition;
+    }
+
+    /**
+     * Requests the adapter to update the native scroll position.
+     * @param position - Partial scroll coordinates to set.
+     * @api
+     */
+    public scrollTo(position: Partial<ScrollPosition>): void {
+        this.assertActive();
+        const nextPosition: ScrollPosition = { ...this.scrollPosition, ...position };
+        if (nextPosition.scrollTop === this.scrollPosition.scrollTop && nextPosition.scrollLeft === this.scrollPosition.scrollLeft) return;
+        this.scrollPosition = nextPosition;
+        this.events.emit("scrollTo", nextPosition);
     }
 
     public getViewportData(): ViewportData<T> {
@@ -490,6 +505,10 @@ export class Grid<T> implements GridApi<T> {
         this.store.clear();
         this.events.clear();
         this.destroyed = true;
+    }
+
+    public getLicenseKey(): string | undefined {
+        return this.licenseKey;
     }
 
     public isDestroyed(): boolean {

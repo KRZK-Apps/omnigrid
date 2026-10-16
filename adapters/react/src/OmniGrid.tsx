@@ -26,7 +26,7 @@ import type {
 } from "@omnigrid/core";
 import { DomPool } from "@omnigrid/core";
 
-import { type ContentBridge, contentToReactNode } from "./content";
+import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
 import { computeGroupSegments } from "./groupHeader";
 import { type PooledColumn, type PooledRowCallbacks, PooledRowPane } from "./pooledRow";
 import { createCellRoot } from "./reactRoot";
@@ -140,6 +140,8 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const pinnedLeftRowsLayerRef = useRef<HTMLDivElement>(null);
     const pinnedRightRowsLayerRef = useRef<HTMLDivElement>(null);
     const [isMeasured, setIsMeasured] = useState(false);
+    /** Space taken by the viewport's native scrollbars; body slots stay clear of it. */
+    const [scrollbarInsets, setScrollbarInsets] = useState<{ right: number; bottom: number }>({ right: 0, bottom: 0 });
     const scrollFrameRef = useRef<{ id: number; top: number; left: number; lastTop: number; lastTime: number }>({ id: 0, top: 0, left: 0, lastTop: 0, lastTime: 0 });
     const scrollVelocityRef = useRef<number>(0);
     const optionsRef = useRef<GridProps<T>>(options);
@@ -527,9 +529,16 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
      * whether or not the scrollbar is visible. For browsers without support,
      * the scroll handler re-measures when the scrollbar appears/disappears.
      */
+    const syncScrollbarInsets = useCallback((element: HTMLDivElement): void => {
+        const right: number = Math.max(0, element.offsetWidth - element.clientWidth - element.clientLeft * 2);
+        const bottom: number = Math.max(0, element.offsetHeight - element.clientHeight - element.clientTop * 2);
+        setScrollbarInsets((previous) => (previous.right === right && previous.bottom === bottom ? previous : { right, bottom }));
+    }, []);
+
     const measureViewport = useCallback(() => {
         const element = viewportRef.current;
         if (!element) return;
+        syncScrollbarInsets(element);
         const scrollbarWidth = element.offsetWidth - element.clientWidth;
         scrollbarWidthRef.current = scrollbarWidth;
         const width = element.clientWidth;
@@ -537,7 +546,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         if (width === 0 || height === 0) return;
         grid.setViewport({ width, height });
         setIsMeasured(true);
-    }, [grid]);
+    }, [grid, syncScrollbarInsets]);
 
     useEffect(() => {
         const element = viewportRef.current;
@@ -546,6 +555,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         const observer = new ResizeObserver(() => {
             const element = viewportRef.current;
             if (!element) return;
+            syncScrollbarInsets(element);
             const scrollbarWidth = element.offsetWidth - element.clientWidth;
             scrollbarWidthRef.current = scrollbarWidth;
             const width = element.clientWidth;
@@ -557,7 +567,12 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         observer.observe(element, { box: "content-box" });
         measureViewport();
         return () => observer.disconnect();
-    }, [grid, measureViewport]);
+    }, [grid, measureViewport, syncScrollbarInsets]);
+
+    // Scrollbars can appear or disappear after any render (content or column changes).
+    useLayoutEffect(() => {
+        if (viewportRef.current) syncScrollbarInsets(viewportRef.current);
+    });
 
     useLayoutEffect(() => {
         if (!isMeasured || autoHeight) return;
@@ -565,6 +580,16 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         // so columns remain aligned when an overlay locks vertical scrolling.
         measureViewport();
     }, [autoHeight, hasVerticalOverflow, isMeasured, measureViewport, overlayScope]);
+
+    useEffect(() => {
+        const unsubscribe: () => void = grid.on("scrollTo", (position) => {
+            const element: HTMLDivElement | null = viewportRef.current;
+            if (!element) return;
+            element.scrollTop = position.scrollTop;
+            element.scrollLeft = position.scrollLeft;
+        });
+        return unsubscribe;
+    }, [grid]);
 
     /**
      * Sync the DomPool after every structural re-render.
@@ -618,6 +643,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         const scrollbarWidth = element.offsetWidth - element.clientWidth;
         if (scrollbarWidth !== scrollbarWidthRef.current) {
             scrollbarWidthRef.current = scrollbarWidth;
+            syncScrollbarInsets(element);
             grid.setViewport({ width: element.clientWidth });
         }
 
@@ -674,26 +700,61 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         return contentToReactNode<T>(raw, { registry: slotComponentsRef.current, context: () => context });
     };
 
+    const renderSlotGroups = (mounts: SlotMount<T>[], context: SlotRenderContext<T>): ReactNode[] =>
+        SLOT_POSITIONS.map((position) => {
+            const content: { mount: SlotMount<T>; value: ReactNode }[] = mounts
+                .filter((mount) => mount.position === position)
+                .map((mount) => ({ mount, value: resolveSlotContent(mount, context) }))
+                .filter((item) => hasRenderableContent(item.value));
+            if (content.length === 0) return null;
+            return (
+                <div key={position} className={`omnigrid-slot-item-group omnigrid-slot-pos-${position}`}>
+                    {content.map(({ mount, value }) => (
+                        <div key={mount.id} className="omnigrid-slot-item">
+                            {value}
+                        </div>
+                    ))}
+                </div>
+            );
+        });
+
     const renderSlot = (slot: SlotName): ReactNode => {
         const mounts = grid.getSlotMounts(slot);
         if (mounts.length === 0) return null;
 
         const context: SlotRenderContext<T> = { api: grid, state: grid.getState(), slot };
+        const groups: ReactNode[] = renderSlotGroups(mounts, context);
+        if (groups.every((group) => group === null)) return null;
+
         return (
             <div className={`omnigrid-slot omnigrid-slot-${slot}`}>
-                {SLOT_POSITIONS.map((position) => {
-                    const group = mounts.filter((mount) => mount.position === position);
-                    if (group.length === 0) return null;
-                    return (
-                        <div key={position} className={`omnigrid-slot-item-group omnigrid-slot-pos-${position}`}>
-                            {group.map((mount) => (
-                                <div key={mount.id} className="omnigrid-slot-item">
-                                    {resolveSlotContent(mount, context)}
-                                </div>
-                            ))}
-                        </div>
-                    );
-                })}
+                {groups}
+            </div>
+        );
+    };
+
+    /** Renders slots that overlay the table body (absolute positioning, no layout shift). */
+    const renderBodySlot = (slot: "bodyTop" | "bodyBottom"): ReactNode => {
+        const mounts = grid.getSlotMounts(slot);
+        if (mounts.length === 0) return null;
+
+        const context: SlotRenderContext<T> = { api: grid, state: grid.getState(), slot };
+        const groups: ReactNode[] = renderSlotGroups(mounts, context);
+        if (groups.every((group) => group === null)) return null;
+
+        return (
+            <div
+                className={`omnigrid-slot omnigrid-slot-${slot}`}
+                style={{
+                    bottom: slot === "bodyBottom" ? scrollbarInsets.bottom : undefined,
+                    left: 0,
+                    position: "absolute",
+                    right: scrollbarInsets.right,
+                    top: slot === "bodyTop" ? headerHeight : undefined,
+                    zIndex: 3,
+                }}
+            >
+                {groups}
             </div>
         );
     };
@@ -957,6 +1018,16 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             <div className="omnigrid-layout-body">
                 {renderSlot("left")}
                 <div
+                    className="omnigrid-viewport-container"
+                    style={{
+                    flex: "1 1 0",
+                    minHeight: 0,
+                    minWidth: 0,
+                    position: "relative",
+                    width: "100%",
+                    }}
+                >
+                    <div
                     ref={viewportRef}
                     className={viewportClassName}
                     onScroll={handleScroll}
@@ -972,7 +1043,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                         scrollbarGutter: verticalScrollbarGutter,
                         width: "100%",
                     }}
-                >
+                    >
                     <div
                         style={{
                             display: "flex",
@@ -1027,27 +1098,26 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                             </div>
                         )}
                     </div>
+                    </div>
+                    {renderBodySlot("bodyTop")}
+                    {renderBodySlot("bodyBottom")}
                     {overlayState.type && overlayScope === "bodyOnly" && (
-                        // Keep the sticky overlay anchored to the body viewport without adding
-                        // its height to the scrollable content's natural dimensions.
-                        <div
-                            className="omnigrid-overlay omnigrid-overlay-body"
-                            role="status"
-                            style={{
-                                height: overlayHeight,
-                                left: 0,
-                                marginBottom: -overlayHeight,
-                                marginTop: -rowTotalHeight,
-                                pointerEvents: "auto",
-                                position: "sticky",
-                                right: 0,
-                                top: headerHeight,
-                                width: "100%",
-                                zIndex: 4,
-                            }}
-                        >
-                            {renderOverlayContent(overlayState)}
-                        </div>
+                    <div
+                        className="omnigrid-overlay omnigrid-overlay-body"
+                        role="status"
+                        style={{
+                            height: overlayHeight,
+                            left: 0,
+                            pointerEvents: "auto",
+                            position: "absolute",
+                            right: 0,
+                            top: headerHeight,
+                            width: "100%",
+                            zIndex: 4,
+                        }}
+                    >
+                        {renderOverlayContent(overlayState)}
+                    </div>
                     )}
                 </div>
                 {renderSlot("right")}

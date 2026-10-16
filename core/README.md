@@ -18,7 +18,8 @@ state, the data pipeline, 2D virtualization, DOM-pool row mapping, slots, and pl
 
 **Scroll is ephemeral, not state.** `scrollTop`/`scrollLeft` are kept out of the Store:
 scroll-only `setViewport({ scrollTop, scrollLeft })` calls never notify subscribers, so adapters do
-not re-render on scroll frames. Read them via `getScrollPosition()`.
+not re-render on scroll frames. Read them via `getScrollPosition()`; use `scrollTo()` to request an
+adapter-native scroll adjustment without moving scroll coordinates into the Store.
 
 ## Key contracts
 
@@ -109,6 +110,7 @@ UI code must never touch core internals directly.
 interface GridApi<T> {
     getState(): GridState<T>;                              // { data, columns, viewport, rowHeight, rowOverscan, columnOverscan }
     getScrollPosition(): ScrollPosition;                   // ephemeral scrollTop/scrollLeft
+    scrollTo(position: Partial<ScrollPosition>): void;      // request a native scroll adjustment from the adapter
     getViewportData(): ViewportData<T>;                    // virtualized window: rows/columns + absolute offsets
     getProcessedData(): T[];                               // after all registered data processors
     getRowId(row: T, index: number): RowId;

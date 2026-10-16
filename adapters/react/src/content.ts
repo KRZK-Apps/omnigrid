@@ -30,6 +30,15 @@ export function isSlotComponentContent(value: unknown): value is { type: "compon
     return typeof value === "object" && value !== null && (value as { type?: unknown }).type === "component";
 }
 
+export function hasRenderableContent(content: ReactNode): boolean {
+    if (content === null || content === undefined || typeof content === "boolean" || content === "") return false;
+    if (Array.isArray(content)) return content.some(hasRenderableContent);
+    if (isValidElement<{ children?: ReactNode }>(content) && content.type === Fragment) {
+        return hasRenderableContent(content.props.children);
+    }
+    return true;
+}
+
 function renderCheckboxControl(value: CheckboxControl): ReactNode {
     return createElement(
         "input",

@@ -282,6 +282,13 @@ export interface GridOptions<T> {
     getRowClass?: (params: RowRenderParams<T>) => string | undefined;
     rowClassRules?: RowClassRules<T>;
     plugins?: GridPlugin<T>[];
+    /**
+     * License key for Pro plugins. When provided, Pro plugins verify the
+     * cryptographic signature and activate full functionality. When missing
+     * or invalid, Pro plugins enter demo mode with a non-intrusive watermark.
+     * @api
+     */
+    licenseKey?: string;
     /** Whether data is currently being fetched. Triggers a loading overlay. @default false when data is supplied */
     loading?: boolean;
     /**
@@ -388,6 +395,7 @@ export interface GridState<T> {
 export interface GridEvents<T> {
     stateChange: GridState<T>;
     viewportChange: ViewportState;
+    scrollTo: ScrollPosition;
     dataChange: T[];
     headerClick: { columnId: string; multiSort: boolean };
     sortingChanged: Array<{ columnId: string; direction: SortDirection }>;
@@ -484,7 +492,7 @@ export interface GridPlugin<T> {
 /* Slot Architecture — blocks where plugins mount their widgets       */
 /* ------------------------------------------------------------------ */
 
-export type SlotName = "top" | "bottom" | "left" | "right";
+export type SlotName = "top" | "bottom" | "left" | "right" | "bodyTop" | "bodyBottom";
 export type SlotPosition = "start" | "center" | "end";
 
 /**
@@ -589,6 +597,12 @@ export interface SlotMount<T> {
 export interface GridApi<T> {
     getState(): GridState<T>;
     getScrollPosition(): ScrollPosition;
+    /**
+     * Requests a native scroll position update from the active adapter.
+     * @param position - Scroll coordinates to update.
+     * @api
+     */
+    scrollTo(position: Partial<ScrollPosition>): void;
     getViewportData(): ViewportData<T>;
     getColumnWidth(columnId: string): number | undefined;
     getProcessedData(): T[];
@@ -619,6 +633,12 @@ export interface GridApi<T> {
     readonly slots: SlotManager<T>;
     readonly icons: IconRegistry<T>;
     getSlotMounts(slot: SlotName): SlotMount<T>[];
+    /**
+     * Returns the `licenseKey` supplied in `GridOptions`. The core never
+     * interprets the key; Pro plugins verify it themselves.
+     * @api
+     */
+    getLicenseKey(): string | undefined;
     /**
      * Shows an overlay using the supplied options.
      *
