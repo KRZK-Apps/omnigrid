@@ -118,3 +118,16 @@ describe("SelectionPlugin row presentation", () => {
         grid.destroy();
     });
 });
+
+describe("SelectionPlugin removal", () => {
+    it("removes the checkbox column and clears selection when the plugin is dropped from the grid", () => {
+        const columns: ColumnDef<Row>[] = [{ id: "name", field: "name", header: "Name", flex: 1 }];
+        const plugin = new SelectionPlugin<Row>({ mode: "multiple", showRowCheckboxes: true });
+        const grid = new Grid<Row>({ columns, data: ROWS, plugins: [plugin] });
+        expect(grid.getState().columns[0].id).toBe("__omnigrid_selection__");
+
+        grid.setPlugins([]);
+        expect(grid.getState().columns.map((c) => c.id)).toEqual(["name"]);
+        expect(plugin.getSelectedRowIds()).toEqual([]);
+    });
+});

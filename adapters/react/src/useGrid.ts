@@ -40,6 +40,22 @@ export function useGrid<T>(options: GridOptions<T>): UseGridResult<T> {
     const getSnapshot = useCallback(() => grid.getState(), [grid]);
     const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
+    // Reconcile plugins when the plugin list changes. Plugins removed from the
+    // list are unregistered (their cleanup restores default behavior); new ones
+    // are registered. Declared before the data sync so that, on a switch, the
+    // old plugin is gone before data is replaced and the new one is attached
+    // before the new data arrives. The first run is skipped: the Grid
+    // constructor already registered the initial plugins.
+    const pluginsSyncedRef = useRef(false);
+    useEffect(() => {
+        if (grid.isDestroyed()) return;
+        if (!pluginsSyncedRef.current) {
+            pluginsSyncedRef.current = true;
+            return;
+        }
+        grid.setPlugins(options.plugins);
+    }, [grid, options.plugins]);
+
     // Sync data when the data reference changes (async load, pagination,
     // parent-side filtering). Skip on the first run — the Grid constructor
     // already initialised data from options.data. Only sync on subsequent

@@ -1,5 +1,5 @@
 import { Grid } from "./grid";
-import type { ColumnDef } from "./types";
+import type { ColumnDef, GridPlugin } from "./types";
 
 interface Row {
     name: string;
@@ -396,5 +396,41 @@ describe("Grid.getViewportData — integer pixel geometry for flex columns", () 
             cursor += item.width;
         }
         expect(cursor).toBe(1161);
+    });
+});
+
+describe("Grid.setPlugins — dynamic plugin reconciliation", () => {
+    it("registers new plugins, unregisters removed ones and keeps unchanged ones", () => {
+        const cleanupA: ReturnType<typeof vi.fn> = vi.fn();
+        const cleanupB: ReturnType<typeof vi.fn> = vi.fn();
+        const registerA: ReturnType<typeof vi.fn> = vi.fn(() => cleanupA);
+        const registerB: ReturnType<typeof vi.fn> = vi.fn(() => cleanupB);
+        const pluginA: GridPlugin<unknown> = { name: "a", register: registerA };
+        const pluginB: GridPlugin<unknown> = { name: "b", register: registerB };
+        const grid: Grid<unknown> = new Grid<unknown>({ columns: [], data: [], plugins: [pluginA] });
+
+        grid.setPlugins([pluginA, pluginB]);
+        expect(registerA).toHaveBeenCalledTimes(1);
+        expect(registerB).toHaveBeenCalledTimes(1);
+
+        grid.setPlugins([pluginB]);
+        expect(cleanupA).toHaveBeenCalledTimes(1);
+        expect(cleanupB).not.toHaveBeenCalled();
+
+        grid.setPlugins([pluginA]);
+        expect(cleanupB).toHaveBeenCalledTimes(1);
+        expect(registerA).toHaveBeenCalledTimes(2);
+    });
+
+    it("resets vertical scroll only when the plugin set changes", () => {
+        const plugin: GridPlugin<unknown> = { name: "a", register: () => undefined };
+        const grid: Grid<unknown> = new Grid<unknown>({ columns: [], data: [], plugins: [plugin] });
+
+        grid.scrollTo({ scrollTop: 300, scrollLeft: 40 });
+        grid.setPlugins([plugin]);
+        expect(grid.getScrollPosition().scrollTop).toBe(300);
+
+        grid.setPlugins([]);
+        expect(grid.getScrollPosition()).toEqual({ scrollTop: 0, scrollLeft: 40 });
     });
 });

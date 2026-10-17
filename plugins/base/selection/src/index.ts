@@ -105,6 +105,12 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         return () => {
             this.unregisterRowClick?.();
             this.unregisterRowClick = undefined;
+            const api: GridApi<T> | undefined = this.api;
+            if (api && !api.isDestroyed()) {
+                api.setColumns(api.getState().columns.filter((column) => column.id !== this.selectionColumnId));
+            }
+            this.selectedRowIds.clear();
+            this.anchorIndex = undefined;
             this.api = undefined;
         };
     }

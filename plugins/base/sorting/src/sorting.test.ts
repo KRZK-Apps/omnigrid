@@ -156,3 +156,19 @@ describe("SortingPlugin comparator and cycle options", () => {
         expect(plugin.getSortModel()).toEqual([{ columnId: "value", direction: "asc" }]);
     });
 });
+
+describe("SortingPlugin removal", () => {
+    it("restores the unsorted order and clears sort metadata when the plugin is dropped", () => {
+        const plugin = new SortingPlugin<Row>();
+        const grid = new Grid<Row>({ columns: COLUMNS, data: RAW, plugins: [plugin] });
+        grid.headerClick("value");
+        expect(grid.getProcessedData().map((r) => r.id)).toEqual(["b", "c", "a"]);
+
+        grid.setPlugins([]);
+        expect(grid.getProcessedData().map((r) => r.id)).toEqual(["a", "b", "c"]);
+        const value = grid.getState().columns.find((c) => c.id === "value");
+        expect(value?.sortState).toBeUndefined();
+        expect(value?.sortable).toBeUndefined();
+        expect(grid.getState().columns.find((c) => c.id === "unsortable")?.sortable).toBe(false);
+    });
+});

@@ -217,3 +217,25 @@ describe("ColumnResizePlugin", () => {
     grid.destroy();
   });
 });
+
+describe("ColumnResizePlugin removal", () => {
+  it("restores the original header renderers when the plugin is dropped", () => {
+    const original = () => "Custom";
+    const grid = new Grid({
+      columns: [
+        { id: "name", header: "Name", width: 120, headerRenderer: original },
+        { id: "age", header: "Age", width: 80 },
+      ],
+      data: [{ name: "Alice", age: 1 }],
+    });
+    const plugin = new ColumnResizePlugin();
+
+    grid.setPlugins([plugin]);
+    expect(grid.getState().columns[0].headerRenderer).not.toBe(original);
+    expect(grid.getState().columns[1].headerRenderer).toBeDefined();
+
+    grid.setPlugins([]);
+    expect(grid.getState().columns[0].headerRenderer).toBe(original);
+    expect(grid.getState().columns[1].headerRenderer).toBeUndefined();
+  });
+});

@@ -36,6 +36,7 @@ export interface ColumnResizePluginOptions<T> {
 export class ColumnResizePlugin<T> implements GridPlugin<T> {
     public readonly name = "@omnigrid/column-resize-plugin";
     private api?: GridApi<T>;
+    private readonly wrappedRenderers = new Map<unknown, ColumnLeafDef<T>["headerRenderer"]>();
     private activeResize?: {
         columnId: string;
         startX: number;
@@ -62,6 +63,7 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
             unregisterPointerHandlers();
             this.clearGuide();
             this.activeResize = undefined;
+            if (!api.isDestroyed()) api.setColumns(this.detachResizeHandles(api.getState().columns));
             this.api = undefined;
         };
     }
@@ -306,13 +308,23 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
             }
 
             const originalHeaderRenderer = column.headerRenderer;
-            return {
-                ...column,
-                headerRenderer: (headerColumn: ColumnDef<T>) => {
-                    const resolvedHeader = originalHeaderRenderer ? originalHeaderRenderer(headerColumn) : headerColumn.header ?? headerColumn.id;
-                    return this.createResizeHandleNode(headerColumn as ColumnLeafDef<T>, resolvedHeader);
-                },
+            const wrapped: NonNullable<ColumnLeafDef<T>["headerRenderer"]> = (headerColumn: ColumnDef<T>) => {
+                const resolvedHeader = originalHeaderRenderer ? originalHeaderRenderer(headerColumn) : headerColumn.header ?? headerColumn.id;
+                return this.createResizeHandleNode(headerColumn as ColumnLeafDef<T>, resolvedHeader);
             };
+            this.wrappedRenderers.set(wrapped, originalHeaderRenderer);
+            return { ...column, headerRenderer: wrapped };
+        });
+    }
+
+    /** Restores the original header renderers that were wrapped with resize handles. */
+    private detachResizeHandles(columns: ColumnDef<T>[]): ColumnDef<T>[] {
+        return columns.map((column) => {
+            if (isColumnGroup(column)) {
+                return { ...column, children: this.detachResizeHandles(column.children) };
+            }
+            if (!column.headerRenderer || !this.wrappedRenderers.has(column.headerRenderer)) return column;
+            return { ...column, headerRenderer: this.wrappedRenderers.get(column.headerRenderer) };
         });
     }
 

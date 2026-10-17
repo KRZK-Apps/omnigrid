@@ -308,3 +308,18 @@ describe("PaginationPlugin control blocks and placement", () => {
         expect(onChange).toHaveBeenLastCalledWith({ page: 1, pageSize: 20 });
     });
 });
+
+describe("PaginationPlugin removal", () => {
+    it("shows all rows and unmounts its slots when the plugin is dropped", () => {
+        const data: Row[] = Array.from({ length: 25 }, (_, i) => ({ value: i }));
+        const columns: ColumnDef<Row>[] = [{ id: "value", field: "value", header: "Value", width: 100 }];
+        const plugin = new PaginationPlugin<Row>({ pageSize: 10 });
+        const grid = new Grid<Row>({ columns, data, plugins: [plugin] });
+        expect(grid.getProcessedData()).toHaveLength(10);
+        expect(grid.getSlotMounts("bottom").length).toBeGreaterThan(0);
+
+        grid.setPlugins([]);
+        expect(grid.getProcessedData()).toHaveLength(25);
+        expect(grid.getSlotMounts("bottom")).toHaveLength(0);
+    });
+});

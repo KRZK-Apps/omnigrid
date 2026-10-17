@@ -28,6 +28,7 @@ export class Grid<T> implements GridApi<T> {
     private readonly events = new EventBus<GridEvents<T>>();
     private readonly virtualizer: Virtualizer<T>;
     private readonly cleanupPlugins = new Set<() => void>();
+    private readonly pluginRegistrations = new Map<GridPlugin<T>, () => void>();
     private readonly dataProcessors = new Set<DataProcessor<T>>();
     private readonly resolveRowId: NonNullable<GridOptions<T>["getRowId"]>;
     public readonly slots: SlotManager<T>;
@@ -406,9 +407,41 @@ export class Grid<T> implements GridApi<T> {
         const unregister = () => {
             cleanup?.();
             this.cleanupPlugins.delete(unregister);
+            if (this.pluginRegistrations.get(plugin) === unregister) this.pluginRegistrations.delete(plugin);
         };
         this.cleanupPlugins.add(unregister);
+        this.pluginRegistrations.set(plugin, unregister);
         return unregister;
+    }
+
+    /**
+     * Reconciles the registered plugins with the given list: plugins missing from
+     * the list are unregistered (their cleanup restores default behavior), new
+     * ones are registered. Plugins already registered are left untouched.
+     * When the set actually changes, the vertical scroll position is reset to
+     * the top, since the plugin set redefines how rows are sourced.
+     * @param plugins - The desired plugin set.
+     */
+    public setPlugins(plugins: GridPlugin<T>[] | null | undefined): void {
+        this.assertActive();
+        const next: GridPlugin<T>[] = plugins ?? [];
+        let changed: boolean = false;
+        Array.from(this.pluginRegistrations.entries()).forEach(([plugin, unregister]) => {
+            if (!next.includes(plugin)) {
+                unregister();
+                changed = true;
+            }
+        });
+        next.forEach((plugin) => {
+            if (!this.pluginRegistrations.has(plugin)) {
+                this.registerPlugin(plugin);
+                changed = true;
+            }
+        });
+        if (changed) {
+            this.scrollTo({ scrollTop: 0 });
+            this.refresh();
+        }
     }
 
     public getSlotMounts(slot: SlotName): SlotMount<T>[] {

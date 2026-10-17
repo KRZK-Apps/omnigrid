@@ -63,6 +63,8 @@ export class SortingPlugin<T> implements GridPlugin<T> {
             this.unregisterHeaderClick?.();
             this.unregisterProcessor = undefined;
             this.unregisterHeaderClick = undefined;
+            this.sortModel = [];
+            this.stripColumnMetadata();
             this.api = undefined;
         };
     }
@@ -155,6 +157,23 @@ export class SortingPlugin<T> implements GridPlugin<T> {
         // `field` is `keyof T | string` (loose rows), so index via a string-keyed cast.
         if (column.field) return (row as Record<string, unknown>)[column.field as string];
         return undefined;
+    }
+
+    /** Removes sort metadata from the columns so the grid returns to its unsorted default. */
+    private stripColumnMetadata(): void {
+        const api: GridApi<T> | undefined = this.api;
+        if (!api || api.isDestroyed()) return;
+        const strip = (columns: ColumnDef<T>[]): ColumnDef<T>[] =>
+            columns.map((column) => {
+                if (isColumnGroup(column)) return { ...column, children: strip(column.children) };
+                return {
+                    ...column,
+                    sortable: column.sortable === false ? false : undefined,
+                    sortState: undefined,
+                    sortIndex: undefined,
+                };
+            });
+        api.setColumns(strip(api.getState().columns));
     }
 
     private updateColumnMetadata(): void {
