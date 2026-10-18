@@ -6,6 +6,7 @@ import type {
     ColumnGroupDef,
     ColumnLeafDef,
     ColumnStyleParams,
+    FilterModel,
     GridOptions,
     GridState,
     HeaderGroupRenderParams,
@@ -24,13 +25,14 @@ import type {
     SlotRenderContext,
     ViewportData,
 } from "@omnigrid/core";
-import { DomPool } from "@omnigrid/core";
+import { DomPool, isActiveCondition } from "@omnigrid/core";
 
 import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
 import { computeGroupSegments } from "./groupHeader";
 import { type PooledColumn, type PooledRowCallbacks, PooledRowPane } from "./pooledRow";
 import { createCellRoot } from "./reactRoot";
 import { renderDefaultOverlay } from "./overlays";
+import { PopupHost } from "./popup";
 import {
     type ResolvedColumnPresentation,
     resolveCellClasses,
@@ -136,6 +138,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const { grid, state, viewportData } = useGrid(options);
 
     const viewportRef = useRef<HTMLDivElement>(null);
+    const layoutRef = useRef<HTMLDivElement>(null);
     const rowsLayerRef = useRef<HTMLDivElement>(null);
     const pinnedLeftRowsLayerRef = useRef<HTMLDivElement>(null);
     const pinnedRightRowsLayerRef = useRef<HTMLDivElement>(null);
@@ -216,6 +219,11 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const suppressRowHoverHighlight = options.suppressRowHoverHighlight ?? false;
     const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null].filter(Boolean).join(" ");
     const overlayState: OverlayState | undefined = state.overlay;
+    const filterModelSnapshot: FilterModel = grid.getFilterModel();
+    const isColumnFiltered = (column: ColumnLeafDef<T>): boolean => {
+        const entry = filterModelSnapshot[column.id] ?? (column.field ? filterModelSnapshot[column.field as string] : undefined);
+        return entry !== undefined && entry.conditions.some(isActiveCondition);
+    };
     const overlayScope: OverlayScope | undefined = overlayState.type
         ? (overlayState.scope ?? (overlayState.type === "error" ? "full" : "bodyOnly"))
         : undefined;
@@ -890,6 +898,33 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                                         )}
                                     </span>
                                 )}
+                                {grid.hasFilterMenu() && item.column.filterable !== false && (
+                                    <button
+                                        type="button"
+                                        className="omnigrid-filter-trigger"
+                                        data-omnigrid-filter-trigger=""
+                                        data-active={isColumnFiltered(item.column) ? "true" : undefined}
+                                        aria-label={`Filter ${item.column.header ?? item.column.id}`}
+                                        aria-haspopup="dialog"
+                                        tabIndex={-1}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            const rect: DOMRect = event.currentTarget.getBoundingClientRect();
+                                            const layoutRect: DOMRect = layoutRef.current?.getBoundingClientRect() ?? ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect);
+                                            grid.requestFilterMenu(item.column.id, {
+                                                x: rect.left - layoutRect.left,
+                                                y: rect.top - layoutRect.top,
+                                                width: rect.width,
+                                                height: rect.height,
+                                            });
+                                        }}
+                                        onKeyDown={(event) => event.stopPropagation()}
+                                    >
+                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                                            <path d="M3 4h18l-7 8.5V20l-4-2v-5.5z" />
+                                        </svg>
+                                    </button>
+                                )}
                             </span>
                         </>
                     )}
@@ -1013,7 +1048,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     );
 
     return (
-        <div className="omnigrid-layout" style={{ ...style, position: "relative", ...(isFullOverlay ? { overflow: "hidden" } : {}) }}>
+        <div className="omnigrid-layout" ref={layoutRef} style={{ ...style, position: "relative", ...(isFullOverlay ? { overflow: "hidden" } : {}) }}>
             {renderSlot("top")}
             <div className="omnigrid-layout-body">
                 {renderSlot("left")}
@@ -1123,6 +1158,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 {renderSlot("right")}
             </div>
             {renderSlot("bottom")}
+            <PopupHost grid={grid} />
             {overlayState.type && isFullOverlay && (
                 <div className="omnigrid-overlay omnigrid-overlay-full" role="status">
                     {renderOverlayContent(overlayState)}

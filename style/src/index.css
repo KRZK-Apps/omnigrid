@@ -533,3 +533,281 @@
         transform: rotate(360deg);
     }
 }
+
+/* Declarative UI popups and controls (rendered from core UIPopupDescriptor / UIControlDescriptor). */
+.omnigrid-popup {
+    background: var(--omnigrid-grid-background);
+    border: 1px solid var(--omnigrid-grid-border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+    color: var(--omnigrid-cell-color);
+    contain: layout paint;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 90vw;
+    min-width: 200px;
+    padding: 10px;
+}
+
+.omnigrid-popup-title {
+    font-weight: 600;
+}
+
+.omnigrid-control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.omnigrid-control-group {
+    gap: 8px;
+}
+
+.omnigrid-control-group-row {
+    align-items: flex-end;
+    flex-direction: row;
+}
+
+.omnigrid-control-label {
+    font-size: 12px;
+    opacity: 0.75;
+}
+
+.omnigrid-control-checkbox {
+    align-items: center;
+    flex-direction: row;
+}
+
+.omnigrid-control-input {
+    background: var(--omnigrid-cell-background);
+    border: 1px solid var(--omnigrid-grid-border);
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+    padding: 4px 28px 4px 6px;
+    width: 100%;
+}
+
+.omnigrid-control-input-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+}
+
+.omnigrid-control-clear {
+    position: absolute;
+    right: 6px;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    color: inherit;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0;
+    opacity: 0.6;
+}
+
+.omnigrid-control-clear:hover {
+    background: var(--omnigrid-cell-hover-background);
+    opacity: 1;
+}
+
+.omnigrid-select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.omnigrid-select-button {
+    align-items: center;
+    background: var(--omnigrid-cell-background);
+    border: 1px solid var(--omnigrid-grid-border);
+    border-radius: 4px;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    gap: 6px;
+    justify-content: space-between;
+    min-height: 28px;
+    padding: 4px 8px;
+    text-align: left;
+    width: 100%;
+}
+
+.omnigrid-select-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.omnigrid-select-value {
+    font: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.omnigrid-select-arrow {
+    align-self: center;
+    color: inherit;
+    font-size: 10px;
+    line-height: 1;
+    margin-left: 6px;
+}
+
+.omnigrid-select-button[aria-expanded="true"] .omnigrid-select-arrow {
+    transform: rotate(180deg);
+    transition: transform 0.2s ease;
+}
+
+.omnigrid-select-listbox {
+    background: var(--omnigrid-grid-background);
+    border: 1px solid var(--omnigrid-grid-border);
+    border-radius: 4px;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    max-height: 240px;
+    min-width: 120px;
+    overflow: auto;
+    padding: 4px;
+    position: fixed;
+    z-index: 1100;
+}
+
+.omnigrid-select-option {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    gap: 6px;
+    padding: 4px 8px;
+    text-align: left;
+}
+
+.omnigrid-select-option-disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.omnigrid-select-option-focused {
+    background: var(--omnigrid-cell-hover-background);
+    outline: none;
+}
+
+.omnigrid-select-option-selected {
+    font-weight: 600;
+}
+
+.omnigrid-select-option:not([aria-disabled="true"]):hover {
+    background: var(--omnigrid-cell-hover-background);
+}
+
+.omnigrid-control-button {
+    background: var(--omnigrid-header-background);
+    border: 1px solid var(--omnigrid-grid-border);
+    border-radius: 4px;
+    color: var(--omnigrid-header-color);
+    cursor: pointer;
+    font: inherit;
+    padding: 4px 10px;
+}
+
+.omnigrid-control-button-primary {
+    background: var(--omnigrid-checkbox-accent);
+    border-color: var(--omnigrid-checkbox-accent);
+    color: #fff;
+}
+
+.omnigrid-control-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Multi-select set filter */
+.omnigrid-multi-select-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 280px;
+    min-width: 200px;
+}
+
+.omnigrid-multi-select-actions {
+    border-bottom: 1px solid var(--omnigrid-grid-border);
+    padding-bottom: 4px;
+}
+
+.omnigrid-multi-select-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.omnigrid-multi-select-item {
+    align-items: center;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    font-size: 13px;
+    gap: 8px;
+    padding: 3px 6px;
+    user-select: none;
+}
+
+.omnigrid-multi-select-item:hover {
+    background: var(--omnigrid-cell-hover-background);
+}
+
+.omnigrid-multi-select-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Header filter trigger: visible on header hover/focus, always visible (with a dot) while a filter is active. */
+.omnigrid-filter-trigger {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 3px;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    justify-content: center;
+    opacity: 0;
+    padding: 2px;
+    position: relative;
+}
+
+.omnigrid-header-cell:hover .omnigrid-filter-trigger,
+.omnigrid-filter-trigger:focus-visible,
+.omnigrid-filter-trigger[data-active="true"] {
+    opacity: 0.75;
+}
+
+.omnigrid-filter-trigger:hover {
+    opacity: 1 !important;
+}
+
+.omnigrid-filter-trigger[data-active="true"] {
+    color: var(--omnigrid-checkbox-accent);
+    opacity: 1;
+}
+
+.omnigrid-filter-trigger[data-active="true"]::after {
+    background: var(--omnigrid-checkbox-accent);
+    border: 1px solid var(--omnigrid-header-background);
+    border-radius: 50%;
+    content: "";
+    height: 6px;
+    position: absolute;
+    right: -1px;
+    top: -1px;
+    width: 6px;
+}

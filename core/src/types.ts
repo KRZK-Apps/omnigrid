@@ -1,11 +1,20 @@
 import type { OverlayOptions, OverlayState, OverlayType } from "./overlays";
 import type { SlotManager } from "./slots";
 import type { IconRegistry } from "./icons";
+import type { FilterCondition, FilterModel, FilterOperator } from "./filtering";
+import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
 
 export type RowId = string | number;
 export type SortDirection = "asc" | "desc";
 export type CellAlign = "left" | "center" | "right";
 export type DataProcessor<T> = (data: T[]) => T[];
+
+/**
+ * Data type of a column, used for filtering, formatting, and auto-detecting filter controls.
+ *
+ * @api
+ */
+export type ColumnDataType = "text" | "number" | "date" | "select" | "boolean";
 
 export interface RowRenderParams<T> {
     id: RowId;
@@ -172,6 +181,26 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     maxWidth?: number;
     /** Whether this column can be sorted. */
     sortable?: boolean;
+    /**
+     * Data type of the column. When omitted, the grid attempts to infer the type
+     * from data rows or filter options.
+     */
+    dataType?: ColumnDataType;
+    /**
+     * Whether this column offers a filter menu. Set to `false` to opt the column out of
+     * filtering UI (the header filter icon is hidden).
+     * @default true
+     */
+    filterable?: boolean;
+    /**
+     * Custom subset of operators allowed for this column's filter menu.
+     */
+    allowedOperators?: FilterOperator[];
+    /**
+     * Fixed options for select / set filtering. When provided, the column
+     * automatically defaults to `dataType: "select"`.
+     */
+    filterOptions?: Array<{ label: string; value: any }>;
     /** Horizontal alignment of cell content. */
     align?: CellAlign;
     /** Initial sort direction used by SortingPlugin. */
@@ -282,6 +311,8 @@ export interface GridOptions<T> {
     getRowClass?: (params: RowRenderParams<T>) => string | undefined;
     rowClassRules?: RowClassRules<T>;
     plugins?: GridPlugin<T>[];
+    /** Initial filter model applied to the data pipeline. */
+    filterModel?: FilterModel;
     /**
      * License key for Pro plugins. When provided, Pro plugins verify the
      * cryptographic signature and activate full functionality. When missing
@@ -403,6 +434,12 @@ export interface GridEvents<T> {
     rowHover: RowHoverEvent<T>;
     slotsChange: { slot: SlotName; mounts: SlotMount<T>[] };
     overlayChange: OverlayState;
+    /** Fired after the filter model changed; the payload is a copy of the new model. */
+    filterChanged: FilterModel;
+    /** Fired when a popup is opened, updated (`descriptor`) or closed (`null`). */
+    popupChange: UIPopupDescriptor | null;
+    /** Fired when the user asks for a column's filter menu (e.g. clicks the header filter icon). */
+    filterMenuRequest: { columnId: string; anchor: UIPopupAnchor };
 }
 
 /* ------------------------------------------------------------------ */
@@ -668,6 +705,68 @@ export interface GridApi<T> {
      * @api
      */
     setLoading(isLoading: boolean, error?: unknown): void;
+    /**
+     * Replaces the whole filter model. Filtering runs before every data
+     * processor (sorting, pagination, ...) and its result is cached until the
+     * data, columns or filter model change. Emits `filterChanged`.
+     * @param model - New filter model; an empty object clears all filters.
+     * @api
+     */
+    setFilterModel(model: FilterModel): void;
+    /**
+     * Returns a copy of the current filter model.
+     * @api
+     */
+    getFilterModel(): FilterModel;
+    /**
+     * Sets (replaces) the single condition of one column, or removes that
+     * column's filter when `condition` is `null`.
+     * @param field - Column id or field.
+     * @param condition - New condition, or `null` to clear.
+     * @api
+     */
+    setColumnFilter(field: string, condition: FilterCondition | null): void;
+    /**
+     * Removes every column filter.
+     * @api
+     */
+    clearFilters(): void;
+    /**
+     * Declares that a plugin provides a column filter menu. While at least one
+     * provider is registered, adapters show the filter icon in column headers.
+     * @returns Function that removes the registration.
+     * @api
+     */
+    registerFilterMenu(): () => void;
+    /**
+     * Whether a filter menu provider is registered.
+     * @api
+     */
+    hasFilterMenu(): boolean;
+    /**
+     * Asks the filter menu provider to open the menu of a column (emits `filterMenuRequest`).
+     * @param columnId - Column id.
+     * @param anchor - Viewport-relative rectangle of the trigger element.
+     * @api
+     */
+    requestFilterMenu(columnId: string, anchor: UIPopupAnchor): void;
+    /**
+     * Opens (or updates, when the id matches) a declarative popup rendered by
+     * the active UI adapter.
+     * @param descriptor - Framework-agnostic popup description.
+     * @api
+     */
+    openPopup(descriptor: UIPopupDescriptor): void;
+    /**
+     * Closes the active popup, if any.
+     * @api
+     */
+    closePopup(): void;
+    /**
+     * Returns the active popup descriptor or `null`.
+     * @api
+     */
+    getPopup(): UIPopupDescriptor | null;
     /** Monotonic counter for structural changes (refresh / data / columns). */
     getRevision(): number;
     destroy(): void;

@@ -7,6 +7,23 @@ export { Grid } from "./grid";
 export { Grid as GridCore } from "./grid";
 export { SlotManager } from "./slots";
 export { Store } from "./store";
+export { applyFilterModel, isActiveCondition, isFilterModelActive, matchesColumnFilter } from "./filtering";
+export type { ColumnFilterModel, FilterCondition, FilterModel, FilterOperator } from "./filtering";
+export type {
+    UIButtonControl,
+    UICheckboxDescriptor,
+    UIControlBase,
+    UIControlDescriptor,
+    UIGroupControl,
+    UIInputControl,
+    UIPopupAnchor,
+    UIPopupDescriptor,
+    UISelectControl,
+    UISelectOption,
+    UITextBlockControl,
+    UIMultiSelectControl,
+    UIMultiSelectOption,
+} from "./ui";
 export type { OverlayOptions, OverlayScope, OverlayState, OverlayType } from "./overlays";
 export type {
     BlockConfig,
@@ -16,6 +33,7 @@ export type {
     CheckboxControl,
     CheckboxRenderParams,
     ColumnClassRules,
+    ColumnDataType,
     ColumnDef,
     ColumnGroupDef,
     ColumnGroupViewport,

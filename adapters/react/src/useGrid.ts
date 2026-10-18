@@ -100,6 +100,18 @@ export function useGrid<T>(options: GridOptions<T>): UseGridResult<T> {
         }
     }, [grid, options.columns]);
 
+    // Controlled filter model: applied when the host passes a new reference.
+    // Skipped on the first run — the Grid constructor already applied it.
+    const filterSyncedRef = useRef(false);
+    useEffect(() => {
+        if (grid.isDestroyed()) return;
+        if (!filterSyncedRef.current) {
+            filterSyncedRef.current = true;
+            return;
+        }
+        if (options.filterModel) grid.setFilterModel(options.filterModel);
+    }, [grid, options.filterModel]);
+
     // Sync loading state. An explicit boolean prop always wins and is applied
     // on every change (including the first flush — the Grid constructor may
     // have been created with a stale value). `undefined` means the host does

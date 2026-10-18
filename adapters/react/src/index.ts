@@ -7,6 +7,10 @@ export type { PooledCellRenderInfo, PooledColumn, PooledRowCallbacks, PooledRowM
 export { OmniGrid } from "./OmniGrid";
 export type { GridProps, OverlayComponentProps, SlotRendererRegistry } from "./OmniGrid";
 export { useGrid } from "./useGrid";
+export { DebouncedInput, isUIControlDescriptor, renderControl } from "./controls";
+export type { DebouncedInputProps } from "./controls";
+export { PopupHost } from "./popup";
+export type { PopupHostProps } from "./popup";
 export type { UseGridResult } from "./useGrid";
 export {
     type ResolvedColumnPresentation,

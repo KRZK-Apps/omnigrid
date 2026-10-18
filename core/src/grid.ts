@@ -1,5 +1,9 @@
 import { flattenColumns, getColumnGroups } from "./columns";
 import { EventBus } from "./events";
+import { applyFilterModel, isActiveCondition } from "./filtering";
+import type { ColumnFilterModel, FilterCondition, FilterModel } from "./filtering";
+import { PopupManager } from "./ui";
+import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
 import { evaluateAutoOverlay } from "./overlays";
 import { IconRegistry } from "./icons";
 import { SlotManager } from "./slots";
@@ -34,6 +38,11 @@ export class Grid<T> implements GridApi<T> {
     public readonly slots: SlotManager<T>;
     public readonly icons = new IconRegistry<T>();
     private processedDataCache: T[] | null = null;
+    /** Output of the built-in filter stage; sits in front of every data processor. */
+    private filteredDataCache: T[] | null = null;
+    private filterModel: FilterModel = {};
+    private filterMenuProviders = 0;
+    private readonly popups = new PopupManager((popup) => this.events.emit("popupChange", popup));
     private revision = 0;
     private destroyed = false;
 
@@ -76,6 +85,7 @@ export class Grid<T> implements GridApi<T> {
         this.resolveRowId = options.getRowId ?? ((_row, index) => index);
         this.loading = options.loading ?? false;
         this.hasData = options.data !== undefined && options.data !== null;
+        if (options.filterModel) this.filterModel = Grid.cloneFilterModel(options.filterModel);
         this.virtualizer = new Virtualizer({
             rowHeight: state.rowHeight,
             rowOverscan: state.rowOverscan,
@@ -243,13 +253,105 @@ export class Grid<T> implements GridApi<T> {
     }
 
     public getProcessedData(): T[] {
-        // Cache is invalidated by setData / setColumns / processor registration.
-        // During scroll the pipeline is NOT re-run — critical optimization for
-        // DOM Pool operation with large row counts.
+        // Pipeline: raw data -> filter engine -> processors (sort, ...) -> virtualization.
+        // Cache is invalidated by setData / setColumns / filter changes / processor
+        // registration. During scroll the pipeline is NOT re-run — critical
+        // optimization for DOM Pool operation with large row counts.
         if (this.processedDataCache !== null) return this.processedDataCache;
-        const result = [...this.dataProcessors].reduce((data, processor) => processor(data), this.getState().data);
+        const result = [...this.dataProcessors].reduce((data, processor) => processor(data), this.getFilteredData());
         this.processedDataCache = result;
         return result;
+    }
+
+    private getFilteredData(): T[] {
+        if (this.filteredDataCache !== null) return this.filteredDataCache;
+        const state = this.getState();
+        this.filteredDataCache = applyFilterModel(state.data, this.filterModel, state.columns);
+        return this.filteredDataCache;
+    }
+
+    private static cloneFilterModel(model: FilterModel): FilterModel {
+        const clone: FilterModel = {};
+        for (const [key, entry] of Object.entries(model)) {
+            const conditions: FilterCondition[] = entry.conditions.map((condition) => ({ ...condition }));
+            clone[key] = entry.logic ? { conditions, logic: entry.logic } : { conditions };
+        }
+        return clone;
+    }
+
+    public setFilterModel(model: FilterModel): void {
+        this.assertActive();
+        const next: FilterModel = {};
+        for (const [key, entry] of Object.entries(Grid.cloneFilterModel(model))) {
+            if (entry.conditions.length > 0) next[key] = entry;
+        }
+        this.filterModel = next;
+        this.filteredDataCache = null;
+        this.processedDataCache = null;
+        this.revision += 1;
+        this.scrollTo({ scrollTop: 0 });
+        this.store.setState({});
+        this.recomputeOverlay();
+        this.events.emit("filterChanged", this.getFilterModel());
+    }
+
+    public getFilterModel(): FilterModel {
+        return Grid.cloneFilterModel(this.filterModel);
+    }
+
+    public setColumnFilter(field: string, condition: FilterCondition | null): void {
+        this.assertActive();
+        const next: FilterModel = this.getFilterModel();
+        if (condition === null || !isActiveCondition(condition)) {
+            if (!(field in next)) return;
+            delete next[field];
+        } else {
+            const entry: ColumnFilterModel = { conditions: [{ ...condition }] };
+            next[field] = entry;
+        }
+        this.setFilterModel(next);
+    }
+
+    public clearFilters(): void {
+        this.assertActive();
+        if (Object.keys(this.filterModel).length === 0) return;
+        this.setFilterModel({});
+    }
+
+    public registerFilterMenu(): () => void {
+        this.assertActive();
+        this.filterMenuProviders += 1;
+        this.refresh();
+        let removed: boolean = false;
+        return () => {
+            if (removed) return;
+            removed = true;
+            this.filterMenuProviders -= 1;
+            if (!this.destroyed) this.refresh();
+        };
+    }
+
+    public hasFilterMenu(): boolean {
+        return this.filterMenuProviders > 0;
+    }
+
+    public requestFilterMenu(columnId: string, anchor: UIPopupAnchor): void {
+        this.assertActive();
+        this.events.emit("filterMenuRequest", { columnId, anchor });
+    }
+
+    public openPopup(descriptor: UIPopupDescriptor): void {
+        this.assertActive();
+        this.popups.open(descriptor);
+    }
+
+    public closePopup(): void {
+        this.assertActive();
+        this.popups.close();
+    }
+
+    public getPopup(): UIPopupDescriptor | null {
+        return this.popups.get();
     }
 
     public getRowId(row: T, index: number): RowId {
@@ -261,6 +363,7 @@ export class Grid<T> implements GridApi<T> {
         this.loadError = undefined;
         this.hasData = data !== undefined && data !== null;
         const nextData: T[] = data ?? [];
+        this.filteredDataCache = null;
         this.processedDataCache = null;
         this.revision += 1;
         this.store.setState({ data: nextData });
@@ -281,6 +384,7 @@ export class Grid<T> implements GridApi<T> {
         const currentData: T[] = this.store.getState().data;
         const nextData: T[] = [...currentData, ...rows];
         this.hasData = true;
+        this.filteredDataCache = null;
         this.processedDataCache = null;
         this.revision += 1;
         this.store.setState({ data: nextData });
@@ -352,6 +456,7 @@ export class Grid<T> implements GridApi<T> {
 
     public setColumns(columns: GridState<T>["columns"]): void {
         this.assertActive();
+        this.filteredDataCache = null;
         this.processedDataCache = null;
         this.revision += 1;
         this.store.setState({ columns });
@@ -531,6 +636,8 @@ export class Grid<T> implements GridApi<T> {
         this.cleanupPlugins.forEach((cleanup) => cleanup());
         this.cleanupPlugins.clear();
         this.dataProcessors.clear();
+        this.popups.close();
+        this.filteredDataCache = null;
         this.processedDataCache = null;
         this.overlayState = { type: null };
         this.overlayManual = false;

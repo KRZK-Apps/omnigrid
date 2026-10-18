@@ -3,6 +3,8 @@ import { cloneElement, createElement, Fragment, isValidElement } from "react";
 
 import type { CheckboxControl, SlotNodeContent, SlotRenderContext } from "@omnigrid/core";
 
+import { isUIControlDescriptor, renderControl } from "./controls";
+
 /**
  * Bridge between the core's headless content and native adapter values.
  * `registry` — registry of React components for `SlotComponentContent`;
@@ -161,6 +163,7 @@ function slotNodeToReact<T>(node: SlotNodeContent<T>, bridge: ContentBridge<T>):
  * Materialises the core's headless content into a ReactNode:
  *   - `string | number | boolean` → scalar;
  *   - CheckboxControl              → `<input type="checkbox">`;
+ *   - `UIControlDescriptor`        → native control (see `controls.ts`);
  *   - `SlotNodeContent`            → declarative node (buttons etc.);
  *   - `SlotComponentContent`       → component from the adapter registry;
  *   - `SlotHtmlContent`            → `<div dangerouslySetInnerHTML>`;
@@ -170,6 +173,7 @@ export function contentToReactNode<T>(content: unknown, bridge: ContentBridge<T>
     if (content == null) return null;
     if (typeof content === "string" || typeof content === "number" || typeof content === "boolean") return content;
     if (isCheckboxControl(content)) return renderCheckboxControl(content);
+    if (isUIControlDescriptor(content)) return renderControl(content);
     if (isSlotNodeContent<T>(content)) return slotNodeToReact(content, bridge);
     if (isSlotComponentContent(content)) {
         const renderer = bridge.registry[content.kind];
