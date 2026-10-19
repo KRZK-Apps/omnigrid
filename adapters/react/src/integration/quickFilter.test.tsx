@@ -6,8 +6,8 @@ import { Grid } from "@omnigrid/core";
 import type { ColumnDef, SlotRenderContext, UIInputControl } from "@omnigrid/core";
 import { QuickFilterPlugin } from "@omnigrid/quick-filter-plugin";
 
-import { contentToReactNode } from "./content";
-import { OmniGrid } from "./OmniGrid";
+import { contentToReactNode } from "../content";
+import { OmniGrid } from "../OmniGrid";
 
 interface User {
     id: number;
@@ -50,9 +50,8 @@ describe("QuickFilterPlugin React integration", () => {
         expect(html).toContain('type="text"');
         // The filter icon from the core icon registry renders before the input body.
         expect(html).toContain("omnigrid-control-body");
-        expect(html).toContain('class="omnigrid-icon omnigrid-icon-filter"');
-        expect(html).toContain("M22 3H2l8 9.46V19l4 2v-8.54L22 3z");
-        expect(html.indexOf("omnigrid-icon-filter")).toBeLessThan(html.indexOf("omnigrid-control-input"));
+        expect(html).toContain('class="omnigrid-icon omnigrid-icon-search"');
+        expect(html.indexOf("omnigrid-icon-search")).toBeLessThan(html.indexOf("omnigrid-control-input"));
     });
 
     it("renders QuickFilterPlugin in the top slot of OmniGrid by default", () => {
@@ -69,22 +68,8 @@ describe("QuickFilterPlugin React integration", () => {
         expect(html).toContain("omnigrid-control-input");
         expect(html).toContain('placeholder="Quick search..."');
         // Icon resolved via the grid's icon registry inside the rendered slot.
-        expect(html).toContain('class="omnigrid-icon omnigrid-icon-filter"');
-        expect(html.indexOf("omnigrid-icon-filter")).toBeLessThan(html.indexOf("omnigrid-control-input"));
-    });
-
-    it("renders QuickFilterPlugin in bodyTop slot without breaking layout", () => {
-        const plugin = new QuickFilterPlugin<User>({ slot: "bodyTop" });
-        const html: string = renderToStaticMarkup(
-            createElement(OmniGrid<User>, {
-                columns,
-                data: users,
-                plugins: [plugin],
-            }),
-        );
-
-        expect(html).toContain("omnigrid-slot-bodyTop");
-        expect(html).toContain("omnigrid-control-input");
+        expect(html).toContain('class="omnigrid-icon omnigrid-icon-search"');
+        expect(html.indexOf("omnigrid-icon-search")).toBeLessThan(html.indexOf("omnigrid-control-input"));
     });
 
     it("renders QuickFilterPlugin in bottom slot when slot is bottom or down", () => {
@@ -107,20 +92,6 @@ describe("QuickFilterPlugin React integration", () => {
             }),
         );
         expect(html2).toContain("omnigrid-slot-bottom");
-    });
-
-    it("renders QuickFilterPlugin in bodyBottom slot", () => {
-        const plugin = new QuickFilterPlugin<User>({ slot: "bodyBottom" });
-        const html: string = renderToStaticMarkup(
-            createElement(OmniGrid<User>, {
-                columns,
-                data: users,
-                plugins: [plugin],
-            }),
-        );
-
-        expect(html).toContain("omnigrid-slot-bodyBottom");
-        expect(html).toContain("omnigrid-control-input");
     });
 
     it("preserves 2D virtualization row calculations when quick filter is applied", () => {

@@ -45,6 +45,7 @@
     "@omnigrid/default-theme": "^0.1.0"
   },
   "devDependencies": {
+    "@omnigrid/filtering-plugin": "*",
     "@omnigrid/quick-filter-plugin": "*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"

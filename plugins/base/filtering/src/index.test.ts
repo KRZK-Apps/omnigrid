@@ -1,6 +1,7 @@
 import { Grid } from "@omnigrid/core";
 import type { ColumnDef, UIControlDescriptor, UIInputControl, UIMultiSelectControl, UISelectControl } from "@omnigrid/core";
 import { FilteringPlugin, inferColumnDataType } from "./index";
+import {describe, it, expect} from "vitest";
 
 interface ItemRow {
     id: number;
