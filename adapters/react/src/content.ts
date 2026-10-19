@@ -160,6 +160,19 @@ function slotNodeToReact<T>(node: SlotNodeContent<T>, bridge: ContentBridge<T>):
 }
 
 /**
+ * Builds an icon resolver backed by the grid's `IconRegistry` so control
+ * descriptors can declare `icon: "filter"` (and friends) as plain names.
+ * Unknown names resolve to `null` instead of throwing, keeping slot renders stable.
+ */
+function createIconResolver<T>(bridge: ContentBridge<T>): (name: string) => ReactNode {
+    return (name: string): ReactNode => {
+        const context: SlotRenderContext<T> = bridge.context();
+        if (!context.api.icons.has(name)) return null;
+        return slotNodeToReact(context.api.icons.get(name), bridge);
+    };
+}
+
+/**
  * Materialises the core's headless content into a ReactNode:
  *   - `string | number | boolean` → scalar;
  *   - CheckboxControl              → `<input type="checkbox">`;
@@ -168,12 +181,14 @@ function slotNodeToReact<T>(node: SlotNodeContent<T>, bridge: ContentBridge<T>):
  *   - `SlotComponentContent`       → component from the adapter registry;
  *   - `SlotHtmlContent`            → `<div dangerouslySetInnerHTML>`;
  *   - anything else               → passthrough (ReactNode from cellRenderer).
+ *
+ * Control `icon` names are resolved through the grid's icon registry.
  */
 export function contentToReactNode<T>(content: unknown, bridge: ContentBridge<T>): ReactNode {
     if (content == null) return null;
     if (typeof content === "string" || typeof content === "number" || typeof content === "boolean") return content;
     if (isCheckboxControl(content)) return renderCheckboxControl(content);
-    if (isUIControlDescriptor(content)) return renderControl(content);
+    if (isUIControlDescriptor(content)) return renderControl(content, createIconResolver(bridge));
     if (isSlotNodeContent<T>(content)) return slotNodeToReact(content, bridge);
     if (isSlotComponentContent(content)) {
         const renderer = bridge.registry[content.kind];

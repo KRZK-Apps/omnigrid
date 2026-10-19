@@ -20,6 +20,19 @@ export interface UIControlBase {
     id: string;
     /** Visible label rendered next to the control. */
     label?: string;
+    /**
+     * Accessible name applied as `aria-label`; preferred over `label` when the
+     * visible label should stay hidden from the layout.
+     * @api
+     */
+    ariaLabel?: string;
+    /**
+     * Name of a core icon (e.g. `"filter"`) rendered to the left of the control body.
+     * Resolved by the adapter through the grid's icon registry; supported by
+     * input, select, multi-select and checkbox controls.
+     * @api
+     */
+    icon?: string;
     /** Disables the control. @default false */
     disabled?: boolean;
     /** Extra CSS class names. */

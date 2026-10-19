@@ -61,10 +61,20 @@ export class SlotManager<T> {
 
     /** Removes a mount by id within a slot. Returns true if found. */
     public unmount(slot: SlotName, id: string): boolean {
-        const slotMounts = this.mounts.get(slot);
+        let removed: boolean = this.unmountFromSlot(slot, id);
+        if (!removed && slot === "bottom") {
+            removed = this.unmountFromSlot("down" as SlotName, id);
+        } else if (!removed && (slot as string) === "down") {
+            removed = this.unmountFromSlot("bottom", id);
+        }
+        return removed;
+    }
+
+    private unmountFromSlot(slot: SlotName, id: string): boolean {
+        const slotMounts: SlotMount<T>[] | undefined = this.mounts.get(slot);
         if (!slotMounts) return false;
 
-        const next = slotMounts.filter((existing) => existing.id !== id);
+        const next: SlotMount<T>[] = slotMounts.filter((existing) => existing.id !== id);
         if (next.length === slotMounts.length) return false;
 
         this.mounts.set(slot, next);
@@ -75,11 +85,23 @@ export class SlotManager<T> {
 
     /** Sorted copy of mounts for the slot. */
     public getMounts(slot: SlotName): SlotMount<T>[] {
-        return [...(this.mounts.get(slot) ?? [])];
+        const direct: SlotMount<T>[] = this.mounts.get(slot) ?? [];
+        if (slot === "bottom") {
+            const down: SlotMount<T>[] = this.mounts.get("down" as SlotName) ?? [];
+            if (down.length > 0) {
+                return [...direct, ...down].sort((left, right) => (left.priority === right.priority ? 0 : left.priority < right.priority ? -1 : 1));
+            }
+        } else if ((slot as string) === "down") {
+            const bottom: SlotMount<T>[] = this.mounts.get("bottom") ?? [];
+            if (bottom.length > 0) {
+                return [...direct, ...bottom].sort((left, right) => (left.priority === right.priority ? 0 : left.priority < right.priority ? -1 : 1));
+            }
+        }
+        return [...direct];
     }
 
     public hasMounts(slot: SlotName): boolean {
-        return (this.mounts.get(slot)?.length ?? 0) > 0;
+        return this.getMounts(slot).length > 0;
     }
 
     public clear(slot?: SlotName): void {

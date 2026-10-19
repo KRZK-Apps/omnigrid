@@ -7,7 +7,7 @@ export { Grid } from "./grid";
 export { Grid as GridCore } from "./grid";
 export { SlotManager } from "./slots";
 export { Store } from "./store";
-export { applyFilterModel, isActiveCondition, isFilterModelActive, matchesColumnFilter } from "./filtering";
+export { applyFilterModel, applyQuickFilter, isActiveCondition, isFilterModelActive, matchesColumnFilter } from "./filtering";
 export type { ColumnFilterModel, FilterCondition, FilterModel, FilterOperator } from "./filtering";
 export type {
     UIButtonControl,

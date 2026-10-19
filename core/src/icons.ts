@@ -9,13 +9,15 @@ export type IconName =
     | "chevron-last"
     | "arrow-up"
     | "arrow-down"
-    | "arrow-up-down";
+    | "arrow-up-down"
+    | "filter"
+    | "search";
 
 export type IconDefinition<T> = SlotNodeContent<T> | (() => SlotNodeContent<T>);
 
 type IconPath = {
-    tag: "path";
-    attrs: { d: string };
+    tag: string;
+    attrs: Record<string, string>;
 };
 
 interface IconEntry<T> {
@@ -50,6 +52,11 @@ const DEFAULT_ICON_PATHS: Record<IconName, IconPath[]> = {
         { tag: "path", attrs: { d: "M7 20V4" } },
         { tag: "path", attrs: { d: "m21 8-4-4-4 4" } },
         { tag: "path", attrs: { d: "M17 4v16" } },
+    ],
+    "filter": [{ tag: "path", attrs: { d: "M22 3H2l8 9.46V19l4 2v-8.54L22 3z" } }],
+    "search": [
+        { tag: "circle", attrs: { cx: "11", cy: "11", r: "8" } },
+        { tag: "path", attrs: { d: "m21 21-4.3-4.3" } },
     ],
 };
 

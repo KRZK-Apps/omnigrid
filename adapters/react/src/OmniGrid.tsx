@@ -142,7 +142,6 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const rowsLayerRef = useRef<HTMLDivElement>(null);
     const pinnedLeftRowsLayerRef = useRef<HTMLDivElement>(null);
     const pinnedRightRowsLayerRef = useRef<HTMLDivElement>(null);
-    const [isMeasured, setIsMeasured] = useState(false);
     /** Space taken by the viewport's native scrollbars; body slots stay clear of it. */
     const [scrollbarInsets, setScrollbarInsets] = useState<{ right: number; bottom: number }>({ right: 0, bottom: 0 });
     const scrollFrameRef = useRef<{ id: number; top: number; left: number; lastTop: number; lastTime: number }>({ id: 0, top: 0, left: 0, lastTop: 0, lastTime: 0 });
@@ -553,7 +552,6 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         const height = element.clientHeight;
         if (width === 0 || height === 0) return;
         grid.setViewport({ width, height });
-        setIsMeasured(true);
     }, [grid, syncScrollbarInsets]);
 
     useEffect(() => {
@@ -570,7 +568,6 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             const height = element.clientHeight;
             if (width === 0 || height === 0) return;
             grid.setViewport({ width, height });
-            setIsMeasured(true);
         });
         observer.observe(element, { box: "content-box" });
         measureViewport();
@@ -583,11 +580,11 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     });
 
     useLayoutEffect(() => {
-        if (!isMeasured || autoHeight) return;
+        if (autoHeight) return;
         // Scrollbar and gutter changes alter clientWidth; sync it before paint
         // so columns remain aligned when an overlay locks vertical scrolling.
         measureViewport();
-    }, [autoHeight, hasVerticalOverflow, isMeasured, measureViewport, overlayScope]);
+    }, [autoHeight, hasVerticalOverflow, measureViewport, overlayScope]);
 
     useEffect(() => {
         const unsubscribe: () => void = grid.on("scrollTo", (position) => {
@@ -686,22 +683,6 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         });
     };
 
-    if (!isMeasured) {
-        return (
-            <div
-                ref={viewportRef}
-                className={viewportClassName}
-                style={{
-                    ...viewportStyle,
-                    overflowX: "auto",
-                    overflowY: autoHeight ? "hidden" : "auto",
-                    position: "relative",
-                    scrollbarGutter: verticalScrollbarGutter,
-                }}
-            />
-        );
-    }
-
     /** Resolves headless slot content into a ReactNode (see contentToReactNode). */
     const resolveSlotContent = (mount: SlotMount<T>, context: SlotRenderContext<T>): ReactNode => {
         const raw = typeof mount.content === "function" ? mount.content(context) : mount.content;
@@ -734,8 +715,9 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         const groups: ReactNode[] = renderSlotGroups(mounts, context);
         if (groups.every((group) => group === null)) return null;
 
+        const slotClass: string = slot === "down" ? "omnigrid-slot omnigrid-slot-bottom omnigrid-slot-down" : `omnigrid-slot omnigrid-slot-${slot}`;
         return (
-            <div className={`omnigrid-slot omnigrid-slot-${slot}`}>
+            <div className={slotClass}>
                 {groups}
             </div>
         );

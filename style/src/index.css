@@ -574,6 +574,13 @@
     opacity: 0.75;
 }
 
+.omnigrid-control-body {
+    align-items: center;
+    display: flex;
+    gap: 6px;
+    width: 100%;
+}
+
 .omnigrid-control-checkbox {
     align-items: center;
     flex-direction: row;

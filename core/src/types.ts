@@ -164,6 +164,13 @@ interface BaseColumnDef<T> {
     resizable?: boolean;
     /** Custom renderer for this column's header. */
     headerRenderer?: (column: ColumnDef<T>) => unknown;
+    /**
+     * Whether this column participates in the global quick filter. Defaults to true.
+     * Columns with `searchable: false` are completely ignored by the global quick filter.
+     * @default true
+     * @api
+     */
+    searchable?: boolean;
 }
 
 export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
@@ -314,6 +321,11 @@ export interface GridOptions<T> {
     /** Initial filter model applied to the data pipeline. */
     filterModel?: FilterModel;
     /**
+     * Initial global quick filter query string. Applied across every column
+     * whose `searchable` property is not `false`.
+     */
+    quickFilter?: string;
+    /**
      * License key for Pro plugins. When provided, Pro plugins verify the
      * cryptographic signature and activate full functionality. When missing
      * or invalid, Pro plugins enter demo mode with a non-intrusive watermark.
@@ -421,6 +433,11 @@ export interface GridState<T> {
     columnOverscan: number;
     /** Active overlay state — updated automatically by the grid's overlay manager. */
     overlay: OverlayState;
+    /**
+     * Global quick filter query string. Applied across every column whose
+     * `searchable` property is not `false`. Empty string means no quick filter.
+     */
+    quickFilter: string;
 }
 
 export interface GridEvents<T> {
@@ -436,6 +453,8 @@ export interface GridEvents<T> {
     overlayChange: OverlayState;
     /** Fired after the filter model changed; the payload is a copy of the new model. */
     filterChanged: FilterModel;
+    /** Fired after the global quick filter changed; the payload is the new query string. */
+    quickFilterChanged: string;
     /** Fired when a popup is opened, updated (`descriptor`) or closed (`null`). */
     popupChange: UIPopupDescriptor | null;
     /** Fired when the user asks for a column's filter menu (e.g. clicks the header filter icon). */
@@ -529,7 +548,7 @@ export interface GridPlugin<T> {
 /* Slot Architecture — blocks where plugins mount their widgets       */
 /* ------------------------------------------------------------------ */
 
-export type SlotName = "top" | "bottom" | "left" | "right" | "bodyTop" | "bodyBottom";
+export type SlotName = "top" | "bottom" | "left" | "right" | "bodyTop" | "bodyBottom" | "down";
 export type SlotPosition = "start" | "center" | "end";
 
 /**
@@ -731,6 +750,20 @@ export interface GridApi<T> {
      * @api
      */
     clearFilters(): void;
+    /**
+     * Sets the global quick filter query string. The query is split on commas
+     * and matched case-insensitively against every column whose `searchable`
+     * property is not `false`, using the column's `valueGetter` when present.
+     * An empty string clears the quick filter. Emits `quickFilterChanged`.
+     * @param query - The quick filter query.
+     * @api
+     */
+    setQuickFilter(query: string): void;
+    /**
+     * Returns the current global quick filter query string.
+     * @api
+     */
+    getQuickFilter(): string;
     /**
      * Declares that a plugin provides a column filter menu. While at least one
      * provider is registered, adapters show the filter icon in column headers.

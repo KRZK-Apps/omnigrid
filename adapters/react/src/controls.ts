@@ -80,7 +80,7 @@ export function DebouncedInput({ descriptor }: DebouncedInputProps): ReactNode {
             value: local,
             placeholder: descriptor.placeholder,
             disabled: descriptor.disabled,
-            "aria-label": descriptor.label ?? descriptor.placeholder,
+            "aria-label": descriptor.ariaLabel ?? descriptor.label ?? descriptor.placeholder,
             onChange: handleChange,
             onBlur: flush,
             onKeyDown: handleKeyDown,
@@ -96,11 +96,13 @@ export function DebouncedInput({ descriptor }: DebouncedInputProps): ReactNode {
     );
 }
 
-function withLabel(descriptor: UIControlDescriptor, field: ReactNode, inline: boolean = false): ReactNode {
+function withLabel(descriptor: UIControlDescriptor, field: ReactNode, inline: boolean = false, resolveIcon?: (name: string) => ReactNode): ReactNode {
     const className: string = ["omnigrid-control", `omnigrid-control-${descriptor.type}`].join(" ");
-    if (!descriptor.label) return createElement("div", { key: descriptor.id, className }, field);
+    const icon: ReactNode = descriptor.icon && resolveIcon ? resolveIcon(descriptor.icon) : null;
+    const body: ReactNode = icon ? createElement("div", { className: "omnigrid-control-body" }, icon, field) : field;
+    if (!descriptor.label) return createElement("div", { key: descriptor.id, className }, body);
     const label: ReactNode = createElement("span", { className: "omnigrid-control-label" }, descriptor.label);
-    return inline ? createElement("label", { key: descriptor.id, className }, field, label) : createElement("label", { key: descriptor.id, className }, label, field);
+    return inline ? createElement("label", { key: descriptor.id, className }, body, label) : createElement("label", { key: descriptor.id, className }, label, body);
 }
 
 /**
@@ -270,7 +272,7 @@ function SelectControl({ descriptor }: { descriptor: UISelectControl }): ReactNo
                     ref: listboxRef,
                     id: listboxId,
                     role: "listbox",
-                    "aria-label": descriptor.label,
+                    "aria-label": descriptor.ariaLabel ?? descriptor.label,
                     "data-omnigrid-filter-trigger": "",
                     className: "omnigrid-select-listbox",
                     onKeyDown: handleListboxKeyDown,
@@ -327,7 +329,7 @@ function SelectControl({ descriptor }: { descriptor: UISelectControl }): ReactNo
                 "aria-haspopup": "listbox",
                 "aria-expanded": isOpen,
                 "aria-controls": listboxId,
-                "aria-label": descriptor.label,
+                "aria-label": descriptor.ariaLabel ?? descriptor.label,
                 className: ["omnigrid-select-button", descriptor.disabled ? "omnigrid-select-button-disabled" : null]
                     .filter(Boolean)
                     .join(" "),
@@ -452,17 +454,19 @@ function MultiSelectControl({ descriptor }: { descriptor: UIMultiSelectControl }
  * Renders one framework-agnostic control descriptor with native HTML elements.
  * Descriptor `id`s become React keys, so re-describing a popup updates
  * elements in place instead of remounting them.
+ * @param descriptor - Control descriptor to materialise.
+ * @param resolveIcon - Optional resolver mapping `descriptor.icon` names to nodes; backed by the grid icon registry.
  */
-export function renderControl(descriptor: UIControlDescriptor): ReactNode {
+export function renderControl(descriptor: UIControlDescriptor, resolveIcon?: (name: string) => ReactNode): ReactNode {
     switch (descriptor.type) {
         case "text":
         case "number":
         case "date":
-            return withLabel(descriptor, createElement(DebouncedInput, { descriptor }));
+            return withLabel(descriptor, createElement(DebouncedInput, { descriptor }), false, resolveIcon);
         case "select":
-            return withLabel(descriptor, createElement(SelectControl, { descriptor }));
+            return withLabel(descriptor, createElement(SelectControl, { descriptor }), false, resolveIcon);
         case "multi-select":
-            return withLabel(descriptor, createElement(MultiSelectControl, { descriptor }));
+            return withLabel(descriptor, createElement(MultiSelectControl, { descriptor }), false, resolveIcon);
         case "checkbox":
             return withLabel(
                 descriptor,
@@ -474,6 +478,7 @@ export function renderControl(descriptor: UIControlDescriptor): ReactNode {
                     onChange: (event: ChangeEvent<HTMLInputElement>) => descriptor.onChange(event.target.checked),
                 }),
                 true,
+                resolveIcon,
             );
         case "button":
             return createElement(
@@ -500,7 +505,7 @@ export function renderControl(descriptor: UIControlDescriptor): ReactNode {
                         .filter(Boolean)
                         .join(" "),
                 },
-                descriptor.children.map(renderControl),
+                descriptor.children.map((child) => renderControl(child, resolveIcon)),
             );
         default:
             return null;

@@ -1,5 +1,5 @@
 import { Grid } from "./grid";
-import { applyFilterModel } from "./filtering";
+import { applyFilterModel, applyQuickFilter } from "./filtering";
 import type { ColumnDef } from "./types";
 import type { UIPopupDescriptor } from "./ui";
 
@@ -130,5 +130,77 @@ describe("Grid popups", () => {
         expect(events).toEqual([popup, null]);
         grid.closePopup();
         expect(events).toHaveLength(2);
+    });
+});
+
+describe("applyQuickFilter", () => {
+    it("returns the same reference for empty or whitespace-only queries", () => {
+        expect(applyQuickFilter(rows, "", columns)).toBe(rows);
+        expect(applyQuickFilter(rows, "   ", columns)).toBe(rows);
+        expect(applyQuickFilter(rows, " , , ", columns)).toBe(rows);
+    });
+
+    it("filters case-insensitively across searchable columns", () => {
+        expect(names(applyQuickFilter(rows, "ali", columns))).toEqual(["Alice"]);
+        expect(names(applyQuickFilter(rows, "AL", columns))).toEqual(["Alice", "alfred"]);
+    });
+
+    it("parses multi-term search queries separated by commas", () => {
+        expect(names(applyQuickFilter(rows, "Alice, bob", columns))).toEqual(["Alice", "Bob"]);
+        expect(names(applyQuickFilter(rows, "Carol, 41", columns))).toEqual(["alfred", "Carol"]);
+    });
+
+    it("completely ignores columns with searchable: false", () => {
+        const colsWithNonSearchable: ColumnDef<Row>[] = [
+            { id: "name", field: "name", width: 100, searchable: false },
+            { id: "age", field: "age", width: 100 },
+        ];
+        // "Alice" is in name, which is searchable: false. So searching "Alice" finds nothing.
+        expect(names(applyQuickFilter(rows, "Alice", colsWithNonSearchable))).toEqual([]);
+        // "30" is in age, which is searchable. So it matches Alice.
+        expect(names(applyQuickFilter(rows, "30", colsWithNonSearchable))).toEqual(["Alice"]);
+    });
+
+    it("utilizes valueGetter if present", () => {
+        const colsWithValueGetter: ColumnDef<Row>[] = [
+            {
+                id: "computed",
+                width: 100,
+                valueGetter: (row: Row) => `Person:${row.name}:${row.age ?? 0}`,
+            },
+        ];
+        expect(names(applyQuickFilter(rows, "Person:Bob", colsWithValueGetter))).toEqual(["Bob"]);
+    });
+});
+
+describe("Grid quickFilter integration", () => {
+    it("exposes get/set and emits quickFilterChanged", () => {
+        const grid = new Grid<Row>({ columns, data: rows });
+        const listener = vi.fn();
+        grid.on("quickFilterChanged", listener);
+
+        expect(grid.getQuickFilter()).toBe("");
+        grid.setQuickFilter("bob");
+        expect(grid.getQuickFilter()).toBe("bob");
+        expect(listener).toHaveBeenCalledWith("bob");
+        expect(names(grid.getProcessedData())).toEqual(["Bob"]);
+
+        grid.setQuickFilter("");
+        expect(grid.getQuickFilter()).toBe("");
+        expect(names(grid.getProcessedData())).toEqual(["Alice", "Bob", "alfred", "Carol"]);
+    });
+
+    it("accepts an initial quickFilter option", () => {
+        const grid = new Grid<Row>({ columns, data: rows, quickFilter: "alice, 25" });
+        expect(grid.getQuickFilter()).toBe("alice, 25");
+        expect(names(grid.getProcessedData())).toEqual(["Alice", "Bob"]);
+    });
+
+    it("shows noMatchingRows when quick filter matches no rows", () => {
+        const grid = new Grid<Row>({ columns, data: rows });
+        grid.setQuickFilter("nonexistent-name");
+        expect(grid.getOverlayState().type).toBe("noMatchingRows");
+        grid.setQuickFilter("");
+        expect(grid.getOverlayState().type).toBeNull();
     });
 });

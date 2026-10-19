@@ -2,10 +2,12 @@ import { createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { UIControlDescriptor } from "@omnigrid/core";
+import { Grid } from "@omnigrid/core";
+import type { ColumnDef, UIControlDescriptor } from "@omnigrid/core";
 
 import { contentToReactNode } from "./content";
 import { isUIControlDescriptor, renderControl } from "./controls";
+import { PopupHost } from "./popup";
 
 describe("renderControl", () => {
     it("renders every control type with native elements", () => {
@@ -39,5 +41,34 @@ describe("renderControl", () => {
         expect(isUIControlDescriptor({ type: "node", tag: "div" })).toBe(false);
         const html: string = renderToStaticMarkup(createElement(Fragment, null, contentToReactNode(descriptor, { registry: {}, context: () => ({}) as never })));
         expect(html).toContain(">Go</button>");
+    });
+
+    it("renders the descriptor icon before the control body when a resolver is provided", () => {
+        const descriptor: UIControlDescriptor = { id: "t", type: "text", value: "", icon: "filter", onChange: () => undefined };
+        const resolveIcon = (name: string): ReturnType<typeof createElement> => createElement("span", { className: `icon-${name}` }, "icon");
+        const html: string = renderToStaticMarkup(createElement(Fragment, null, renderControl(descriptor, resolveIcon)));
+        expect(html).toContain("omnigrid-control-body");
+        expect(html.indexOf("icon-filter")).toBeLessThan(html.indexOf("omnigrid-control-input"));
+    });
+});
+
+describe("PopupHost", () => {
+    interface Row {
+        id: number;
+    }
+
+    const columns: ColumnDef<Row>[] = [{ id: "id", field: "id", header: "ID", width: 60 }];
+
+    it("resolves control icons through the grid icon registry", () => {
+        const grid = new Grid<Row>({ columns, data: [{ id: 1 }] });
+        grid.openPopup({
+            id: "test-popup",
+            controls: [{ id: "f", type: "text", value: "", icon: "filter", onChange: () => undefined }],
+        });
+
+        const html: string = renderToStaticMarkup(createElement(PopupHost<Row>, { grid }));
+        expect(html).toContain("omnigrid-popup");
+        expect(html).toContain('class="omnigrid-icon omnigrid-icon-filter"');
+        expect(html.indexOf("omnigrid-icon-filter")).toBeLessThan(html.indexOf("omnigrid-control-input"));
     });
 });

@@ -244,3 +244,42 @@ export function applyFilterModel<T>(data: T[], model: FilterModel, columns: Colu
     if (compiled.length === 0) return data;
     return data.filter((row) => compiled.every(({ column, predicate }) => predicate(getCellValue(row, column))));
 }
+
+/**
+ * Splits a quick filter query into comma-separated terms, trims whitespace,
+ * and matches every row against the union of searchable columns.
+ *
+ * Terms are matched case-insensitively using `String.prototype.includes`.
+ * A column participates when its `searchable` property is not `false`; the
+ * column's `valueGetter` takes precedence over `field` when resolving the
+ * cell value. An empty query returns the input array unchanged (same
+ * reference) so callers can short-circuit.
+ *
+ * @param data - Rows to filter.
+ * @param query - The raw quick filter query (may contain commas).
+ * @param columns - Column definitions used to resolve searchable columns.
+ * @returns Rows matching at least one term in at least one searchable column.
+ * @api
+ */
+export function applyQuickFilter<T>(data: T[], query: string, columns: ColumnDef<T>[]): T[] {
+    const trimmed: string = query.trim();
+    if (trimmed === "") return data;
+
+    const terms: string[] = trimmed
+        .split(",")
+        .map((term) => term.trim().toLowerCase())
+        .filter((term) => term.length > 0);
+    if (terms.length === 0) return data;
+
+    const searchable: ColumnLeafDef<T>[] = flattenColumns(columns).filter((column) => column.searchable !== false);
+    if (searchable.length === 0) return data;
+
+    return data.filter((row) =>
+        searchable.some((column) => {
+            const value: unknown = getCellValue(row, column);
+            if (value === undefined || value === null) return false;
+            const text: string = String(value).toLowerCase();
+            return terms.some((term) => text.includes(term));
+        }),
+    );
+}

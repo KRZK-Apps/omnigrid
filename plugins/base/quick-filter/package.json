@@ -1,0 +1,43 @@
+{
+    "name": "@omnigrid/quick-filter-plugin",
+    "version": "0.1.0",
+    "description": "Headless quick filter plugin for OmniGrid. Mounts a search input into the top or bottom slot.",
+    "keywords": [
+        "omnigrid",
+        "grid",
+        "quick-filter",
+        "search",
+        "plugin"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/KRZK-Apps/omnigrid.git",
+        "directory": "plugins/base/quick-filter"
+    },
+    "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/quick-filter#readme",
+    "bugs": {
+        "url": "https://github.com/KRZK-Apps/omnigrid/issues"
+    },
+    "license": "MIT",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "npx tsc -p tsconfig.json",
+        "lint": "npx tsc --noEmit -p tsconfig.json",
+        "test": "vitest run",
+        "prepublishOnly": "npm run build"
+    },
+    "dependencies": {
+        "@omnigrid/core": "^0.1.0"
+    }
+}

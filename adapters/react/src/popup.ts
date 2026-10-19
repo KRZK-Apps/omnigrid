@@ -1,9 +1,10 @@
 import type { CSSProperties, ReactNode } from "react";
 import { createElement, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import type { GridApi, UIPopupDescriptor } from "@omnigrid/core";
+import type { GridApi, SlotRenderContext, UIPopupDescriptor } from "@omnigrid/core";
 
-import { renderControl } from "./controls";
+import type { ContentBridge } from "./content";
+import { contentToReactNode } from "./content";
 
 export interface PopupHostProps<T> {
     grid: GridApi<T>;
@@ -73,6 +74,10 @@ export function PopupHost<T>({ grid }: PopupHostProps<T>): ReactNode {
     }, [popup]);
 
     if (!popup) return null;
+    const bridge: ContentBridge<T> = {
+        registry: {},
+        context: (): SlotRenderContext<T> => ({ api: grid, state: grid.getState() }),
+    };
     return createElement(
         "div",
         {
@@ -84,6 +89,6 @@ export function PopupHost<T>({ grid }: PopupHostProps<T>): ReactNode {
             style: anchorStyle(popup),
         },
         popup.title ? createElement("div", { className: "omnigrid-popup-title" }, popup.title) : null,
-        popup.controls.map(renderControl),
+        popup.controls.map((control) => contentToReactNode(control, bridge)),
     );
 }

@@ -1,6 +1,6 @@
 import { flattenColumns, getColumnGroups } from "./columns";
 import { EventBus } from "./events";
-import { applyFilterModel, isActiveCondition } from "./filtering";
+import { applyFilterModel, applyQuickFilter, isActiveCondition } from "./filtering";
 import type { ColumnFilterModel, FilterCondition, FilterModel } from "./filtering";
 import { PopupManager } from "./ui";
 import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
@@ -79,6 +79,7 @@ export class Grid<T> implements GridApi<T> {
             rowOverscan: options.rowOverscan ?? 5,
             columnOverscan: options.columnOverscan ?? 2,
             overlay: { type: null },
+            quickFilter: options.quickFilter ?? "",
         };
         this.store = new Store(state);
         this.licenseKey = options.licenseKey;
@@ -265,8 +266,12 @@ export class Grid<T> implements GridApi<T> {
 
     private getFilteredData(): T[] {
         if (this.filteredDataCache !== null) return this.filteredDataCache;
-        const state = this.getState();
-        this.filteredDataCache = applyFilterModel(state.data, this.filterModel, state.columns);
+        const state: GridState<T> = this.getState();
+        let data: T[] = applyFilterModel(state.data, this.filterModel, state.columns);
+        if (state.quickFilter) {
+            data = applyQuickFilter(data, state.quickFilter, state.columns);
+        }
+        this.filteredDataCache = data;
         return this.filteredDataCache;
     }
 
@@ -316,6 +321,36 @@ export class Grid<T> implements GridApi<T> {
         this.assertActive();
         if (Object.keys(this.filterModel).length === 0) return;
         this.setFilterModel({});
+    }
+
+    /**
+     * Sets the global quick filter query string. The query is split on commas
+     * and matched case-insensitively against every column whose `searchable`
+     * property is not `false`, using the column's `valueGetter` when present.
+     * An empty string clears the quick filter. Emits `quickFilterChanged`.
+     * @param query - The quick filter query.
+     * @api
+     */
+    public setQuickFilter(query: string): void {
+        this.assertActive();
+        const nextQuery: string = query ?? "";
+        if (this.store.getState().quickFilter === nextQuery) return;
+        this.filteredDataCache = null;
+        this.processedDataCache = null;
+        this.revision += 1;
+        this.store.setState({ quickFilter: nextQuery });
+        this.scrollTo({ scrollTop: 0 });
+        this.recomputeOverlay();
+        this.events.emit("quickFilterChanged", nextQuery);
+    }
+
+    /**
+     * Returns the current global quick filter query string.
+     * @returns The active quick filter query string.
+     * @api
+     */
+    public getQuickFilter(): string {
+        return this.store.getState().quickFilter;
     }
 
     public registerFilterMenu(): () => void {

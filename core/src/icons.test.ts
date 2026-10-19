@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { IconRegistry } from "./icons";
 
 describe("IconRegistry", () => {
-    it("provides core chevrons and sorting arrows as declarative SVG nodes", () => {
+    it("provides core chevrons, sorting arrows and the filter icon as declarative SVG nodes", () => {
         const icons = new IconRegistry<{}>();
 
         for (const name of [
@@ -16,6 +16,7 @@ describe("IconRegistry", () => {
             "arrow-up",
             "arrow-down",
             "arrow-up-down",
+            "filter",
         ]) {
             expect(icons.get(name)).toMatchObject({
                 type: "node",
