@@ -74,6 +74,27 @@ describe("Grid.getViewportData — pinned columns", () => {
         const vd = grid.getViewportData();
         expect(vd.columns.map((item) => item.width)).toEqual([140, 230, 230]);
     });
+
+    it("recomputes flex widths when setColumns changes a non-leading column", () => {
+        const grid = makeGrid(
+            [
+                { id: "locked", width: 100, resizable: false },
+                { id: "resized", flex: 1, minWidth: 100 },
+                { id: "remaining", flex: 1, minWidth: 100 },
+            ],
+            600,
+        );
+
+        expect(grid.getViewportData().columns.map((item) => item.width)).toEqual([100, 250, 250]);
+
+        grid.setColumns([
+            { id: "locked", width: 100, resizable: false },
+            { id: "resized", width: 300 },
+            { id: "remaining", flex: 1, minWidth: 100 },
+        ]);
+
+        expect(grid.getViewportData().columns.map((item) => item.width)).toEqual([100, 300, 200]);
+    });
 });
 
 describe("Grid.getViewportData — horizontal windowing of scrollable columns", () => {

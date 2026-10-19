@@ -102,7 +102,7 @@ export class Virtualizer<T> {
         };
     }
 
-    private readonly widthsCache = new WeakMap<object, { viewportWidth: number; length: number; widths: number[] }>();
+    private readonly widthsCache = new WeakMap<object, { viewportWidth: number; columns: readonly ColumnLeafDef<T>[]; widths: number[] }>();
 
     public getColumnOffsets(columns: ColumnLeafDef<T>[], viewportWidth = 0): VirtualItem[] {
         const widths = this.getColumnWidths(columns, viewportWidth);
@@ -134,14 +134,15 @@ export class Virtualizer<T> {
     }
 
     private getColumnWidths(columns: ColumnLeafDef<T>[], viewportWidth: number): number[] {
-        // Cache by first column identity + viewportWidth. Column objects are stable
-        // across scroll frames (replaced atomically on setColumns), so this avoids
-        // re-running the expensive flex-distribution loop on every scroll frame
-        // for the three column partitions (pinnedLeft, scrollable, pinnedRight).
+        // Column objects are stable across scroll frames, so validate each
+        // identity before reusing cached widths. Checking only the first column
+        // misses updates to other columns when setColumns replaces them.
         if (columns.length > 0) {
             const cacheKey = columns[0];
             const cached = this.widthsCache.get(cacheKey);
-            if (cached && cached.viewportWidth === viewportWidth && cached.length === columns.length) {
+            const columnsUnchanged =
+                cached?.columns.length === columns.length && cached.columns.every((column, index) => column === columns[index]);
+            if (cached && cached.viewportWidth === viewportWidth && columnsUnchanged) {
                 return cached.widths;
             }
         }
@@ -183,7 +184,7 @@ export class Virtualizer<T> {
 
         const result = this.quantizeWidths(widths);
         if (columns.length > 0) {
-            this.widthsCache.set(columns[0], { viewportWidth, length: columns.length, widths: result });
+            this.widthsCache.set(columns[0], { viewportWidth, columns: [...columns], widths: result });
         }
         return result;
     }

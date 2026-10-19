@@ -331,6 +331,7 @@ export interface GridOptions<T> {
     /** Row data; omitted or null means an initial load is pending. */
     data?: T[] | null;
     columns: ColumnDef<T>[];
+    /** Returns a stable row ID; defaults to the row's current index. Use a stable ID to preserve row identity when rows are reordered. */
     getRowId?: (row: T, index: number) => RowId;
     rowHeight?: number;
     /** Rows to render beyond the visible viewport (top + bottom buffer). @default 5 */

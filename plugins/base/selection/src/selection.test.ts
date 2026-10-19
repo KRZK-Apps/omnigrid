@@ -117,6 +117,29 @@ describe("SelectionPlugin row presentation", () => {
         });
         grid.destroy();
     });
+
+    it("keeps selected row identity when processed data is reordered", () => {
+        const plugin = new SelectionPlugin<Row>({ mode: "multiple" });
+        const grid = new Grid<Row>({ columns: [], data: ROWS, getRowId: (row) => row.id, plugins: [plugin] });
+        let sortByAgeAscending: boolean = false;
+
+        grid.registerDataProcessor((data) => {
+            if (!sortByAgeAscending) return data;
+            return [...data].sort((left, right) => left.age - right.age);
+        });
+        plugin.toggleRow("a", 0);
+
+        sortByAgeAscending = true;
+        grid.setData(ROWS);
+
+        expect(grid.getProcessedData().map((row) => row.id)).toEqual(["b", "a"]);
+        expect(plugin.getSelectionState()).toEqual({
+            selectedRowIds: ["a"],
+            selectedRows: [ROWS[0]],
+        });
+
+        grid.destroy();
+    });
 });
 
 describe("SelectionPlugin removal", () => {
