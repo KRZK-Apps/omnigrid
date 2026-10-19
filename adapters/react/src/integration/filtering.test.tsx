@@ -93,7 +93,7 @@ describe("FilteringPlugin React integration", () => {
     });
 
     it("renders select filter popup with multi-select", () => {
-        const itemColumns: ColumnDef<ItemRow>[] = [{ id: "category", field: "category", header: "Category", dataType: "select", width: 100 }];
+        const itemColumns: ColumnDef<ItemRow>[] = [{ id: "category", field: "category", header: "Category", filterType: "set", width: 100 }];
         const plugin = new FilteringPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns: itemColumns, data: sampleRows, plugins: [plugin] });
 

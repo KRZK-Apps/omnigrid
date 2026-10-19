@@ -28,7 +28,7 @@ describe("inferColumnDataType", () => {
                 { id: "cat", field: "category", header: "Category", filterOptions: [{ value: "Food", label: "Food" }] },
                 sampleRows,
             ),
-        ).toBe("select");
+        ).toBe("text");
         expect(
             inferColumnDataType<ItemRow>({ id: "id", field: "id", header: "ID", dataType: "text" }, sampleRows),
         ).toBe("text");
@@ -125,7 +125,7 @@ describe("FilteringPlugin", () => {
 
     it("handles select/set column with multi-select", () => {
         const itemColumns: ColumnDef<ItemRow>[] = [
-            { id: "category", field: "category", header: "Category", dataType: "select", width: 100 },
+            { id: "category", field: "category", header: "Category", filterType: "set", width: 100 },
         ];
         const plugin = new FilteringPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns: itemColumns, data: sampleRows, plugins: [plugin] });

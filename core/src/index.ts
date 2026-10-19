@@ -34,6 +34,7 @@ export type {
     CheckboxRenderParams,
     ColumnClassRules,
     ColumnDataType,
+    ColumnFilterType,
     ColumnDef,
     ColumnGroupDef,
     ColumnGroupViewport,

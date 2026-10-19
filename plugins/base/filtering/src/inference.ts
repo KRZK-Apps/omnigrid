@@ -1,10 +1,11 @@
-import type { ColumnDataType, ColumnLeafDef } from "@omnigrid/core";
+import type { ColumnDataType, ColumnFilterType, ColumnLeafDef } from "@omnigrid/core";
 
 const ISO_DATE_REGEX: RegExp = /^\d{4}-\d{2}-\d{2}/;
 
 /**
  * Determines the data type of a column, either from explicit `column.dataType`,
- * inferred from `column.filterOptions`, or inferred by sampling rows.
+ * or inferred by sampling rows. Presence of `filterOptions` no longer forces
+ * `dataType` to `"select"`.
  *
  * @param column - Column definition to inspect.
  * @param rows - Current data rows to inspect values.
@@ -12,7 +13,6 @@ const ISO_DATE_REGEX: RegExp = /^\d{4}-\d{2}-\d{2}/;
  */
 export function inferColumnDataType<T>(column: ColumnLeafDef<T>, rows: T[]): ColumnDataType {
     if (column.dataType) return column.dataType;
-    if (column.filterOptions && column.filterOptions.length > 0) return "select";
 
     for (const row of rows) {
         if (!row) continue;
@@ -34,4 +34,17 @@ export function inferColumnDataType<T>(column: ColumnLeafDef<T>, rows: T[]): Col
     }
 
     return "text";
+}
+
+/**
+ * Resolves the effective filter type for a column.
+ *
+ * - If `column.filterType` is set, use it.
+ * - If `column.filterOptions` is set (and length > 0), default to `"set"`.
+ * - Otherwise derive from `column.dataType` or from data sampling.
+ */
+export function resolveFilterType<T>(column: ColumnLeafDef<T>, dataType: ColumnDataType, hasOptions: boolean): ColumnFilterType {
+    if (column.filterType) return column.filterType;
+    if (hasOptions) return "set";
+    return dataType as ColumnFilterType;
 }

@@ -10,11 +10,27 @@ export type CellAlign = "left" | "center" | "right";
 export type DataProcessor<T> = (data: T[]) => T[];
 
 /**
- * Data type of a column, used for filtering, formatting, and auto-detecting filter controls.
+ * Nature of the values stored in a column.
+ *
+ * It describes the data itself — never the filter UI. Used for sorting,
+ * formatting and to pick the default filter type of a column (a `number`
+ * column gets the numeric filter, and so on).
  *
  * @api
  */
-export type ColumnDataType = "text" | "number" | "date" | "select" | "boolean";
+export type ColumnDataType = "text" | "number" | "date" | "boolean";
+
+/**
+ * Kind of filter UI rendered for a column.
+ *
+ * - `text` / `number` / `date` — single value input with an operator drop-down;
+ * - `boolean` — All / Yes / No switch;
+ * - `set` — checklist of the distinct values of the column;
+ * - `custom` — filter registered by a third-party plugin.
+ *
+ * @api
+ */
+export type ColumnFilterType = "text" | "number" | "date" | "boolean" | "set" | "custom";
 
 export interface RowRenderParams<T> {
     id: RowId;
@@ -189,10 +205,20 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     /** Whether this column can be sorted. */
     sortable?: boolean;
     /**
-     * Data type of the column. When omitted, the grid attempts to infer the type
-     * from data rows or filter options.
+     * Nature of the values in this column. When omitted, the filtering plugin
+     * infers it by sampling the data.
      */
     dataType?: ColumnDataType;
+    /**
+     * Kind of filter UI rendered for this column. When omitted, it is derived
+     * from `dataType` (and, failing that, from the sampled data).
+     */
+    filterType?: ColumnFilterType;
+    /**
+     * Identifier of a custom filter registered with the filtering plugin.
+     * Required when `filterType` is `"custom"`.
+     */
+    filterTypeId?: string;
     /**
      * Whether this column offers a filter menu. Set to `false` to opt the column out of
      * filtering UI (the header filter icon is hidden).
@@ -204,8 +230,8 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
      */
     allowedOperators?: FilterOperator[];
     /**
-     * Fixed options for select / set filtering. When provided, the column
-     * automatically defaults to `dataType: "select"`.
+     * Fixed option list used by the `"set"` filter. When provided, the column
+     * defaults to `filterType: "set"` unless `filterType` is set explicitly.
      */
     filterOptions?: Array<{ label: string; value: any }>;
     /** Horizontal alignment of cell content. */

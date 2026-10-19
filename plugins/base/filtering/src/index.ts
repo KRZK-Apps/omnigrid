@@ -1,5 +1,6 @@
 import type {
     ColumnDataType,
+    ColumnFilterType,
     ColumnLeafDef,
     FilterCondition,
     FilterOperator,
@@ -12,10 +13,10 @@ import type {
     UISelectOption,
 } from "@omnigrid/core";
 import { flattenColumns } from "@omnigrid/core";
-import { inferColumnDataType } from "./inference";
+import { inferColumnDataType, resolveFilterType } from "./inference";
 import { ALL_OPERATOR_LABELS, DATE_OPERATORS, NUMBER_OPERATORS, TEXT_OPERATORS } from "./operators";
 
-export { inferColumnDataType } from "./inference";
+export { inferColumnDataType, resolveFilterType } from "./inference";
 export { ALL_OPERATOR_LABELS, DATE_OPERATORS, NUMBER_OPERATORS, TEXT_OPERATORS } from "./operators";
 
 const POPUP_PREFIX: string = "omnigrid-filter:";
@@ -101,12 +102,22 @@ export class FilteringPlugin<T> implements GridPlugin<T> {
         const column = columns.find((item) => item.id === columnId);
         const rawData = api.getState().data;
         const dataType: ColumnDataType = column ? inferColumnDataType(column, rawData) : "text";
+        const hasOptions: boolean = !!(column?.filterOptions && column.filterOptions.length > 0);
+        const filterType: ColumnFilterType = column ? resolveFilterType(column, dataType, hasOptions) : "text";
 
-        switch (dataType) {
+        if (filterType === "custom") {
+            if (!column?.filterTypeId) {
+                return this.describeComparableFilter(api, columnId, column, "text", TEXT_OPERATORS, "contains");
+            }
+            // Custom filters will be registered via plugin options in a future refactor
+            return this.describeComparableFilter(api, columnId, column, "text", TEXT_OPERATORS, "contains");
+        }
+
+        switch (filterType) {
             case "boolean":
                 return this.describeBooleanFilter(api, columnId);
-            case "select":
-                return this.describeSelectFilter(api, columnId, column);
+            case "set":
+                return this.describeSetFilter(api, columnId, column);
             case "date":
                 return this.describeComparableFilter(api, columnId, column, "date", DATE_OPERATORS, "equals");
             case "number":
@@ -227,7 +238,7 @@ export class FilteringPlugin<T> implements GridPlugin<T> {
         return { id: `${POPUP_PREFIX}${columnId}`, anchor: this.anchor, placement: "bottom-end", controls };
     }
 
-    private describeSelectFilter(
+    private describeSetFilter(
         api: GridApi<T>,
         columnId: string,
         column: ColumnLeafDef<T> | undefined,
