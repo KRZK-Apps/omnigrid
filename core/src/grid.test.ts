@@ -151,6 +151,63 @@ describe("Grid.getViewportData — horizontal windowing of scrollable columns", 
     });
 });
 
+describe("Grid.getViewportData — column spanning", () => {
+    const columns: ColumnDef<Row>[] = [
+        { id: "c0", width: 100, colSpan: 3 },
+        { id: "c1", width: 100 },
+        { id: "c2", width: 100 },
+        { id: "c3", width: 100 },
+        { id: "c4", width: 100 },
+        { id: "c5", width: 100 },
+        { id: "c6", width: 100 },
+        { id: "c7", width: 100 },
+        { id: "c8", width: 100 },
+        { id: "c9", width: 100 },
+    ];
+
+    it("exposes full leaf geometry and expands the window so spans are not clipped", () => {
+        // Scroll deep: base window would start at c4, but the c0 span origin
+        // lookback pulls it back and the static span extends the right edge.
+        const grid = makeGrid(columns, 500, 500, 400);
+        const vd = grid.getViewportData();
+
+        expect(vd.leafColumns.map((c) => c.id)).toEqual(columns.map((c) => c.id));
+        expect(vd.columnOffsets).toHaveLength(10);
+        expect(vd.columnOffsets[0]).toMatchObject({ offset: 0, size: 100 });
+        // Expanded left (origin lookback) and right (static span tail).
+        expect(vd.columnRange.start).toBe(0);
+        expect(vd.columns[0].column.id).toBe("c0");
+        expect(vd.columns.map((c) => c.column.id)).toContain("c6");
+
+        const data: Row[] = [{ name: "row-0" }];
+        const spanned = makeGrid(columns, 500, 500, 400);
+        spanned.setData(data);
+        const layout = spanned.getRowSpans(data[0], 0, vd.leafColumns, vd.columnOffsets);
+        expect(layout.spans[0]).toEqual({ span: 3, covered: false });
+        expect(layout.widths[0]).toBe(300);
+        expect(layout.offsets[0]).toBe(0);
+        expect(spanned.resolveColSpan(data[0], 0, vd.leafColumns[0], 0, vd.leafColumns.length)).toBe(3);
+        spanned.destroy();
+        grid.destroy();
+    });
+
+    it("leaves the window untouched when no column declares colSpan", () => {
+        const plain: ColumnDef<Row>[] = [
+            { id: "c0", width: 100 },
+            { id: "c1", width: 100 },
+            { id: "c2", width: 100 },
+            { id: "c3", width: 100 },
+            { id: "c4", width: 100 },
+            { id: "c5", width: 100 },
+        ];
+        const grid = makeGrid(plain, 500, 500, 200);
+        const vd = grid.getViewportData();
+        expect(vd.columnRange).toEqual({ start: 2, end: 6 });
+        expect(vd.leafColumns.map((c) => c.id)).toEqual(["c0", "c1", "c2", "c3", "c4", "c5"]);
+        grid.destroy();
+    });
+});
+
 describe("Grid.getRevision — structural change detection", () => {
     it("increments on setData", () => {
         const grid = makeGrid([{ id: "a", width: 100 }], 800);

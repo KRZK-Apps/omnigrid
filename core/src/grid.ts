@@ -1,4 +1,4 @@
-import { flattenColumns, getColumnGroups } from "./columns";
+import { flattenColumns, getColumnGroups, getRowSpans, resolveColSpan } from "./columns";
 import { EventBus } from "./events";
 import { applyFilterModel, applyQuickFilter, isActiveCondition } from "./filtering";
 import type { ColumnFilterModel, FilterCondition, FilterModel } from "./filtering";
@@ -9,6 +9,7 @@ import { IconRegistry } from "./icons";
 import { SlotManager } from "./slots";
 import { Store } from "./store";
 import type {
+    ColumnLeafDef,
     DataProcessor,
     GridApi,
     GridEvents,
@@ -18,6 +19,7 @@ import type {
     RowClickEvent,
     RowHoverEvent,
     RowId,
+    RowSpanLayout,
     ScrollPosition,
     SlotMount,
     SlotName,
@@ -197,11 +199,22 @@ export class Grid<T> implements GridApi<T> {
         const totalWidth = pinnedLeftWidth + scrollableWidth + pinnedRightWidth;
 
         // Virtual range for the scrollable section only.
-
+        //
         // Pass pre-computed scrollableOffsets to avoid a second (iterative)
         // flex-distribution pass — getColumnRange would otherwise recompute
         // all column widths from scratch via getColumnOffsets.
-        const columnRange = scrollable.length ? this.virtualizer.getColumnRange(scrollable, scrollLeft, scrollableViewWidth, scrollableOffsets) : { start: 0, end: 0 };
+        //
+        // Span-aware expansion: a `colSpan` origin may sit BEFORE the window
+        // while covering into it, and a span starting inside may extend PAST
+        // the right edge. Expand the shared window left (bounded lookback for
+        // origins) and right (max declared static span) so every visible row
+        // can anchor its spans without clipping. Per-row dynamic spans that
+        // reach further are handled by the adapter via `getRowSpans` over the
+        // full `leafColumns` below.
+        const baseColumnRange = scrollable.length
+            ? this.virtualizer.getColumnRange(scrollable, scrollLeft, scrollableViewWidth, scrollableOffsets)
+            : { start: 0, end: 0 };
+        const columnRange = Grid.expandColumnRangeForSpans(scrollable, baseColumnRange);
 
         const rowRange = this.virtualizer.getRowRange(processedData.length, this.scrollPosition.scrollTop, state.viewport.height);
 
@@ -243,6 +256,12 @@ export class Grid<T> implements GridApi<T> {
             columns,
             pinnedLeftColumns,
             pinnedRightColumns,
+            leafColumns: scrollable,
+            pinnedLeftLeafColumns: pinnedLeft,
+            pinnedRightLeafColumns: pinnedRight,
+            columnOffsets: scrollableOffsets,
+            pinnedLeftOffsets,
+            pinnedRightOffsets,
             columnGroups,
             headerRowCount,
             columnGroupDepth,
@@ -251,6 +270,81 @@ export class Grid<T> implements GridApi<T> {
             totalWidth,
             totalHeight: this.virtualizer.getTotalHeight(processedData.length),
         };
+    }
+
+    /**
+     * Expands the shared scrollable column window so `colSpan` origins stay
+     * anchored during horizontal scrolling.
+     *
+     * Left: bounded lookback (`MAX_SPAN_LOOKBACK`) while any visible leaf
+     * declares `colSpan` — covers spans that start before the window and
+     * bleed into it. Right: extends past the window by the largest declared
+     * static span minus one, so a span starting on the last visible leaf is
+     * not clipped. Dynamic per-row spans beyond these bounds resolve in the
+     * adapter via `getRowSpans` over the full `leafColumns`.
+     *
+     * @param scrollable - Ordered scrollable leaf columns.
+     * @param range - Base virtual window from the virtualizer.
+     * @returns Expanded `[start, end)` window, clamped to the group.
+     */
+    private static expandColumnRangeForSpans<T>(scrollable: ColumnLeafDef<T>[], range: { start: number; end: number }): { start: number; end: number } {
+        if (scrollable.length === 0) return { start: 0, end: 0 };
+        let hasSpan: boolean = false;
+        let maxStaticSpan: number = 1;
+        for (let i: number = 0; i < scrollable.length; i += 1) {
+            const declared: unknown = scrollable[i].colSpan;
+            if (declared === undefined) continue;
+            hasSpan = true;
+            if (typeof declared === "number" && Number.isFinite(declared)) {
+                const span: number = Math.floor(declared);
+                if (span > maxStaticSpan) maxStaticSpan = span;
+            }
+        }
+        if (!hasSpan) return { start: range.start, end: range.end };
+        const lookback: number = 64;
+        const start: number = Math.max(0, range.start - lookback);
+        const end: number = Math.min(scrollable.length, Math.max(range.end, range.end + maxStaticSpan - 1));
+        return { start, end };
+    }
+
+    /**
+     * Resolves the per-row span layout for one pin group of the body.
+     *
+     * Thin entry point over `getRowSpans` bound to this grid's row identity
+     * (`getRowId`): computes merged widths and covered cells for the given
+     * row across the FULL leaf group (`ViewportData.leafColumns` /
+     * `columnOffsets` for the scrollable section, pinned siblings likewise).
+     * Adapters call this per visible row instead of re-implementing span math;
+     * results are memoized per row/column-set by the caller for 60 FPS scroll.
+     *
+     * @param data - Raw row data object.
+     * @param index - Zero-based row index in the processed dataset.
+     * @param columns - Full ordered leaves of one pin group.
+     * @param offsets - Pre-computed absolute geometry for `columns`.
+     * @returns Per-row span layout for the group.
+     * @api
+     */
+    public getRowSpans(data: T, index: number, columns: ColumnLeafDef<T>[], offsets: { offset: number; size: number }[]): RowSpanLayout {
+        return getRowSpans(data, index, (row: T, rowIndex: number) => this.getRowId(row, rowIndex), columns, offsets);
+    }
+
+    /**
+     * Resolves the normalized horizontal span of a single body cell.
+     *
+     * Entry point over `resolveColSpan` bound to this grid's row identity:
+     * clips the declared `colSpan` to the pin group (`columnCount` leaves)
+     * and falls back to `1` for invalid declarations or resolver errors.
+     *
+     * @param data - Raw row data object.
+     * @param index - Zero-based row index in the processed dataset.
+     * @param column - Column definition being evaluated.
+     * @param columnIndex - Position of the column in the visible leaf layout.
+     * @param columnCount - Total number of visible leaves in the pin group.
+     * @returns Normalized span width in columns (`1` = no merge).
+     * @api
+     */
+    public resolveColSpan(data: T, index: number, column: ColumnLeafDef<T>, columnIndex: number, columnCount: number): number {
+        return resolveColSpan(data, index, (row: T, rowIndex: number) => this.getRowId(row, rowIndex), column, columnIndex, columnCount);
     }
 
     public getProcessedData(): T[] {

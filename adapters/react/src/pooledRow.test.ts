@@ -157,8 +157,6 @@ function firstCell(host: FakeElement): FakeElement {
     return host.children[0];
 }
 
-/* ------------------------------ Tests ------------------------------ */
-
 describe("PooledRowPane — staging placeholder for root-rendered cells", () => {
     it("paints the placeholder synchronously into a blank cell before the async root commit", () => {
         const { pane, host, createRootCalls, renderCalls, placeholders } = makeHarness({
@@ -234,6 +232,88 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
         expect(createRootCalls).toHaveLength(0);
         expect(renderCalls).toHaveLength(0);
         expect(placeholders).toHaveLength(0);
+    });
+});
+
+describe("PooledRowPane — column spanning", () => {
+    it("renders the span origin with the summed width and parks covered cells off-screen", () => {
+        const { pane, host } = makeHarness();
+        const columns = [col(0, 0), col(1, 120), col(2, 240)];
+        const spans = {
+            spans: [
+                { span: 2, covered: false },
+                { span: 1, covered: true },
+                { span: 1, covered: false },
+            ],
+            widths: [240, 0, 120],
+            offsets: [0, 0, 240],
+        };
+
+        pane.bind(row(0, { name: "Alice", age: 30 }), columns, 0, spans);
+
+        const cells: FakeElement[] = host.children as FakeElement[];
+        expect(cells).toHaveLength(3);
+        // Origin: summed width of the two merged columns, aligned to the start.
+        expect(cells[0].style.width).toBe("240px");
+        expect(cells[0].style.transform).toBe("translate3d(0px, 0, 0)");
+        // Covered leaf: parked off-screen so recycled nodes never overlap.
+        expect(cells[1].style.transform).toBe("translate3d(-200000px, 0, 0)");
+        // Trailing plain cell keeps its own geometry.
+        expect(cells[2].style.width).toBe("120px");
+        expect(cells[2].style.transform).toBe("translate3d(240px, 0, 0)");
+    });
+
+    it("rebinds content when only the span changes on the same column", () => {
+        const { pane, host } = makeHarness();
+        const columns = [col(0, 0), col(1, 120)];
+        pane.bind(row(0, { name: "Alice", age: 30 }), columns, 0, {
+            spans: [
+                { span: 1, covered: false },
+                { span: 1, covered: false },
+            ],
+            widths: [120, 120],
+            offsets: [0, 120],
+        });
+        expect((host.children as FakeElement[])[0].style.width).toBe("120px");
+
+        pane.bind(row(0, { name: "Alice", age: 30 }), columns, 0, {
+            spans: [
+                { span: 2, covered: false },
+                { span: 1, covered: true },
+            ],
+            widths: [240, 0],
+            offsets: [0, 0],
+        });
+        expect((host.children as FakeElement[])[0].style.width).toBe("240px");
+        expect((host.children as FakeElement[])[1].style.transform).toBe("translate3d(-200000px, 0, 0)");
+    });
+
+    it("correctly offsets cells when originX is non-zero (pinned pane offset)", () => {
+        const { pane, host } = makeHarness();
+        const originX: number = 100;
+        const columns = [col(0, 100), col(1, 220), col(2, 340)];
+        const spans = {
+            spans: [
+                { span: 2, covered: false },
+                { span: 1, covered: true },
+                { span: 1, covered: false },
+            ],
+            widths: [240, 0, 120],
+            offsets: [100, 100, 340],
+        };
+
+        pane.bind(row(0, { name: "Alice", age: 30 }), columns, originX, spans);
+
+        const cells: FakeElement[] = host.children as FakeElement[];
+        expect(cells).toHaveLength(3);
+        // Origin: offset 100 - originX 100 = 0px, width 240px.
+        expect(cells[0].style.width).toBe("240px");
+        expect(cells[0].style.transform).toBe("translate3d(0px, 0, 0)");
+        // Covered leaf: parked off-screen.
+        expect(cells[1].style.transform).toBe("translate3d(-200000px, 0, 0)");
+        // Trailing plain cell: offset 340 - originX 100 = 240px, width 120px.
+        expect(cells[2].style.width).toBe("120px");
+        expect(cells[2].style.transform).toBe("translate3d(240px, 0, 0)");
     });
 });
 

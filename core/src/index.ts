@@ -30,8 +30,11 @@ export type {
     CellAlign,
     CellRenderParams,
     CellClassRules,
+    CellSpan,
+    CellSpanningParams,
     CheckboxControl,
     CheckboxRenderParams,
+    ColSpanDef,
     ColumnClassRules,
     ColumnDataType,
     ColumnFilterType,
@@ -64,7 +67,9 @@ export type {
     RowHost,
     RowHoverEvent,
     RowId,
+    RowNode,
     RowRenderParams,
+    RowSpanLayout,
     RowStyle,
     ScrollPosition,
     SlotComponentContent,
@@ -84,5 +89,5 @@ export type {
     ViewportState,
     VirtualItem,
 } from "./types";
-export { getColumnGroups, flattenColumns, isColumnGroup, isColumnLeaf, getCellValue } from "./columns";
+export { getColumnGroups, flattenColumns, isColumnGroup, isColumnLeaf, getCellValue, getCellSpanningParams, resolveColSpan, getRowSpans } from "./columns";
 export { Virtualizer } from "./virtualizer";

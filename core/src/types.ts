@@ -32,11 +32,99 @@ export type ColumnDataType = "text" | "number" | "date" | "boolean";
  */
 export type ColumnFilterType = "text" | "number" | "date" | "boolean" | "set" | "custom";
 
-export interface RowRenderParams<T> {
+/**
+ * Row identity and position metadata passed to row-aware callbacks.
+ *
+ * `RowNode` is a lightweight view over a single processed row: the stable
+ * `id` (from `getRowId`), the zero-based `index` in the processed dataset,
+ * and the raw `data` object itself.
+ *
+ * @api
+ */
+export interface RowNode<T> {
+    /** Stable row identifier (from `getRowId`, defaults to row index). */
     id: RowId;
+    /** Zero-based index of the row in the processed dataset. */
     index: number;
+    /** Raw row data object. */
     data: T;
 }
+
+/**
+ * Context passed to the `colSpan` resolver of a column.
+ *
+ * Mirrors the data-bearing fields of `RowNode` plus the column being
+ * evaluated, so span decisions can depend on row values, row position,
+ * or column identity.
+ *
+ * @api
+ */
+export interface CellSpanningParams<T> {
+    /** Raw row data object. */
+    data: T;
+    /** Row identity and position metadata. */
+    node: RowNode<T>;
+    /** Column definition being evaluated for spanning. */
+    column: ColumnLeafDef<T>;
+}
+
+/**
+ * Horizontal span declared on a leaf column.
+ *
+ * A static number merges that many consecutive visible columns starting at
+ * the current column; a function computes the span per row from
+ * `CellSpanningParams`. Values are normalized to integers `>= 1`
+ * (`1` = no spanning, the default).
+ *
+ * @api
+ */
+export type ColSpanDef<T> = number | ((params: CellSpanningParams<T>) => number);
+
+/**
+ * Normalized horizontal span of a single body cell.
+ *
+ * Produced per visible row by `getRowSpans`: `span` is the merged width in
+ * columns (`1` = plain cell), `covered` marks cells hidden underneath a span
+ * started at an earlier column.
+ *
+ * @api
+ */
+export interface CellSpan {
+    /** Merged width in visible columns (`1` = no spanning). */
+    span: number;
+    /** Whether this cell is covered by a span that starts to its left. */
+    covered: boolean;
+}
+
+/**
+ * Per-row span layout for one pin group of the body.
+ *
+ * `spans` is indexed by position in the visible leaf group: `spans[i]`
+ * describes the cell at that leaf for this row. `widths[i]` / `offsets[i]`
+ * are the aggregated pixel geometry — the `left` of a span origin and the
+ * summed width of the `span` covered columns.
+ *
+ * @api
+ */
+export interface RowSpanLayout {
+    /** Per-leaf span descriptors, indexed by position in the pin group. */
+    spans: CellSpan[];
+    /** Aggregated pixel width per leaf (span origins carry the summed width). */
+    widths: number[];
+    /** Pixel `left` per leaf (span origins align with the starting column). */
+    offsets: number[];
+}
+/**
+ * Context passed to every row-level callback (`getRowStyle`, `getRowClass`,
+ * `rowClassRules`, `checkboxDisabled`, ...).
+ *
+ * Alias of `RowNode`: the stable row id, the zero-based index in the
+ * processed dataset, and the raw row data object.
+ *
+ * @api
+ */
+export type RowRenderParams<T> = RowNode<T>;
+
 
 export interface RowStyle {
     [property: string]: string | number | undefined;
@@ -242,6 +330,19 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     sortIndex?: number;
     /** Compares values for this column, overriding the sorting plugin default. */
     comparator?: (left: unknown, right: unknown, column: ColumnLeafDef<T>) => number;
+    /**
+     * Horizontal cell merging declared on the column.
+     *
+     * A static number merges that many consecutive visible columns starting
+     * at this column; a function computes the span per row from
+     * `CellSpanningParams`. Normalized to an integer `>= 1` (`1` = no merge).
+     * Spans are clipped to the visible leaf layout (pinned groups never
+     * merge) and covered cells are skipped during rendering.
+     *
+     * @default 1
+     * @api
+     */
+    colSpan?: ColSpanDef<T>;
     /** Prevents clicks in this column's cells from triggering row-click behavior. */
     stopRowClick?: boolean;
     /** Prevents clicks on this column's header from triggering header-click behavior. */
@@ -424,6 +525,27 @@ export interface ViewportData<T> {
     pinnedLeftColumns: Array<{ column: ColumnLeafDef<T>; index: number; offset: number; width: number }>;
     /** Right-pinned leaf columns — always visible, absolute offsets anchored to totalWidth. */
     pinnedRightColumns: Array<{ column: ColumnLeafDef<T>; index: number; offset: number; width: number }>;
+    /**
+     * Full ordered leaf columns of each pin group (scrollable or pinned),
+     * independent of the current virtual window. Adapters use these together
+     * with `getRowSpans` (or `Grid.getRowSpans`) to resolve per-row spanning:
+     * the windowed `columns` / `pinned*Columns` above only carry the visible
+     * slice, while a span origin may sit before the window and cover into it.
+     */
+    leafColumns: ColumnLeafDef<T>[];
+    /** Full ordered leaf columns of the left-pinned group. See `leafColumns`. */
+    pinnedLeftLeafColumns: ColumnLeafDef<T>[];
+    /** Full ordered leaf columns of the right-pinned group. See `leafColumns`. */
+    pinnedRightLeafColumns: ColumnLeafDef<T>[];
+    /**
+     * Pre-computed absolute geometry (`offset`/`size`) for every entry of
+     * `leafColumns`, aligned by position. Backs span width aggregation.
+     */
+    columnOffsets: VirtualItem[];
+    /** Pre-computed absolute geometry for `pinnedLeftLeafColumns`, aligned by position. */
+    pinnedLeftOffsets: VirtualItem[];
+    /** Pre-computed absolute geometry for `pinnedRightLeafColumns`, aligned by position. */
+    pinnedRightOffsets: VirtualItem[];
     /**
      * Column groups (definitions with leaf spans) — the data needed to render
      * stacked group header rows. Empty when no groups are defined.
@@ -690,6 +812,30 @@ export interface GridApi<T> {
     getColumnWidth(columnId: string): number | undefined;
     getProcessedData(): T[];
     getRowId(row: T, index: number): RowId;
+    /**
+     * Resolves the normalized horizontal span of a single body cell.
+     * Clips the declared `colSpan` to the pin group and falls back to `1`
+     * for invalid declarations or resolver errors.
+     * @param data - Raw row data object.
+     * @param index - Zero-based row index in the processed dataset.
+     * @param column - Column definition being evaluated.
+     * @param columnIndex - Position of the column in the visible leaf layout.
+     * @param columnCount - Total number of visible leaves in the pin group.
+     * @returns Normalized span width in columns (`1` = no merge).
+     * @api
+     */
+    resolveColSpan(data: T, index: number, column: ColumnLeafDef<T>, columnIndex: number, columnCount: number): number;
+    /**
+     * Resolves the per-row span layout for one pin group of the body.
+     * Computes merged widths and covered cells across the FULL leaf group.
+     * @param data - Raw row data object.
+     * @param index - Zero-based row index in the processed dataset.
+     * @param columns - Full ordered leaves of one pin group.
+     * @param offsets - Pre-computed absolute geometry for `columns`.
+     * @returns Per-row span layout for the group.
+     * @api
+     */
+    getRowSpans(data: T, index: number, columns: ColumnLeafDef<T>[], offsets: { offset: number; size: number }[]): RowSpanLayout;
     setData(data: T[] | null | undefined): void;
     /**
      * Chunk-append API for incremental data loading (infinite scroll, live

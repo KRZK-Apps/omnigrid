@@ -236,8 +236,31 @@ See [@omnigrid/react](../../adapters/react/README.md).
 ## Exported helpers
 
 - `flattenColumns`, `isColumnLeaf`, `isColumnGroup`, `getColumnGroups` — column tree utilities.
+- `resolveColSpan`, `getRowSpans`, `getCellSpanningParams` — column spanning
+  (`ColumnDef.colSpan`): normalized per-cell spans and per-row merged layouts.
 - `Store`, `Virtualizer`, `EventBus`, `DomPool`, `SlotManager`, `IconRegistry` — building blocks
   (mostly used internally; public for advanced integrations/tests).
+
+### Column spanning (`colSpan`)
+
+A leaf column may merge horizontally across consecutive visible columns:
+
+```ts
+const columns: ColumnDef<Row>[] = [
+    { id: "title", width: 200, colSpan: 2 },                       // static: always 2
+    { id: "note", width: 160, colSpan: ({ data }) => (data.merged ? 3 : 1) },
+];
+```
+
+`resolveColSpan` normalizes one cell (floors, clamps to `>= 1`, clips to the
+pin group, falls back to `1` on resolver errors); `getRowSpans` / `Grid.getRowSpans`
+aggregates a whole row — the origin carries the summed pixel width aligned to
+the starting column, covered cells are skipped. `Grid.getViewportData`
+additionally exposes the full leaf groups (`leafColumns` + `columnOffsets`,
+pinned siblings likewise) and expands the shared column window so spans
+crossing the viewport boundary are never clipped. The React adapter resolves
+per-row layouts (memoized per viewport commit) and paints merged widths via
+`translateX` without breaking node recycling.
 
 ## Links
 

@@ -1,4 +1,4 @@
-import type { CellAlign, ColumnLeafDef, PooledRow, RowId, RowStyle, ViewportData } from "@omnigrid/core";
+import type { CellAlign, ColumnLeafDef, PooledRow, RowId, RowSpanLayout, RowStyle, ViewportData } from "@omnigrid/core";
 
 import { type ContentBridge, contentToReactNode, isSlotHtmlContent } from "./content";
 import type { CellRoot } from "./reactRoot";
@@ -12,6 +12,11 @@ export interface PooledCellRenderInfo<T> {
     columnIndex: number;
     rowId: RowId;
     rowIndex: number;
+    /**
+     * Normalized horizontal span of this cell (`1` = plain cell).
+     * Span origins render the merged width; covered cells are skipped.
+     */
+    colSpan: number;
 }
 
 export interface PooledRowModifiers {
@@ -70,6 +75,7 @@ interface CellPane<T> {
     element: HTMLDivElement;
     column: ColumnLeafDef<T> | null;
     columnIndex: number;
+    span: number;
     root: CellRoot | null;
     offsetX: number | null;
     width: number | null;
@@ -130,7 +136,7 @@ export class PooledRowPane<T> {
         });
     }
     /** Binds a row to the panel and fully rebuilds content. */
-    public bind(row: PooledRow<T>, columns: PooledColumn<T>[], originX = 0): void {
+    public bind(row: PooledRow<T>, columns: PooledColumn<T>[], originX = 0, spans?: RowSpanLayout | null): void {
         const hovered = this.host.matches(":hover");
         if (hovered && this.row) this.callbacks.onRowHover(this.row, false);
         this.row = row;
@@ -142,17 +148,22 @@ export class PooledRowPane<T> {
         // copies the row background colour onto each existing cell. If it ran
         // first, newly created cells would keep the default CSS background
         // until the next bind (i.e. until scrolling).
-        this.mapColumns(columns, true);
+        this.mapColumns(columns, true, spans);
         this.applyRowPresentation(row);
         if (hovered) this.callbacks.onRowHover(row, true);
     }
 
+    /** Returns the currently bound row, if any. */
+    public getRow(): PooledRow<T> | null {
+        return this.row;
+    }
+
     /** Re-layouts cells for a new horizontal column window. */
-    public updateColumns(columns: PooledColumn<T>[], originX = 0): void {
+    public updateColumns(columns: PooledColumn<T>[], originX = 0, spans?: RowSpanLayout | null): void {
         this.originX = originX;
         const row = this.row;
         if (row) this.applyRowSizing(row);
-        this.mapColumns(columns, false);
+        this.mapColumns(columns, false, spans);
     }
 
     /** Single row positioning operation — transform only (no reflow). */
@@ -183,7 +194,7 @@ export class PooledRowPane<T> {
         while (this.cells.length < count) this.cells.push(this.createCell());
     }
 
-    private mapColumns(columns: PooledColumn<T>[], forceContent: boolean): void {
+    private mapColumns(columns: PooledColumn<T>[], forceContent: boolean, spans?: RowSpanLayout | null): void {
         this.ensureCells(columns.length);
 
         for (let slot = 0; slot < this.cells.length; slot += 1) {
@@ -202,12 +213,34 @@ export class PooledRowPane<T> {
                 continue;
             }
 
-            const columnChanged = cell.column !== layout.column || cell.columnIndex !== layout.index;
-            this.layoutCell(cell, layout);
+            // Spanned rows: covered leaves render nothing — the span origin
+            // owns the merged width. Park the node off-screen so recycled
+            // nodes never overlap the merged cell.
+            const covered: boolean = spans?.spans[slot]?.covered ?? false;
+            if (covered) {
+                if (cell.column !== null) {
+                    this.clearContent(cell);
+                    cell.column = null;
+                    cell.columnIndex = -1;
+                }
+                cell.offsetX = null;
+                cell.width = null;
+                cell.element.style.transform = `translate3d(${OFFSCREEN_X}px, 0, 0)`;
+                continue;
+            }
+
+            const spanWidth: number | undefined = spans?.widths[slot];
+            const spanOffset: number | undefined = spans?.offsets[slot];
+            const effective: PooledColumn<T> =
+                spanWidth !== undefined && spanOffset !== undefined ? { ...layout, width: spanWidth, offset: spanOffset } : layout;
+
+            const columnChanged = cell.column !== layout.column || cell.columnIndex !== layout.index || cell.span !== (spans?.spans[slot]?.span ?? 1);
+            this.layoutCell(cell, effective);
 
             if (columnChanged) cell.columnIndex = layout.index;
             if (columnChanged || forceContent) {
                 cell.column = layout.column;
+                cell.span = spans?.spans[slot]?.span ?? 1;
                 this.renderContent(cell);
             }
         }
@@ -243,6 +276,7 @@ export class PooledRowPane<T> {
             element,
             column: null,
             columnIndex: -1,
+            span: 1,
             root: null,
             offsetX: null,
             width: null,
@@ -274,6 +308,7 @@ export class PooledRowPane<T> {
             columnIndex: cell.columnIndex,
             rowId: row.rowId,
             rowIndex: row.index,
+            colSpan: cell.span,
         };
         this.applyCellPresentation(cell, cellInfo);
         const content = this.callbacks.renderCellContent(cellInfo);

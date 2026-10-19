@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 
 import type {
     CellRenderParams,
+    CellSpan,
     ColumnGroupDef,
     ColumnLeafDef,
     ColumnStyleParams,
@@ -18,6 +19,7 @@ import type {
     OverlayState,
     OverlayType,
     RowRenderParams,
+    RowSpanLayout,
     RowStyle,
     SlotMount,
     SlotName,
@@ -246,6 +248,167 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         Map<string, { revision: number; data: unknown[] | null; presentation: ResolvedColumnPresentation }>
     >(new Map());
 
+    /**
+     * Memoized per-row span layouts, keyed by row index within one viewport
+     * commit. `getRowSpans` walks the full leaf group per visible row; the
+     * cache keeps horizontal scroll at 60 FPS by reusing the layout while the
+     * column set, offsets, and revision are unchanged. Cleared whenever the
+     * column window or structural revision changes (see `syncPool`).
+     */
+    const spanCacheRef = useRef<{
+        revision: number;
+        columns: unknown;
+        offsets: unknown;
+        pinnedLeftColumns: unknown;
+        pinnedLeftOffsets: unknown;
+        pinnedRightColumns: unknown;
+        pinnedRightOffsets: unknown;
+        layouts: Map<number, { central: RowSpanLayout | null; left: RowSpanLayout | null; right: RowSpanLayout | null }>;
+    }>({
+        revision: -1,
+        columns: null,
+        offsets: null,
+        pinnedLeftColumns: null,
+        pinnedLeftOffsets: null,
+        pinnedRightColumns: null,
+        pinnedRightOffsets: null,
+        layouts: new Map(),
+    });
+
+    const getCachedRowSpans = (
+        viewport: ViewportData<T>,
+        rowData: T,
+        rowIndex: number,
+    ): { central: RowSpanLayout | null; left: RowSpanLayout | null; right: RowSpanLayout | null } => {
+        const revision: number = grid.getRevision();
+        const cache = spanCacheRef.current;
+        const sameWindow: boolean =
+            cache.revision === revision &&
+            cache.columns === viewport.leafColumns &&
+            cache.offsets === viewport.columnOffsets &&
+            cache.pinnedLeftColumns === viewport.pinnedLeftLeafColumns &&
+            cache.pinnedLeftOffsets === viewport.pinnedLeftOffsets &&
+            cache.pinnedRightColumns === viewport.pinnedRightLeafColumns &&
+            cache.pinnedRightOffsets === viewport.pinnedRightOffsets;
+        if (!sameWindow) {
+            cache.revision = revision;
+            cache.columns = viewport.leafColumns;
+            cache.offsets = viewport.columnOffsets;
+            cache.pinnedLeftColumns = viewport.pinnedLeftLeafColumns;
+            cache.pinnedLeftOffsets = viewport.pinnedLeftOffsets;
+            cache.pinnedRightColumns = viewport.pinnedRightLeafColumns;
+            cache.pinnedRightOffsets = viewport.pinnedRightOffsets;
+            cache.layouts.clear();
+        }
+        const cached = cache.layouts.get(rowIndex);
+        if (cached) return cached;
+        const resolve = (columns: ColumnLeafDef<T>[], offsets: { offset: number; size: number }[]): RowSpanLayout | null => {
+            if (columns.length === 0) return null;
+            let hasSpan: boolean = false;
+            for (let i: number = 0; i < columns.length; i += 1) {
+                if (columns[i].colSpan !== undefined) {
+                    hasSpan = true;
+                    break;
+                }
+            }
+            if (!hasSpan) return null;
+            return grid.getRowSpans(rowData, rowIndex, columns, offsets);
+        };
+        const entry = {
+            central: resolve(viewport.leafColumns, viewport.columnOffsets),
+            left: resolve(viewport.pinnedLeftLeafColumns, viewport.pinnedLeftOffsets),
+            right: resolve(viewport.pinnedRightLeafColumns, viewport.pinnedRightOffsets),
+        };
+        cache.layouts.set(rowIndex, entry);
+        return entry;
+    };
+
+    /**
+     * Slices a full-group span layout down to the windowed columns a layer
+     * renders. The scrollable layer renders `columnRange` over `leafColumns`;
+     * pinned layers render their whole group. Spans that start before the
+     * window and cover into it surface as a leading origin whose `left`
+     * already matches the starting column — no clipping. Returns `null`
+     * when the row carries no spans so the pane takes the fast path.
+     */
+    const sliceSpanLayoutForLayer = (
+        viewport: ViewportData<T>,
+        layerColumns: PooledColumn<T>[],
+        isCentral: boolean,
+        layout: RowSpanLayout | null,
+    ): RowSpanLayout | null => {
+        if (!layout) return null;
+        const start: number = isCentral ? viewport.columnRange.start : 0;
+        const spans: CellSpan[] = [];
+        const widths: number[] = [];
+        const offsets: number[] = [];
+        // Full-group span origins before the window that still cover into
+        // it: surface the FIRST visible covered leaf as the rendered origin
+        // with the REMAINING width (origin left + covered prefix clipped).
+        for (let slot: number = 0; slot < layerColumns.length; slot += 1) {
+            const globalIndex: number = start + slot;
+            const cell: CellSpan | undefined = layout.spans[globalIndex];
+            const leafOffset: number = layerColumns[slot]?.offset ?? 0;
+            if (!cell) {
+                spans.push({ span: 1, covered: false });
+                widths.push(layerColumns[slot]?.width ?? 0);
+                offsets.push(leafOffset);
+                continue;
+            }
+            if (cell.covered) {
+                // Find the origin: walk back while covered. When the origin
+                // itself is before the window, the first visible covered leaf
+                // becomes the rendered origin (width = remaining span width).
+                let origin: number = globalIndex;
+                while (origin > 0 && layout.spans[origin]?.covered) origin -= 1;
+                const originCovered: boolean = layout.spans[origin]?.covered ?? true;
+                if (!originCovered && origin < start) {
+                    // Only the FIRST visible covered leaf renders; later ones
+                    // stay covered (skipped) so the merged cell paints once.
+                    if (slot > 0 && layout.spans[globalIndex - 1]?.covered && globalIndex - 1 >= start) {
+                        spans.push({ span: 1, covered: true });
+                        widths.push(0);
+                        offsets.push(leafOffset);
+                        continue;
+                    }
+                    const originSpan: number = layout.spans[origin]?.span ?? 1;
+                    const originEnd: number = origin + originSpan;
+                    // Visible remainder: from the window's left edge at this
+                    // slot to the span end (clipped to rendered leaves).
+                    let remaining: number = 0;
+                    let visibleSpan: number = 0;
+                    for (let k: number = slot; k < layerColumns.length; k += 1) {
+                        const colIndex: number = start + k;
+                        if (colIndex >= originEnd) break;
+                        remaining += layerColumns[k]?.width ?? 0;
+                        visibleSpan += 1;
+                    }
+                    spans.push({ span: Math.max(1, visibleSpan), covered: false });
+                    widths.push(remaining);
+                    offsets.push(leafOffset);
+                    continue;
+                }
+                spans.push({ span: 1, covered: true });
+                widths.push(0);
+                offsets.push(leafOffset);
+                continue;
+            }
+            // Origin inside the window: clip the width to the rendered
+            // leaves so a span running past the right edge does not overlap
+            // the pinned-right pane or overflow the scrollable layer.
+            let clipped: number = 0;
+            let visibleSpan: number = 0;
+            for (let k: number = 0; k < cell.span && slot + k < layerColumns.length; k += 1) {
+                clipped += layerColumns[slot + k]?.width ?? 0;
+                visibleSpan += 1;
+            }
+            spans.push({ span: Math.max(1, visibleSpan), covered: false });
+            widths.push(clipped);
+            offsets.push(leafOffset);
+        }
+        return { spans, widths, offsets };
+    };
+
     const getColumnPresentation = (column: ColumnLeafDef<T>): ResolvedColumnPresentation => {
         const revision: number = grid.getRevision();
         const processedData: T[] = grid.getProcessedData();
@@ -382,7 +545,21 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 },
                 bindRow: (host, row) => {
                     const pane = paneMap.get(host);
-                    if (pane) pane.bind(row, layer.columns, layer.originX);
+                    if (!pane) return;
+                    // Per-row span layout over the FULL leaf group: merged
+                    // widths come from the span origin's summed geometry and
+                    // covered leaves are skipped — no clipping or overlap when
+                    // a span crosses the virtual window boundary.
+                    const viewport = grid.getViewportData();
+                    const spans = getCachedRowSpans(viewport, row.data, row.index);
+                    const isLeft: boolean = layer === layers.left;
+                    const isRight: boolean = layer === layers.right;
+                    const layout = isLeft ? spans.left : isRight ? spans.right : spans.central;
+                    // Slice the full-group layout down to the windowed columns
+                    // this layer renders: `columnRange` addresses `leafColumns`
+                    // (scrollable) while pinned layers render their full group.
+                    const sliced = sliceSpanLayoutForLayer(viewport, layer.columns, !isLeft && !isRight, layout);
+                    pane.bind(row, layer.columns, layer.originX, sliced);
                 },
                 transformRow: (host, offsetY) => {
                     const pane = paneMap.get(host);
@@ -512,7 +689,18 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             if (columnWindowKey !== columnWindowKeyRef.current) {
                 columnWindowKeyRef.current = columnWindowKey;
                 const updateColumnWindow = (): void => {
-                    for (const pane of layers.central.panes) pane.updateColumns(layers.central.columns, layers.central.originX);
+                    // Span-aware: each pane resolves its own row's layout so
+                    // merged cells keep their summed width while the window
+                    // slides — covered leaves stay parked off-screen.
+                    for (const pane of layers.central.panes) {
+                        const paneRow = pane.getRow();
+                        if (!paneRow) {
+                            pane.updateColumns(layers.central.columns, layers.central.originX, null);
+                            continue;
+                        }
+                        const spans = getCachedRowSpans(currentViewportData, paneRow.data, paneRow.index);
+                        pane.updateColumns(layers.central.columns, layers.central.originX, sliceSpanLayoutForLayer(currentViewportData, layers.central.columns, true, spans.central));
+                    }
                     setColumnWindowVersion((v) => v + 1);
                 };
                 if (synchronousColumnWindow) {

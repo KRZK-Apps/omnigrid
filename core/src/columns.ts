@@ -1,9 +1,4 @@
-import type {
-    ColumnDef,
-    ColumnGroupDef,
-    ColumnGroupViewport,
-    ColumnLeafDef,
-} from "./types";
+import type { CellSpan, CellSpanningParams, ColumnDef, ColumnGroupDef, ColumnGroupViewport, ColumnLeafDef, RowId, RowNode, RowSpanLayout } from "./types";
 
 /**
  * Runtime narrowing: does the column definition describe a GROUP
@@ -101,4 +96,150 @@ export function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
     if (column.valueGetter) return column.valueGetter(row);
     if (column.field) return (row as Record<string, unknown>)[column.field as string];
     return undefined;
+}
+
+/**
+ * Builds the `CellSpanningParams` context for a single row.
+ *
+ * Shared by every span entry point so resolver functions always observe the
+ * same row identity (`id` / `index` / `data` shape as `RowNode`).
+ *
+ * @param data - Raw row data object.
+ * @param index - Zero-based index of the row in the processed dataset.
+ * @param getRowId - Stable id resolver (defaults to the row index).
+ * @param column - Column definition being evaluated.
+ * @returns Span context handed to `colSpan` resolver functions.
+ * @api
+ */
+export function getCellSpanningParams<T>(
+    data: T,
+    index: number,
+    getRowId: (row: T, index: number) => RowId,
+    column: ColumnLeafDef<T>,
+): CellSpanningParams<T> {
+    const node: RowNode<T> = { id: getRowId(data, index), index, data };
+    return { data, node, column };
+}
+
+/**
+ * Resolves the normalized horizontal span of one cell.
+ *
+ * Static numbers are used directly; functions are evaluated with
+ * `getCellSpanningParams`. The result is floored to an integer, clamped to
+ * `>= 1`, and clipped so the span never runs past `columnCount` leaves.
+ * Resolver exceptions fall back to `1` (no merge) so a single bad callback
+ * cannot break the viewport.
+ *
+ * @param data - Raw row data object.
+ * @param index - Zero-based row index in the processed dataset.
+ * @param getRowId - Stable id resolver.
+ * @param column - Column definition being evaluated.
+ * @param columnIndex - Position of the column in the visible leaf layout.
+ * @param columnCount - Total number of visible leaves in the pin group.
+ * @returns Normalized span width in columns (`1` = no merge).
+ * @api
+ */
+export function resolveColSpan<T>(
+    data: T,
+    index: number,
+    getRowId: (row: T, index: number) => RowId,
+    column: ColumnLeafDef<T>,
+    columnIndex: number,
+    columnCount: number,
+): number {
+    const declared: ColumnLeafDef<T>["colSpan"] = column.colSpan;
+    if (declared === undefined) return 1;
+    let raw: number = 1;
+    if (typeof declared === "function") {
+        try {
+            raw = declared(getCellSpanningParams(data, index, getRowId, column));
+        } catch {
+            return 1;
+        }
+    } else {
+        raw = declared;
+    }
+    if (!Number.isFinite(raw)) return 1;
+    const span: number = Math.floor(raw);
+    if (span <= 1) return 1;
+    const remaining: number = columnCount - columnIndex;
+    if (remaining <= 1) return 1;
+    return Math.min(span, remaining);
+}
+
+/**
+ * Resolves the per-row span layout for a pin group of visible leaves.
+ *
+ * Walks the leaves left to right: span origins keep their (possibly
+ * resolver-computed) width and mark the following `span - 1` leaves as
+ * covered; covered leaves contribute zero width so adapters can skip them
+ * without overlap. Pixel geometry is aggregated from the pre-computed
+ * `offsets` items (`offset`/`size` per leaf), so a span origin's width is
+ * the exact sum of its covered columns and its `left` matches the starting
+ * column.
+ *
+ * Static-heavy rows short-circuit: when no visible leaf declares `colSpan`,
+ * the layout is the identity mapping (no resolver runs).
+ *
+ * @param data - Raw row data object.
+ * @param index - Zero-based row index in the processed dataset.
+ * @param getRowId - Stable id resolver.
+ * @param columns - Visible leaves of one pin group (scrollable or pinned).
+ * @param offsets - Pre-computed `VirtualItem` geometry for `columns`.
+ * @returns Per-row span layout for the group.
+ * @api
+ */
+export function getRowSpans<T>(
+    data: T,
+    index: number,
+    getRowId: (row: T, index: number) => RowId,
+    columns: ColumnLeafDef<T>[],
+    offsets: { offset: number; size: number }[],
+): RowSpanLayout {
+    const count: number = columns.length;
+    const spans: CellSpan[] = new Array<CellSpan>(count);
+    const widths: number[] = new Array<number>(count);
+    const layoutOffsets: number[] = new Array<number>(count);
+
+    let hasSpan: boolean = false;
+    for (let i: number = 0; i < count; i += 1) {
+        if (columns[i].colSpan !== undefined) {
+            hasSpan = true;
+            break;
+        }
+    }
+    if (!hasSpan) {
+        for (let i: number = 0; i < count; i += 1) {
+            spans[i] = { span: 1, covered: false };
+            widths[i] = offsets[i]?.size ?? 0;
+            layoutOffsets[i] = offsets[i]?.offset ?? 0;
+        }
+        return { spans, widths, offsets: layoutOffsets };
+    }
+
+    let i: number = 0;
+    while (i < count) {
+        const span: number = resolveColSpan(data, index, getRowId, columns[i], i, count);
+        if (span <= 1) {
+            spans[i] = { span: 1, covered: false };
+            widths[i] = offsets[i]?.size ?? 0;
+            layoutOffsets[i] = offsets[i]?.offset ?? 0;
+            i += 1;
+            continue;
+        }
+        const originOffset: number = offsets[i]?.offset ?? 0;
+        const end: number = Math.min(count, i + span);
+        let total: number = 0;
+        for (let k: number = i; k < end; k += 1) total += offsets[k]?.size ?? 0;
+        spans[i] = { span: end - i, covered: false };
+        widths[i] = total;
+        layoutOffsets[i] = originOffset;
+        for (let k: number = i + 1; k < end; k += 1) {
+            spans[k] = { span: 1, covered: true };
+            widths[k] = 0;
+            layoutOffsets[k] = originOffset;
+        }
+        i = end;
+    }
+    return { spans, widths, offsets: layoutOffsets };
 }
