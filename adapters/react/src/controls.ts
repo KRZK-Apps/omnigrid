@@ -366,6 +366,19 @@ function MultiSelectControl({ descriptor }: { descriptor: UIMultiSelectControl }
         [descriptor.options],
     );
 
+    const someChecked = useMemo(
+        () => descriptor.options.length > 0 && !allChecked && descriptor.options.some((opt) => opt.checked),
+        [descriptor.options, allChecked],
+    );
+
+    const selectAllRef = useRef<HTMLInputElement | null>(null);
+
+    useEffect(() => {
+        if (selectAllRef.current) {
+            selectAllRef.current.indeterminate = someChecked;
+        }
+    }, [someChecked]);
+
     const toggleAll = (checked: boolean) => {
         if (checked) {
             descriptor.onChange(descriptor.options.map((opt) => opt.value));
@@ -422,6 +435,7 @@ function MultiSelectControl({ descriptor }: { descriptor: UIMultiSelectControl }
                 "label",
                 { className: "omnigrid-multi-select-item" },
                 createElement("input", {
+                    ref: selectAllRef,
                     type: "checkbox",
                     className: "omnigrid-checkbox",
                     checked: allChecked,

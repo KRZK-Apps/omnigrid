@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { Grid } from "@omnigrid/core";
 import type { ColumnDef, GridState, UIInputControl, UISelectControl } from "@omnigrid/core";
-import { FilteringPlugin } from "@omnigrid/filtering-plugin";
+import { ColumnFilterPlugin } from "@omnigrid/column-filter-plugin";
 
 import { PopupHost } from "../popup";
 
@@ -36,9 +36,9 @@ function control<T>(grid: Grid<T>, id: string): { value: unknown; onChange: (val
     return found as { value: unknown; onChange: (value: string) => void };
 }
 
-describe("FilteringPlugin React integration", () => {
+describe("ColumnFilterPlugin React integration", () => {
     it("renders text filter popup controls via PopupHost", () => {
-        const plugin = new FilteringPlugin<ItemRow>();
+        const plugin = new ColumnFilterPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns, data: sampleRows, plugins: [plugin] });
 
         plugin.openColumnFilter("name", { x: 1, y: 2 });
@@ -57,7 +57,7 @@ describe("FilteringPlugin React integration", () => {
 
     it("renders number filter popup with range inputs", () => {
         const itemColumns: ColumnDef<ItemRow>[] = [{ id: "id", field: "id", header: "ID", width: 100 }];
-        const plugin = new FilteringPlugin<ItemRow>();
+        const plugin = new ColumnFilterPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns: itemColumns, data: sampleRows, plugins: [plugin] });
 
         plugin.openColumnFilter("id");
@@ -77,7 +77,7 @@ describe("FilteringPlugin React integration", () => {
 
     it("renders boolean filter popup with All/Yes/No", () => {
         const itemColumns: ColumnDef<ItemRow>[] = [{ id: "active", field: "active", header: "Active", width: 100 }];
-        const plugin = new FilteringPlugin<ItemRow>();
+        const plugin = new ColumnFilterPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns: itemColumns, data: sampleRows, plugins: [plugin] });
 
         plugin.openColumnFilter("active");
@@ -94,7 +94,7 @@ describe("FilteringPlugin React integration", () => {
 
     it("renders select filter popup with multi-select", () => {
         const itemColumns: ColumnDef<ItemRow>[] = [{ id: "category", field: "category", header: "Category", filterType: "set", width: 100 }];
-        const plugin = new FilteringPlugin<ItemRow>();
+        const plugin = new ColumnFilterPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns: itemColumns, data: sampleRows, plugins: [plugin] });
 
         plugin.openColumnFilter("category");
@@ -110,7 +110,7 @@ describe("FilteringPlugin React integration", () => {
     });
 
     it("closes popup when grid state changes", () => {
-        const plugin = new FilteringPlugin<ItemRow>();
+        const plugin = new ColumnFilterPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns, data: sampleRows, plugins: [plugin] });
 
         plugin.openColumnFilter("name");

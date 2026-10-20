@@ -30,14 +30,14 @@ function toText(value: unknown): string {
 }
 
 /** Configuration for the filtering plugin. */
-export interface FilteringPluginOptions {
+export interface ColumnFilterPluginOptions {
     /** Debounce applied by the adapter to text inputs before the filter is applied. @default 250 */
     debounceMs?: number;
 }
 
 /** Adds a declarative column filter popup on top of the core filter engine. */
-export class FilteringPlugin<T> implements GridPlugin<T> {
-    public readonly name = "@omnigrid/filtering-plugin";
+export class ColumnFilterPlugin<T> implements GridPlugin<T> {
+    public readonly name = "@omnigrid/column-filter-plugin";
     private api?: GridApi<T>;
     private anchor?: UIPopupAnchor;
     /** Operator chosen in the popup before any value was typed (no condition exists yet). */
@@ -48,7 +48,7 @@ export class FilteringPlugin<T> implements GridPlugin<T> {
     private closeAfterApply = false;
     private readonly debounceMs?: number;
 
-    public constructor(options: FilteringPluginOptions = {}) {
+    public constructor(options: ColumnFilterPluginOptions = {}) {
         this.debounceMs = options.debounceMs;
     }
 

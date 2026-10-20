@@ -50,6 +50,40 @@ describe("renderControl", () => {
         expect(html).toContain("omnigrid-control-body");
         expect(html.indexOf("icon-filter")).toBeLessThan(html.indexOf("omnigrid-control-input"));
     });
+
+    it("renders the multi-select select-all checkbox checked when all options are selected", () => {
+        const descriptor: UIControlDescriptor = {
+            id: "ms",
+            type: "multi-select",
+            options: [
+                { value: "a", label: "A", checked: true },
+                { value: "b", label: "B", checked: true },
+            ],
+            onChange: () => undefined,
+        };
+        const html: string = renderToStaticMarkup(createElement(Fragment, null, renderControl(descriptor)));
+        const actionsIndex: number = html.indexOf("omnigrid-multi-select-actions");
+        const listIndex: number = html.indexOf("omnigrid-multi-select-list");
+        const actionsHtml: string = html.slice(actionsIndex, listIndex);
+        expect(actionsHtml).toContain("checked");
+    });
+
+    it("renders the multi-select select-all checkbox unchecked when only some options are selected", () => {
+        const descriptor: UIControlDescriptor = {
+            id: "ms",
+            type: "multi-select",
+            options: [
+                { value: "a", label: "A", checked: true },
+                { value: "b", label: "B", checked: false },
+            ],
+            onChange: () => undefined,
+        };
+        const html: string = renderToStaticMarkup(createElement(Fragment, null, renderControl(descriptor)));
+        const actionsIndex: number = html.indexOf("omnigrid-multi-select-actions");
+        const listIndex: number = html.indexOf("omnigrid-multi-select-list");
+        const actionsHtml: string = html.slice(actionsIndex, listIndex);
+        expect(actionsHtml).not.toContain("checked");
+    });
 });
 
 describe("PopupHost", () => {

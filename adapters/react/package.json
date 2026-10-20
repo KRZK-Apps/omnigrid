@@ -1,6 +1,6 @@
 {
   "name": "@omnigrid/react",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "React adapter and renderer for OmniGrid",
   "keywords": [
     "omnigrid",
@@ -45,7 +45,7 @@
     "@omnigrid/default-theme": "^0.1.0"
   },
   "devDependencies": {
-    "@omnigrid/filtering-plugin": "*",
+    "@omnigrid/column-filter-plugin": "*",
     "@omnigrid/quick-filter-plugin": "*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"

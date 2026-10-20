@@ -1,5 +1,5 @@
 {
-    "name": "@omnigrid/filtering-plugin",
+    "name": "@omnigrid/column-filter-plugin",
     "version": "0.1.1",
     "description": "Headless column filter popup plugin for OmniGrid",
     "keywords": [
@@ -11,9 +11,9 @@
     "repository": {
         "type": "git",
         "url": "https://github.com/KRZK-Apps/omnigrid.git",
-        "directory": "plugins/base/filtering"
+        "directory": "plugins/base/column-filter"
     },
-    "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/filtering#readme",
+    "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/column-filter#readme",
     "bugs": {
         "url": "https://github.com/KRZK-Apps/omnigrid/issues"
     },

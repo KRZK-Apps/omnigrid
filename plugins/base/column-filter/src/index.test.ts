@@ -1,6 +1,6 @@
 import { Grid } from "@omnigrid/core";
 import type { ColumnDef, UIControlDescriptor, UIInputControl, UIMultiSelectControl, UISelectControl } from "@omnigrid/core";
-import { FilteringPlugin, inferColumnDataType } from "./index";
+import { ColumnFilterPlugin, inferColumnDataType } from "./index";
 import {describe, it, expect} from "vitest";
 
 interface ItemRow {
@@ -46,9 +46,9 @@ function control(grid: Grid<any>, id: string): UIControlDescriptor {
     return grid.getPopup()!.controls.find((item) => item.id === id)!;
 }
 
-describe("FilteringPlugin", () => {
+describe("ColumnFilterPlugin", () => {
     it("opens a popup whose controls drive the core filter model", () => {
-        const plugin = new FilteringPlugin<Row>();
+        const plugin = new ColumnFilterPlugin<Row>();
         const grid = new Grid<Row>({ columns, data: rows, plugins: [plugin] });
         plugin.openColumnFilter("name", { x: 1, y: 2 });
         expect(grid.getPopup()?.title).toBeUndefined();
@@ -66,7 +66,7 @@ describe("FilteringPlugin", () => {
     });
 
     it("keeps an operator chosen before any value is typed", () => {
-        const plugin = new FilteringPlugin<Row>();
+        const plugin = new ColumnFilterPlugin<Row>();
         const grid = new Grid<Row>({ columns, data: rows, plugins: [plugin] });
         plugin.openColumnFilter("name");
         (control(grid, "operator") as UISelectControl).onChange("equals");
@@ -75,7 +75,7 @@ describe("FilteringPlugin", () => {
     });
 
     it("closes its popup on unregister", () => {
-        const plugin = new FilteringPlugin<Row>();
+        const plugin = new ColumnFilterPlugin<Row>();
         const grid = new Grid<Row>({ columns, data: rows });
         const unregister = grid.registerPlugin(plugin);
         plugin.openColumnFilter("name");
@@ -85,7 +85,7 @@ describe("FilteringPlugin", () => {
 
     it("handles number column with range", () => {
         const itemColumns: ColumnDef<ItemRow>[] = [{ id: "id", field: "id", header: "ID", width: 100 }];
-        const plugin = new FilteringPlugin<ItemRow>();
+        const plugin = new ColumnFilterPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns: itemColumns, data: sampleRows, plugins: [plugin] });
 
         plugin.openColumnFilter("id");
@@ -107,7 +107,7 @@ describe("FilteringPlugin", () => {
 
     it("handles boolean column with All/Yes/No", () => {
         const itemColumns: ColumnDef<ItemRow>[] = [{ id: "active", field: "active", header: "Active", width: 100 }];
-        const plugin = new FilteringPlugin<ItemRow>();
+        const plugin = new ColumnFilterPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns: itemColumns, data: sampleRows, plugins: [plugin] });
 
         plugin.openColumnFilter("active");
@@ -127,7 +127,7 @@ describe("FilteringPlugin", () => {
         const itemColumns: ColumnDef<ItemRow>[] = [
             { id: "category", field: "category", header: "Category", filterType: "set", width: 100 },
         ];
-        const plugin = new FilteringPlugin<ItemRow>();
+        const plugin = new ColumnFilterPlugin<ItemRow>();
         const grid = new Grid<ItemRow>({ columns: itemColumns, data: sampleRows, plugins: [plugin] });
 
         plugin.openColumnFilter("category");
