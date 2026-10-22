@@ -47,6 +47,7 @@ export class DomPool<T> {
     /** Whether slot i's content (bindRow) has been bound since its last position change. */
     private readonly hostContentBound: boolean[] = [];
     private readonly hostOffsetY: number[] = [];
+    private readonly hostHeight: number[] = [];
     /** Scratch flags: whether slot i was claimed by the current window (ring mapping). */
     private readonly slotActive: boolean[] = [];
 
@@ -77,24 +78,25 @@ export class DomPool<T> {
     public update(viewport: DomPoolUpdateOptions<T>): DomPoolUpdate<T> {
         this.assertActive();
 
-        const { data, rowRange, rowHeight, rowWidth, skipBind } = viewport;
+        const { data, rowRange, rowHeight, rowOffsets, rowHeights, visibleRowRange, rowWidth, skipBind } = viewport;
         if (data !== this.lastData) {
             this.lastData = data;
             this.forceRebind = true;
         }
 
         const range: Range = rowRange;
-        const windowSize = range.end - range.start;
+        const windowSize: number = range.end - range.start;
 
         // Pool grows only up to the high-water mark of the window: during
         // normal scrolling the pool size stays stable — nodes are neither
         // created nor destroyed.
         while (this.hosts.length < windowSize) {
-            const host = this.bindings.createRow();
+            const host: RowHost<T> = this.bindings.createRow();
             this.hosts.push(host);
             this.hostRowIndex.push(null);
             this.hostContentBound.push(false);
             this.hostOffsetY.push(OFFSCREEN_Y);
+            this.hostHeight.push(-1);
         }
 
         const bound: DomPoolUpdate<T>["bound"] = [];
@@ -108,6 +110,10 @@ export class DomPool<T> {
         // `REBIND_PER_FRAME` stale slots, then resumes normal binding for
         // new rows.
         //
+        // The quota covers the OFF-SCREEN rows only: the rows that intersect
+        // the viewport are always bound (see below) — they carry the data the
+        // user actually reads.
+        //
         // With RING mapping the quota rarely engages during slow scroll:
         // scrolling by k rows reassigns only k slots (the ones recycled from
         // rows that left the window), so steady scrolling performs O(k) binds
@@ -117,9 +123,9 @@ export class DomPool<T> {
         //
         // When forceRebind is set (from invalidate(), e.g. structural changes),
         // bind everything immediately — set quota to Infinity.
-        const REBIND_PER_FRAME = Math.max(1, Math.floor(windowSize / 3));
-        const rebindQuota = skipBind ? 0 : this.forceRebind ? Infinity : REBIND_PER_FRAME;
-        let quota = rebindQuota;
+        const REBIND_PER_FRAME: number = Math.max(1, Math.floor(windowSize / 3));
+        const rebindQuota: number = skipBind ? 0 : this.forceRebind ? Infinity : REBIND_PER_FRAME;
+        let quota: number = rebindQuota;
 
         // RING MAPPING: slot = rowIndex % poolSize. The slot a row occupies is
         // derived from the row index itself, not from the position inside the
@@ -130,16 +136,18 @@ export class DomPool<T> {
         // (slot i ↔ range.start + i), where EVERY slot changed its row index
         // on each frame and the rebind quota left the visible rows showing
         // stale content for several frames.
-        const poolSize = this.hosts.length;
-        for (let slot = 0; slot < poolSize; slot += 1) this.slotActive[slot] = false;
+        const poolSize: number = this.hosts.length;
+        for (let slot: number = 0; slot < poolSize; slot += 1) this.slotActive[slot] = false;
 
         // Iterate the window in ascending row order so the rebind quota, when
         // it engages, always refreshes from the top of the window downward.
-        for (let rowIndex = range.start; rowIndex < range.end; rowIndex += 1) {
-            const slot = rowIndex % poolSize;
+        for (let rowIndex: number = range.start; rowIndex < range.end; rowIndex += 1) {
+            const slot: number = rowIndex % poolSize;
             this.slotActive[slot] = true;
-            const host = this.hosts[slot];
-            const offsetY = rowIndex * rowHeight;
+            const host: RowHost<T> = this.hosts[slot];
+            const rangeIndex: number = rowIndex - range.start;
+            const offsetY: number = rowOffsets ? (rowOffsets[rangeIndex] ?? rowIndex * rowHeight) : rowIndex * rowHeight;
+            const currentHeight: number = rowHeights ? (rowHeights[rangeIndex] ?? rowHeight) : rowHeight;
 
             // Position is always updated — we need the transform to keep rows
             // at the correct offset regardless of whether content is bound.
@@ -149,29 +157,60 @@ export class DomPool<T> {
                 positioned.push({ host, offsetY });
             }
 
-            const indexChanged = this.hostRowIndex[slot] !== rowIndex;
-            const isNewSlot = this.hostRowIndex[slot] === null;
-            const needsBind = indexChanged || this.forceRebind || !this.hostContentBound[slot];
+            const indexChanged: boolean = this.hostRowIndex[slot] !== rowIndex;
+            const heightChanged: boolean = this.hostHeight[slot] !== currentHeight;
+            const isNewSlot: boolean = this.hostRowIndex[slot] === null;
+            const contentBound: boolean = this.hostContentBound[slot];
+
+            // The row BOX follows the virtualizer unconditionally: position AND
+            // height are geometry, not content. During a fast scroll the
+            // content of a recycled node is stale (it still belongs to the
+            // previous row), but the node must get the size of the row it
+            // stands for NOW — otherwise a 60px node occupies a 32px slot and
+            // the rows overlap (or leave gaps when the height shrinks).
+            // `resizeRow` only touches the box, never the content.
+            const resizeRow = this.bindings.resizeRow;
+            const canResize: boolean = resizeRow !== undefined && !this.forceRebind;
+            if (heightChanged && canResize && !isNewSlot) {
+                this.hostHeight[slot] = currentHeight;
+                resizeRow?.(host, currentHeight);
+            }
+
+            // A content re-bind is needed when the node shows a different row,
+            // when it has no content at all, or on a forced re-bind. A height
+            // change alone never invalidates the content — unless the adapter
+            // cannot resize a node, in which case the row has to be re-bound
+            // to pick up the new height.
+            const needsBind: boolean = indexChanged || this.forceRebind || !contentBound || (heightChanged && !canResize);
             // New slots (never been bound) must always bind — empty rows at the
             // viewport edge are visible as empty space, worse than a one-frame
-            // bind cost. During fast scroll (skipBind), only DEFER rebinding
-            // slots that already had content at a different row index.
-            const mustBind = isNewSlot || this.forceRebind || (needsBind && !skipBind && quota > 0);
+            // bind cost.
+            //
+            // The rows that intersect the viewport must bind as well, even
+            // during a fast scroll: the pool recycles its nodes in a ring, so
+            // a node that is not re-bound keeps the content of a completely
+            // unrelated row — the user would read another row's data (e.g. the
+            // wrong ID) in the visible area. Only the off-screen rows (the
+            // overscan corridor) follow the rebind quota.
+            const inViewport: boolean = visibleRowRange !== undefined && rowIndex >= visibleRowRange.start && rowIndex < visibleRowRange.end;
+            const quotaBind: boolean = needsBind && !skipBind && quota > 0;
+            const mustBind: boolean = isNewSlot || this.forceRebind || (needsBind && (inViewport || quotaBind));
             if (needsBind && mustBind) {
-                const dataRow = data[rowIndex];
+                const dataRow: T = data[rowIndex];
                 const row: PooledRow<T> = {
                     index: rowIndex,
                     rowId: this.getRowId(dataRow, rowIndex),
                     data: dataRow,
                     offsetY,
-                    height: rowHeight,
+                    height: currentHeight,
                     width: rowWidth,
                 };
                 this.hostRowIndex[slot] = rowIndex;
+                this.hostHeight[slot] = currentHeight;
                 this.hostContentBound[slot] = true;
                 this.bindings.bindRow(host, row);
                 bound.push({ host, row });
-                if (!isNewSlot && !this.forceRebind) quota -= 1;
+                if (!isNewSlot && !this.forceRebind && quotaBind) quota -= 1;
             } else if (indexChanged || this.forceRebind) {
                 // Index changed but we can't bind this frame (skipBind or
                 // quota exhausted) — update rowIndex for position tracking
@@ -179,6 +218,10 @@ export class DomPool<T> {
                 // at the correct new position until the next slow frame.
                 this.hostRowIndex[slot] = rowIndex;
                 this.hostContentBound[slot] = false;
+                // The node stands for the new row from now on: the adapters
+                // look rows up by index (hover highlight), so the index has to
+                // follow the position even while the content is still stale.
+                this.bindings.updateRowIndex?.(host, rowIndex);
             }
         }
 
@@ -186,11 +229,12 @@ export class DomPool<T> {
         // clear their content and move them off-screen, but keep the nodes for
         // the next frame. With ring mapping these slots are scattered across
         // the pool rather than forming a tail.
-        for (let slot = 0; slot < poolSize; slot += 1) {
+        for (let slot: number = 0; slot < poolSize; slot += 1) {
             if (this.slotActive[slot]) continue;
             if (this.hostRowIndex[slot] === null) continue;
-            const host = this.hosts[slot];
+            const host: RowHost<T> = this.hosts[slot];
             this.hostRowIndex[slot] = null;
+            this.hostHeight[slot] = -1;
             this.hostContentBound[slot] = false;
             this.hostOffsetY[slot] = OFFSCREEN_Y;
             this.bindings.recycleRow(host);
@@ -232,6 +276,7 @@ export class DomPool<T> {
         this.hostRowIndex.length = 0;
         this.hostContentBound.length = 0;
         this.hostOffsetY.length = 0;
+        this.hostHeight.length = 0;
         this.slotActive.length = 0;
         this.lastData = null;
         this.destroyed = true;

@@ -64,6 +64,7 @@ export type {
     Range,
     RowClassRules,
     RowClickEvent,
+    RowHeightUpdateOptions,
     RowHost,
     RowHoverEvent,
     RowId,
@@ -90,4 +91,4 @@ export type {
     VirtualItem,
 } from "./types";
 export { getColumnGroups, flattenColumns, isColumnGroup, isColumnLeaf, getCellValue, getCellSpanningParams, resolveColSpan, getRowSpans } from "./columns";
-export { Virtualizer } from "./virtualizer";
+export { Virtualizer, RowHeightRegistry } from "./virtualizer";

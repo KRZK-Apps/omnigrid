@@ -324,6 +324,8 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     filterOptions?: Array<{ label: string; value: any }>;
     /** Horizontal alignment of cell content. */
     align?: CellAlign;
+    /** Enables automatic text wrapping instead of ellipsis truncation. @default false @api */
+    wrapText?: boolean;
     /** Initial sort direction used by SortingPlugin. */
     sortState?: SortDirection;
     /** 1-based sort priority, set only while multiple columns are sorted. */
@@ -428,6 +430,33 @@ export type OverlayComponent<T> =
     | ((props: OverlayComponentProps<T>) => unknown)
     | ((payload: unknown, state: GridState<T>) => unknown);
 
+/**
+ * Options for a single row-height update.
+ *
+ * @api
+ */
+export interface RowHeightUpdateOptions {
+    /**
+     * Whether the grid applies the scroll anchoring correction itself.
+     * Set to `false` when the adapter wants to defer the correction — e.g.
+     * while the user is actively scrolling, where a scrollTop jump fights
+     * the user's input. The returned correction stays valid either way.
+     * @default true
+     */
+    anchor?: boolean;
+    /**
+     * Whether the grid notifies its Store subscribers about the change.
+     *
+     * The row heights are NOT part of the grid state — the notification only
+     * re-renders the host framework. Adapters that update the row geometry
+     * imperatively (the DOM pool) can opt out: a re-render per measured row
+     * starves the frame budget while the user scrolls, and the grid then
+     * lags behind the native scroll position.
+     * @default true
+     */
+    notify?: boolean;
+}
+
 export interface GridOptions<T> {
     /** Row data; omitted or null means an initial load is pending. */
     data?: T[] | null;
@@ -435,6 +464,29 @@ export interface GridOptions<T> {
     /** Returns a stable row ID; defaults to the row's current index. Use a stable ID to preserve row identity when rows are reordered. */
     getRowId?: (row: T, index: number) => RowId;
     rowHeight?: number;
+    /** Enables automatic text wrapping for all cells. @default false @api */
+    wrapText?: boolean;
+    /**
+     * Fallback row height (px) for rows that have not been measured yet.
+     * When set (or when `getRowHeight` is set), the grid switches to
+     * variable-height mode: each row may have its own height, while unknown
+     * rows use this estimate for scrollbar and range math.
+     * Defaults to `rowHeight`.
+     * @api
+     */
+    estimatedRowHeight?: number;
+    /**
+     * Synchronous per-row height resolver. Must be O(1) — it is consulted
+     * during virtualization math. Return `undefined` to fall back to the
+     * estimated height for that row. Dynamically measured heights (via
+     * `setRowHeight`) always win over this resolver.
+     *
+     * The result is captured when the offset index is (re)built, so the
+     * resolver must be stable for a given row index — changing it requires
+     * a `setData` / `setColumns` call (or `resetAllRowHeights`).
+     * @api
+     */
+    getRowHeight?: (rowIndex: number, row: T) => number | undefined;
     /** Rows to render beyond the visible viewport (top + bottom buffer). @default 5 */
     rowOverscan?: number;
     /** Columns to render beyond the visible viewport (left + right buffer). @default 2 */
@@ -518,7 +570,7 @@ export interface ColumnGroupViewport<T> {
 }
 
 export interface ViewportData<T> {
-    rows: Array<{ id: RowId; data: T; index: number; offset: number }>;
+    rows: Array<{ id: RowId; data: T; index: number; offset: number; height?: number }>;
     /** Scrollable (virtualized) leaf columns of the current horizontal window. */
     columns: Array<{ column: ColumnLeafDef<T>; index: number; offset: number; width: number }>;
     /** Left-pinned leaf columns — always visible, absolute offsets from 0. */
@@ -568,7 +620,29 @@ export interface ViewportData<T> {
      */
     columnGroupDepth: Map<number, number>;
     rowRange: Range;
+    /**
+     * Rows that intersect the viewport — `rowRange` without the overscan
+     * buffer.
+     *
+     * Adapters must bind these rows eagerly: pooled nodes are recycled in a
+     * ring, so a node that was not re-bound shows the data of an unrelated
+     * row.
+     * @api
+     */
+    visibleRowRange: Range;
     columnRange: Range;
+    /**
+     * Per-row vertical offsets aligned with `rowRange` in variable-height mode.
+     * Omitted in fixed-height mode.
+     * @api
+     */
+    rowOffsets?: number[];
+    /**
+     * Per-row heights aligned with `rowRange` in variable-height mode.
+     * Omitted in fixed-height mode.
+     * @api
+     */
+    rowHeights?: number[];
     totalWidth: number;
     totalHeight: number;
 }
@@ -640,6 +714,34 @@ export interface DomPoolBindings<T> {
     bindRow(host: RowHost<T>, row: PooledRow<T>): void;
     transformRow(host: RowHost<T>, offsetY: number): void;
     recycleRow(host: RowHost<T>): void;
+    /**
+     * Applies a new height to an already bound row node.
+     *
+     * Called when only the row HEIGHT changed (variable-height mode) while
+     * the row itself stayed the same: the content is still valid, so the
+     * node only needs a new box. Rebinding instead would re-render every
+     * cell of the row and re-trigger its measurement.
+     *
+     * Optional: when it is not implemented the pool falls back to a full
+     * re-bind for height changes.
+     * @api
+     */
+    resizeRow?(host: RowHost<T>, height: number): void;
+    /**
+     * Updates the row index a node stands for.
+     *
+     * Called when the node was re-used for a different row but its content
+     * could not be re-bound in the same frame (fast scroll, rebind quota).
+     * The node keeps the PREVIOUS content until it is bound, but its row
+     * index must already describe the NEW row — adapters look rows up by
+     * index (e.g. the hover highlight), and a stale index would highlight
+     * the wrong node.
+     *
+     * Optional: when it is not implemented the node keeps its old index
+     * until the content is bound.
+     * @api
+     */
+    updateRowIndex?(host: RowHost<T>, rowIndex: number): void;
 }
 
 /**
@@ -654,6 +756,27 @@ export interface DomPoolUpdateOptions<T> {
     rowRange: Range;
     /** Pixel height of each row. */
     rowHeight: number;
+    /**
+     * Per-row geometry for variable-height mode, aligned with `rowRange`:
+     * `rowOffsets[i]` / `rowHeights[i]` describe `data[rowRange.start + i]`.
+     * When present, the pool positions each row at its own offset and height
+     * instead of `rowIndex * rowHeight`. Omitted in fixed-height mode.
+     * @api
+     */
+    rowOffsets?: number[];
+    /** Per-row heights aligned with `rowOffsets`. See `rowOffsets`. @api */
+    rowHeights?: number[];
+    /**
+     * Rows that intersect the viewport (a subset of `rowRange`, without the
+     * overscan buffer).
+     *
+     * These rows are bound even when `skipBind` is set: a recycled node that
+     * is not re-bound keeps the content of a completely unrelated row, and
+     * the user would see the wrong data in the visible area. The off-screen
+     * rows follow the rebind quota.
+     * @api
+     */
+    visibleRowRange?: Range;
     /** Pixel width of each row (sum of all column widths). */
     rowWidth: number;
     /**
@@ -847,6 +970,45 @@ export interface GridApi<T> {
      * @api
      */
     appendData(rows: T[] | null | undefined): void;
+    /**
+     * Records the measured DOM height of a row (variable-height mode).
+     * Heights below 1px delta are ignored to prevent feedback loops between
+     * measurement and layout. Switching the height of rows above the current
+     * scroll position keeps the anchored row visually stable: the returned
+     * value is the scrollTop correction (px, may be negative) the adapter
+     * must apply to its scroll container to prevent viewport jumps.
+     * @param rowIndex - Zero-based index in the processed dataset.
+     * @param height - Measured row height in pixels (must be finite and > 0).
+     * @param options - Optional anchoring control.
+     * @returns ScrollTop adjustment in pixels (`0` = no anchoring needed).
+     * @api
+     */
+    setRowHeight(rowIndex: number, height: number, options?: RowHeightUpdateOptions): number;
+    /**
+     * Removes a measured row height (e.g. when row content collapses back to
+     * the estimate). Returns the scrollTop correction like `setRowHeight`.
+     * @param rowIndex - Zero-based index in the processed dataset.
+     * @param options - Optional anchoring control.
+     * @returns ScrollTop adjustment in pixels (`0` = no anchoring needed).
+     * @api
+     */
+    resetRowHeight(rowIndex: number, options?: RowHeightUpdateOptions): number;
+    /** Removes all measured row heights (e.g. after `setColumns`). @api */
+    resetAllRowHeights(): void;
+    /**
+     * Returns the absolute vertical offset (px) of the top of a row,
+     * accounting for variable heights. Falls back to `index * rowHeight`
+     * when no measurements exist.
+     * @param rowIndex - Zero-based index in the processed dataset.
+     * @api
+     */
+    getRowTop(rowIndex: number): number;
+    /**
+     * Returns the current (measured, resolved, or estimated) height of a row.
+     * @param rowIndex - Zero-based index in the processed dataset.
+     * @api
+     */
+    getRowHeight(rowIndex: number): number;
     setViewport(viewport: Partial<ViewportState>): void;
     refresh(): void;
     subscribe(listener: () => void): () => void;

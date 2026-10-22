@@ -40,6 +40,7 @@ export interface PooledRowCallbacks<T> {
     onRowHover(row: PooledRow<T>, hovered: boolean): void;
     onCellClick(row: PooledRow<T>, column: ColumnLeafDef<T>, modifiers: PooledRowModifiers): void;
     createRoot(container: HTMLDivElement): CellRoot;
+    onRowHeightChange?(rowIndex: number, height: number): void;
     /**
      * Returns a cheap scalar preview of the cell value, painted synchronously
      * into a blank cell while its first React commit (complex content) is
@@ -105,6 +106,8 @@ export class PooledRowPane<T> {
      * of the left + scrollable widths.
      */
     private originX = 0;
+    private variableHeight = false;
+    private heightMeasureId = 0;
 
     public constructor(
         private readonly host: HTMLDivElement,
@@ -134,6 +137,21 @@ export class PooledRowPane<T> {
             const row = this.row;
             if (row) this.callbacks.onRowHover(row, false);
         });
+        // Variable-height mode only: the row box is resized to the measured
+        // content height, so a height change has to be reported back to the
+        // grid. In fixed-height mode no observer is installed at all — the
+        // measurement would be a pointless layout read on every resize.
+        this.variableHeight = Boolean(callbacks.onRowHeightChange);
+        if (this.variableHeight) {
+            const observer = new ResizeObserver(() => {
+                const currentRow = this.row;
+                if (!currentRow) return;
+                const measured = host.scrollHeight;
+                if (Math.abs(measured - currentRow.height) < 1) return;
+                this.callbacks.onRowHeightChange?.(currentRow.index, measured);
+            });
+            observer.observe(host);
+        }
     }
     /** Binds a row to the panel and fully rebuilds content. */
     public bind(row: PooledRow<T>, columns: PooledColumn<T>[], originX = 0, spans?: RowSpanLayout | null): void {
@@ -144,13 +162,12 @@ export class PooledRowPane<T> {
         this.host.classList.remove("omnigrid-row-hover");
         this.originX = originX;
         this.applyRowSizing(row);
-        // Cells must exist BEFORE presentation is applied: applyRowPresentation
-        // copies the row background colour onto each existing cell. If it ran
-        // first, newly created cells would keep the default CSS background
-        // until the next bind (i.e. until scrolling).
         this.mapColumns(columns, true, spans);
         this.applyRowPresentation(row);
         if (hovered) this.callbacks.onRowHover(row, true);
+        if (this.variableHeight) {
+            this.scheduleHeightMeasurement(row);
+        }
     }
 
     /** Returns the currently bound row, if any. */
@@ -164,11 +181,42 @@ export class PooledRowPane<T> {
         const row = this.row;
         if (row) this.applyRowSizing(row);
         this.mapColumns(columns, false, spans);
+        if (this.variableHeight && row) {
+            this.scheduleHeightMeasurement(row);
+        }
     }
 
     /** Single row positioning operation — transform only (no reflow). */
     public setOffsetY(offsetY: number): void {
         this.host.style.transform = `translate3d(0, ${Math.round(offsetY)}px, 0)`;
+    }
+
+    /**
+     * Updates the row index the node stands for without touching its content.
+     *
+     * Used by the DOM pool when the node was re-used for a different row but
+     * the content could not be re-bound in the same frame (fast scroll, rebind
+     * quota): the content stays stale until the next bind, but the index has
+     * to describe the new row — the adapters look rows up by index (hover
+     * highlight), and a stale index would highlight the wrong node.
+     */
+    public setRowIndex(rowIndex: number): void {
+        this.host.dataset.rowIndex = String(rowIndex);
+    }
+
+    /**
+     * Applies a new height to the bound row without touching its content.
+     *
+     * Used by the DOM pool when only the row HEIGHT changed (variable-height
+     * mode): the row data is still valid, so the node is resized instead of
+     * re-bound — re-binding would re-render every cell and re-trigger the
+     * height measurement.
+     */
+    public resize(height: number): void {
+        const row = this.row;
+        if (!row || row.height === height) return;
+        row.height = height;
+        this.applyRowSizing(row);
     }
 
     /** Moves an unused row far off-screen (outside viewport). */
@@ -257,6 +305,19 @@ export class PooledRowPane<T> {
             cell.offsetX = offset;
             cell.width = layout.width;
         }
+        // Wrapping cells are sized by their CONTENT (the row height is
+        // measured from them), every other cell fills the row. The NEW column
+        // decides — a pooled cell can be recycled from a wrapping column into
+        // a plain one, and the leftover styles would break the row layout.
+        // Only the sizing is touched here: alignment and padding stay with the
+        // theme.
+        if (this.variableHeight && layout.column.wrapText) {
+            element.style.height = "auto";
+            element.style.minHeight = "100%";
+        } else {
+            element.style.height = "100%";
+            element.style.minHeight = "";
+        }
         if (cell.justify !== justify) {
             element.style.justifyContent = justify;
             cell.justify = justify;
@@ -269,7 +330,7 @@ export class PooledRowPane<T> {
         element.style.top = "0";
         element.style.left = "0";
         element.style.overflow = "hidden";
-        element.style.height = `${this.callbacks.rowHeight}px`;
+        element.style.height = "100%";
         this.host.appendChild(element);
 
         const cell: CellPane<T> = {
@@ -330,6 +391,26 @@ export class PooledRowPane<T> {
                 cell.appliedStyleKeys.push(key);
             }
         }
+        if (cell.column?.wrapText) {
+            // Wrapping cell: the text breaks into several lines and the cell
+            // grows with it. The theme owns the horizontal padding and the
+            // alignment — only the text flow and the vertical padding of the
+            // wrapped block are overridden.
+            cell.element.style.whiteSpace = "normal";
+            cell.element.style.wordBreak = "break-word";
+            cell.element.style.overflow = "visible";
+            cell.element.style.textOverflow = "clip";
+            cell.element.style.paddingBlock = "4px";
+            cell.element.style.alignItems = "flex-start";
+        } else {
+            // Reset the wrapping styles: the cell may be pooled from a
+            // wrapping column.
+            cell.element.style.whiteSpace = "nowrap";
+            cell.element.style.overflow = "hidden";
+            cell.element.style.textOverflow = "ellipsis";
+            cell.element.style.paddingBlock = "";
+            cell.element.style.alignItems = "";
+        }
     }
 
     private applyContent(cell: CellPane<T>, content: unknown, cellInfo: PooledCellRenderInfo<T>): void {
@@ -377,6 +458,26 @@ export class PooledRowPane<T> {
         cell.root.render(contentToReactNode(content, this.bridge));
     }
 
+    private scheduleHeightMeasurement(row: PooledRow<T>): void {
+        const id = ++this.heightMeasureId;
+        const measure = (): void => {
+            if (id !== this.heightMeasureId) return;
+            if (this.row?.index !== row.index) return;
+            const measured = this.host.scrollHeight;
+            if (measured > 0 && Math.abs(measured - this.row.height) > 1) {
+                this.callbacks.onRowHeightChange?.(this.row.index, measured);
+            }
+        };
+        // The rAF callback runs before the layout of its frame — reading
+        // `scrollHeight` there forces the layout of the freshly bound content.
+        // The second pass catches the React commit of complex cell content,
+        // which lands a frame later.
+        requestAnimationFrame(() => {
+            measure();
+            requestAnimationFrame(measure);
+        });
+    }
+
     private clearContent(cell: CellPane<T>): void {
         if (cell.root) {
             // Keep the root mounted while the pooled cell is reused. Calling
@@ -388,12 +489,24 @@ export class PooledRowPane<T> {
     }
 
     private applyRowSizing(row: PooledRow<T>): void {
-        // The row node is an absolutely-positioned block: without explicit
-        // dimensions it collapses to 0×0, hiding the row background and row
-        // hover styles. Width covers the full content (all columns), height
-        // matches the row height.
         if (row.width > 0) this.host.style.width = `${row.width}px`;
-        if (row.height > 0) this.host.style.height = `${row.height}px`;
+        if (this.variableHeight) {
+            // The virtualizer owns the row geometry: the node is sized to the
+            // height the virtualizer reserved for this row and CLIPS its
+            // content. Content taller than the reserved slot (the measurement
+            // has not arrived yet) is cut off instead of bleeding into the
+            // next row — otherwise rows overlap and the grid degenerates
+            // into a pile of overlapping lines while scrolling.
+            this.host.style.height = `${row.height}px`;
+            this.host.style.minHeight = "";
+            this.host.style.overflow = "hidden";
+        } else {
+            this.host.style.overflow = "";
+            if (row.height > 0) {
+                this.host.style.height = `${row.height}px`;
+                this.host.style.minHeight = "";
+            }
+        }
     }
 
     private applyRowPresentation(row: PooledRow<T>): void {

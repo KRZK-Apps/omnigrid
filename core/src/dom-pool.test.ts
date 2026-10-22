@@ -160,6 +160,133 @@ describe("DomPool — fast scroll (skipBind) and recovery", () => {
         const settled = step(pool, data, { start: 20, end: 29 });
         expect(settled.bound).toHaveLength(0);
     });
+
+    it("resizes recycled nodes during a fast scroll so the boxes match the virtualizer", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const resized: number[] = [];
+        bindings.resizeRow = (host: RowHost<Row>, height: number): void => {
+            resized.push(height);
+        };
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        // Slow frame: rows 0..4 with individual heights.
+        pool.update({
+            data,
+            rowRange: { start: 0, end: 5 },
+            rowHeight: ROW_HEIGHT,
+            rowOffsets: [0, 40, 80, 120, 160],
+            rowHeights: [40, 40, 40, 40, 40],
+            rowWidth: 100,
+        });
+
+        resized.length = 0;
+        // Fast scroll: the window jumps to rows 50..54, the content binding is
+        // deferred — but the recycled nodes MUST get the height of the row
+        // they now stand for, otherwise a 40px node occupies a 90px slot
+        // (overlap) or a 90px node occupies a 40px slot (gap).
+        const update = pool.update({
+            data,
+            rowRange: { start: 50, end: 55 },
+            rowHeight: ROW_HEIGHT,
+            rowOffsets: [500, 590, 680, 770, 860],
+            rowHeights: [90, 90, 90, 90, 90],
+            rowWidth: 100,
+            skipBind: true,
+        });
+
+        expect(update.bound).toHaveLength(0);
+        expect(resized).toEqual([90, 90, 90, 90, 90]);
+    });
+
+    it("binds the rows that intersect the viewport even while the fast scroll defers the rest", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        step(pool, data, { start: 0, end: 10 });
+        log.length = 0;
+
+        // Fast scroll to rows 50..59 — the viewport only shows rows 52..55.
+        const update = pool.update({
+            data,
+            rowRange: { start: 50, end: 60 },
+            rowHeight: ROW_HEIGHT,
+            rowWidth: 100,
+            visibleRowRange: { start: 52, end: 56 },
+            skipBind: true,
+        });
+
+        // Only the VISIBLE rows are bound: a recycled node that is not
+        // re-bound would show the data of an unrelated row.
+        expect(update.bound.map((item) => item.row.index)).toEqual([52, 53, 54, 55]);
+    });
+
+    it("reports the new row index of a recycled node even while its content is still stale", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        const indexes: number[] = [];
+        bindings.updateRowIndex = (host: RowHost<Row>, rowIndex: number): void => {
+            indexes.push(rowIndex);
+        };
+
+        step(pool, data, { start: 0, end: 9 });
+        log.length = 0;
+
+        // Fast scroll: the off-screen slots are re-used for new rows, but their
+        // content cannot be re-bound in the same frame.
+        pool.update({
+            data,
+            rowRange: { start: 20, end: 29 },
+            rowHeight: ROW_HEIGHT,
+            rowWidth: 100,
+            visibleRowRange: { start: 20, end: 23 },
+            skipBind: true,
+        });
+
+        // Every re-used node reports the row it now stands for — the adapters
+        // look rows up by index (hover highlight), a stale index would
+        // highlight the wrong node. The VISIBLE rows (20..22) are bound right
+        // away, so they report their index through the bind.
+        expect(indexes).toEqual([23, 24, 25, 26, 27, 28]);
+    });
+
+    it("keeps the off-screen rows unbound during a fast scroll and binds them by the quota afterwards", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        step(pool, data, { start: 0, end: 9 });
+        log.length = 0;
+
+        const fast = pool.update({
+            data,
+            rowRange: { start: 20, end: 29 },
+            rowHeight: ROW_HEIGHT,
+            rowWidth: 100,
+            visibleRowRange: { start: 20, end: 23 },
+            skipBind: true,
+        });
+        // Only the three visible rows are bound right away.
+        expect(fast.bound.map((item) => item.row.index)).toEqual([20, 21, 22]);
+
+        // The scroll settled: the stale off-screen slots follow the quota
+        // (floor(9 / 3) = 3 per frame) — the visible ones are already bound.
+        const first = pool.update({
+            data,
+            rowRange: { start: 20, end: 29 },
+            rowHeight: ROW_HEIGHT,
+            rowWidth: 100,
+            visibleRowRange: { start: 20, end: 23 },
+        });
+        expect(first.bound.map((item) => item.row.index)).toEqual([23, 24, 25]);
+    });
 });
 
 describe("DomPool — window shrink and invalidate", () => {
@@ -209,5 +336,97 @@ describe("DomPool — window shrink and invalidate", () => {
         expect(pool.size).toBe(8);
         expect(update.bound).toHaveLength(8);
     });
-});
 
+    it("respects rowOffsets and rowHeights when provided for variable-height rows", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(10);
+
+        // rowOffsets: [0, 45, 120], rowHeights: [45, 75, 30]
+        const update = pool.update({
+            data,
+            rowRange: { start: 0, end: 3 },
+            rowHeight: ROW_HEIGHT,
+            rowOffsets: [0, 45, 120],
+            rowHeights: [45, 75, 30],
+            rowWidth: 100,
+        });
+
+        expect(log).toContain("pos:0@0");
+        expect(log).toContain("pos:1@45");
+        expect(log).toContain("pos:2@120");
+
+        expect(update.bound[0]?.row.height).toBe(45);
+        expect(update.bound[1]?.row.height).toBe(75);
+        expect(update.bound[2]?.row.height).toBe(30);
+    });
+
+    it("rebinds an existing row slot when its height changes", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(10);
+
+        pool.update({
+            data,
+            rowRange: { start: 0, end: 2 },
+            rowHeight: ROW_HEIGHT,
+            rowOffsets: [0, 30],
+            rowHeights: [30, 30],
+            rowWidth: 100,
+        });
+
+        log.length = 0;
+        // Same row indices 0 and 1, but row 0 height changes to 80
+        const update = pool.update({
+            data,
+            rowRange: { start: 0, end: 2 },
+            rowHeight: ROW_HEIGHT,
+            rowOffsets: [0, 80],
+            rowHeights: [80, 30],
+            rowWidth: 100,
+        });
+
+        // Row 0 had height changed, so it must be rebound
+        expect(update.bound.some((item) => item.row.index === 0 && item.row.height === 80)).toBe(true);
+    });
+
+    it("resizes — instead of re-binding — a row whose height changed", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const resized: number[] = [];
+        bindings.resizeRow = (host: RowHost<Row>, height: number): void => {
+            resized.push(height);
+            log.push(`resize:${(host as TestHost).id}@${height}`);
+        };
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(10);
+
+        pool.update({
+            data,
+            rowRange: { start: 0, end: 2 },
+            rowHeight: ROW_HEIGHT,
+            rowOffsets: [0, 30],
+            rowHeights: [30, 30],
+            rowWidth: 100,
+        });
+
+        log.length = 0;
+        const update = pool.update({
+            data,
+            rowRange: { start: 0, end: 2 },
+            rowHeight: ROW_HEIGHT,
+            rowOffsets: [0, 80],
+            rowHeights: [80, 30],
+            rowWidth: 100,
+        });
+
+        // The row content is still valid — only its box changed.
+        expect(update.bound).toHaveLength(0);
+        expect(resized).toEqual([80]);
+        expect(log).toContain("resize:0@80");
+        // The row below keeps its position, the resized row moves down.
+        expect(log).toContain("pos:1@80");
+    });
+});

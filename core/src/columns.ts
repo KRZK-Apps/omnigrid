@@ -38,6 +38,26 @@ export function flattenColumns<T>(columns: ColumnDef<T>[]): ColumnLeafDef<T>[] {
 }
 
 /**
+ * Applies the grid-level `wrapText` flag to every leaf column that does not
+ * define it explicitly — a column-level `wrapText` always wins.
+ *
+ * Returns the input untouched when the grid-level flag is not set.
+ */
+export function applyWrapText<T>(columns: ColumnDef<T>[], wrapText: boolean | undefined): ColumnDef<T>[] {
+    if (wrapText === undefined) return columns;
+
+    const walk = (nodes: ColumnDef<T>[]): ColumnDef<T>[] =>
+        nodes.map((node) => {
+            if (isColumnGroup(node)) {
+                return { ...node, children: walk(node.children) };
+            }
+            return node.wrapText === undefined ? { ...node, wrapText } : node;
+        });
+
+    return walk(columns);
+}
+
+/**
  * Projects every group onto the flat VISIBLE leaf layout.
  *
  * For each group (in pre-order) returns its span over the visible leaf

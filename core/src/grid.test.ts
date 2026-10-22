@@ -512,3 +512,168 @@ describe("Grid.setPlugins — dynamic plugin reconciliation", () => {
         expect(grid.getScrollPosition()).toEqual({ scrollTop: 0, scrollLeft: 40 });
     });
 });
+
+describe("Grid — Variable Row Height", () => {
+    it("supports setRowHeight without touching the structural revision", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const revisionBefore: number = grid.getRevision();
+
+        const correction: number = grid.setRowHeight(0, 60);
+        expect(correction).toBe(0); // at scrollTop 0, no scroll anchoring needed
+        // A height change is a geometry change, not a structural one: bumping
+        // the revision would force the DOM pool to re-bind every visible row.
+        expect(grid.getRevision()).toBe(revisionBefore);
+        expect(grid.getRowHeight(0)).toBe(60);
+        expect(grid.getRowHeight(1)).toBe(32);
+        expect(grid.getRowTop(0)).toBe(0);
+        expect(grid.getRowTop(1)).toBe(60);
+    });
+
+    it("notifies subscribers about a height change", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const listener = vi.fn();
+        grid.subscribe(listener);
+
+        grid.setRowHeight(0, 60);
+        expect(listener).toHaveBeenCalled();
+    });
+
+    it("does not notify subscribers when the measured height did not change", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const listener = vi.fn();
+        grid.subscribe(listener);
+
+        grid.setRowHeight(0, 60);
+        listener.mockClear();
+
+        // Sub-pixel noise is ignored by the registry.
+        grid.setRowHeight(0, 60.5);
+        expect(listener).not.toHaveBeenCalled();
+    });
+
+    it("defers the scroll anchoring correction when anchoring is disabled", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        grid.scrollTo({ scrollTop: 200 });
+
+        const listener = vi.fn();
+        grid.on("scrollTo", listener);
+
+        const correction: number = grid.setRowHeight(0, 60, { anchor: false });
+        expect(correction).toBe(28);
+        expect(grid.getScrollPosition().scrollTop).toBe(200);
+        expect(listener).not.toHaveBeenCalled();
+    });
+
+    it("triggers scroll anchoring when row above the viewport changes height", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        grid.scrollTo({ scrollTop: 200 });
+
+        const listener = vi.fn();
+        grid.on("scrollTo", listener);
+
+        // Row 0 is at top 0 (< 200), grows by 28px (from 32 to 60)
+        const correction: number = grid.setRowHeight(0, 60);
+        expect(correction).toBe(28);
+        expect(grid.getScrollPosition().scrollTop).toBe(228);
+        expect(listener).toHaveBeenCalledWith(expect.objectContaining({ scrollTop: 228 }));
+    });
+
+    it("provides rowOffsets and rowHeights in getViewportData for variable-height grids", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        grid.setRowHeight(0, 50);
+        grid.setRowHeight(1, 80);
+
+        const vd = grid.getViewportData();
+        expect(vd.rowOffsets).toBeDefined();
+        expect(vd.rowHeights).toBeDefined();
+        expect(vd.rowOffsets?.[0]).toBe(0);
+        expect(vd.rowOffsets?.[1]).toBe(50);
+        expect(vd.rowHeights?.[0]).toBe(50);
+        expect(vd.rowHeights?.[1]).toBe(80);
+        expect(vd.rows[0].offset).toBe(0);
+        expect(vd.rows[0].height).toBe(50);
+        expect(vd.rows[1].offset).toBe(50);
+        expect(vd.rows[1].height).toBe(80);
+    });
+
+    it("keeps the row offsets consistent while the rows are measured during a scroll", () => {
+        const data: Row[] = Array.from({ length: 300 }, (_: unknown, index: number) => ({ name: `row-${index}` }));
+        const grid = new Grid<Row>({
+            columns: [{ id: "a", width: 120 }],
+            data,
+            rowHeight: 32,
+        });
+        grid.setViewport({ width: 800, height: 480 });
+
+        const measured: Set<number> = new Set();
+        for (let step: number = 0; step < 40; step += 1) {
+            grid.setViewport({ scrollTop: Math.min(9000, step * 300) });
+            const viewport = grid.getViewportData();
+            // The DOM measures the rows that are visible (plus the overscan).
+            for (let index: number = viewport.rowRange.start; index < viewport.rowRange.end; index += 1) {
+                if (measured.has(index)) continue;
+                measured.add(index);
+                grid.setRowHeight(index, 32 + ((index * 37) % 50));
+            }
+
+            const after = grid.getViewportData();
+            const offsets: number[] = after.rowOffsets ?? [];
+            for (let i: number = 1; i < offsets.length; i += 1) {
+                const previous: number = offsets[i - 1] as number;
+                const current: number = offsets[i] as number;
+                // The offsets grow monotonically and match the measured heights.
+                expect(current).toBeGreaterThanOrEqual(previous);
+                const rowIndex: number = after.rowRange.start + i - 1;
+                expect(Math.abs(current - (previous + grid.getRowHeight(rowIndex)))).toBeLessThanOrEqual(1);
+            }
+        }
+    });
+
+    it("respects declarative getRowHeight option", () => {
+        const data: Row[] = [{ name: "r0" }, { name: "r1" }, { name: "r2" }];
+        const grid = new Grid<Row>({
+            columns: [{ id: "a", width: 100 }],
+            data,
+            rowHeight: 30,
+            estimatedRowHeight: 35,
+            getRowHeight: (index, row) => (row.name === "r1" ? 70 : undefined),
+        });
+        grid.setViewport({ width: 500, height: 500 });
+
+        expect(grid.getRowHeight(0)).toBe(35); // fallback to estimatedRowHeight
+        expect(grid.getRowHeight(1)).toBe(70); // resolved via callback
+        expect(grid.getRowHeight(2)).toBe(35);
+
+        const vd = grid.getViewportData();
+        expect(vd.rowHeights?.[0]).toBe(35);
+        expect(vd.rowHeights?.[1]).toBe(70);
+        expect(vd.rowHeights?.[2]).toBe(35);
+        expect(vd.totalHeight).toBe(35 + 70 + 35);
+    });
+
+    it("resets measured row heights on setData", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        grid.setRowHeight(0, 100);
+        expect(grid.getRowHeight(0)).toBe(100);
+
+        grid.setData([{ name: "new-0" }]);
+        expect(grid.getRowHeight(0)).toBe(32); // restored back to default rowHeight
+    });
+
+    it("applies the grid-level wrapText flag to columns without an explicit one", () => {
+        const grid = new Grid<Row>({
+            columns: [
+                { id: "a", field: "name" },
+                { id: "b", field: "name", wrapText: false },
+            ],
+            data: [{ name: "r0" }],
+            rowHeight: 32,
+            wrapText: true,
+        });
+
+        const columns = grid.getState().columns;
+        expect((columns[0] as { wrapText?: boolean }).wrapText).toBe(true);
+        // An explicit column-level flag always wins.
+        expect((columns[1] as { wrapText?: boolean }).wrapText).toBe(false);
+    });
+});

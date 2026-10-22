@@ -79,10 +79,30 @@ class FakeElement {
     }
 }
 
+/** Minimal ResizeObserver stand-in: the pane only needs observe/disconnect. */
+class FakeResizeObserver {
+    public observe(): void {
+        // No-op: the fake DOM has no layout.
+    }
+
+    public unobserve(): void {
+        // No-op: the fake DOM has no layout.
+    }
+
+    public disconnect(): void {
+        // No-op: the fake DOM has no layout.
+    }
+}
+
 function installFakeDocument(): void {
     (globalThis as Record<string, unknown>).document = {
         createElement: () => new FakeElement(),
     };
+    (globalThis as Record<string, unknown>).ResizeObserver = FakeResizeObserver;
+    if (typeof globalThis.requestAnimationFrame !== "function") {
+        (globalThis as Record<string, unknown>).requestAnimationFrame = (callback: (time: number) => void): number =>
+            setTimeout(() => callback(0), 0) as unknown as number;
+    }
 }
 
 /* ------------------------------ Harness ------------------------------ */
@@ -100,6 +120,8 @@ interface MakeOptions {
     complexContent?: boolean;
     /** Value returned by renderCellPlaceholder; `undefined` = callback not provided. */
     placeholder?: string | null;
+    /** Enables the variable-height mode (the grid measures the row height). */
+    variableHeight?: boolean;
 }
 
 const COLUMN: ColumnLeafDef<Row> = { id: "name", field: "name", width: 120 };
@@ -142,6 +164,9 @@ function makeHarness(options: MakeOptions = {}): Harness {
             placeholders.push(info);
             return options.placeholder ?? null;
         };
+    }
+    if (options.variableHeight) {
+        callbacks.onRowHeightChange = () => {};
     }
 
     const host = new FakeElement();
@@ -317,3 +342,140 @@ describe("PooledRowPane — column spanning", () => {
     });
 });
 
+describe("PooledRowPane — variable row height", () => {
+    it("applies dynamic row height to host and sets cell height to 100%", () => {
+        const { pane, host } = makeHarness();
+        const customRow: PooledRow<Row> = {
+            index: 0,
+            rowId: 0,
+            data: { name: "Alice", age: 30 },
+            offsetY: 100,
+            height: 75,
+            width: 300,
+        };
+        pane.bind(customRow, [col(0, 0)], 0);
+
+        expect(host.style.height).toBe("75px");
+        const cells: FakeElement[] = host.children as FakeElement[];
+        expect(cells[0].style.height).toBe("100%");
+    });
+
+    it("clips the row to the height the virtualizer reserved for it", () => {
+        const { pane, host } = makeHarness({ variableHeight: true });
+        const customRow: PooledRow<Row> = {
+            index: 0,
+            rowId: 0,
+            data: { name: "Alice", age: 30 },
+            offsetY: 0,
+            height: 40,
+            width: 300,
+        };
+        pane.bind(customRow, [col(0, 0)], 0);
+
+        // The row node must never paint outside its slot — content taller
+        // than the reserved height is clipped instead of bleeding into the
+        // next row (which would overlap rows while scrolling).
+        expect(host.style.overflow).toBe("hidden");
+        expect(host.style.minHeight).toBe("");
+    });
+
+    it("resizes the bound row without touching its content", () => {
+        const { pane, host, renderCalls } = makeHarness({ variableHeight: true });
+        const customRow: PooledRow<Row> = {
+            index: 0,
+            rowId: 0,
+            data: { name: "Alice", age: 30 },
+            offsetY: 0,
+            height: 40,
+            width: 300,
+        };
+        pane.bind(customRow, [col(0, 0)], 0);
+        const rendersAfterBind: number = renderCalls.length;
+
+        pane.resize(96);
+
+        expect(host.style.height).toBe("96px");
+        expect(pane.getRow()?.height).toBe(96);
+        // The cell content was NOT re-rendered.
+        expect(renderCalls.length).toBe(rendersAfterBind);
+    });
+});
+
+describe("PooledRowPane — wrapping columns", () => {
+    const WRAP_COLUMN: ColumnLeafDef<Row> = { id: "bio", field: "name", width: 120, wrapText: true };
+
+    function wrapCol(index: number, offset: number): { column: ColumnLeafDef<Row>; index: number; offset: number; width: number } {
+        return { column: WRAP_COLUMN, index, offset, width: 120 };
+    }
+
+    it("lets a wrapping cell grow with its content while the row keeps the reserved height", () => {
+        const { pane, host } = makeHarness({ variableHeight: true });
+        const customRow: PooledRow<Row> = {
+            index: 0,
+            rowId: 0,
+            data: { name: "Alice", age: 30 },
+            offsetY: 0,
+            height: 40,
+            width: 300,
+        };
+
+        pane.bind(customRow, [wrapCol(0, 0)], 0);
+
+        const cell: FakeElement = firstCell(host);
+        // The cell is sized by its content — the row height is measured from it.
+        expect(cell.style.height).toBe("auto");
+        expect(cell.style.minHeight).toBe("100%");
+        // The text wraps instead of being truncated.
+        expect(cell.style.whiteSpace).toBe("normal");
+        expect(cell.style.wordBreak).toBe("break-word");
+        // The wrapped block is aligned to the top of the row.
+        expect(cell.style.alignItems).toBe("flex-start");
+        // The row itself stays at the height the virtualizer reserved.
+        expect(host.style.height).toBe("40px");
+    });
+
+    it("keeps the theme alignment and padding for plain columns", () => {
+        const { pane, host } = makeHarness({ variableHeight: true });
+        const customRow: PooledRow<Row> = {
+            index: 0,
+            rowId: 0,
+            data: { name: "Alice", age: 30 },
+            offsetY: 0,
+            height: 40,
+            width: 300,
+        };
+
+        pane.bind(customRow, [col(0, 0)], 0);
+
+        const cell: FakeElement = firstCell(host);
+        expect(cell.style.height).toBe("100%");
+        expect(cell.style.minHeight).toBe("");
+        // No inline alignment / padding overrides — the theme owns them.
+        expect(cell.style.alignItems).toBe("");
+        expect(cell.style.paddingBlock).toBe("");
+        expect(cell.style.whiteSpace).toBe("nowrap");
+    });
+
+    it("resets the wrapping styles when a cell is recycled into a plain column", () => {
+        const { pane, host } = makeHarness({ variableHeight: true });
+        const customRow: PooledRow<Row> = {
+            index: 0,
+            rowId: 0,
+            data: { name: "Alice", age: 30 },
+            offsetY: 0,
+            height: 40,
+            width: 300,
+        };
+
+        pane.bind(customRow, [wrapCol(0, 0)], 0);
+        // The same node is reused for a plain column.
+        pane.bind({ ...customRow, index: 1 }, [col(0, 0)], 0);
+
+        const cell: FakeElement = firstCell(host);
+        expect(cell.style.height).toBe("100%");
+        expect(cell.style.minHeight).toBe("");
+        expect(cell.style.whiteSpace).toBe("nowrap");
+        expect(cell.style.alignItems).toBe("");
+        expect(cell.style.paddingBlock).toBe("");
+    });
+});

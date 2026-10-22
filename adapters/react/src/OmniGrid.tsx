@@ -78,6 +78,21 @@ function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
 const SLOT_POSITIONS: SlotPosition[] = ["start", "center", "end"];
 
 /**
+ * Scroll velocity (px/ms) above which a scroll is treated as "fast".
+ * Mouse wheel and trackpad scrolls typically range 0.05–0.2 px/ms, while
+ * scrollbar thumb drags and page jumps exceed 10 px/ms.
+ */
+const FAST_SCROLL_VELOCITY = 2.0;
+
+/**
+ * How long (ms) after the last processed scroll frame the fast-scroll state
+ * is kept. The velocity is only sampled on scroll frames, so it has to be
+ * aged out explicitly — otherwise a single fast flick would keep the grid in
+ * fast-scroll mode forever.
+ */
+const FAST_SCROLL_WINDOW = 150;
+
+/**
  * Per-layer (DomPool + pane tracking) state for the three horizontal column
  * groups: pinned-left, scrollable, and pinned-right. The core's `ViewportData`
  * yields absolute (table-space) offsets; each layer translates those into its
@@ -94,6 +109,13 @@ interface RowLayerState<T> {
     processed: unknown[] | null;
     originX: number;
     rowWidth: number;
+    /**
+     * Viewport data of the last pool sync. Row binds read the span layout from
+     * it instead of re-computing `getViewportData()` per bound row — in
+     * variable-height mode that call is O(window x log n) and used to be paid
+     * once per row, once per layer, on every pool update.
+     */
+    viewport: ViewportData<T> | null;
 }
 
 function createRowLayerState<T>(): RowLayerState<T> {
@@ -108,6 +130,7 @@ function createRowLayerState<T>(): RowLayerState<T> {
         processed: null,
         originX: 0,
         rowWidth: 0,
+        viewport: null,
     };
 }
 
@@ -141,6 +164,8 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
 
     const viewportRef = useRef<HTMLDivElement>(null);
     const layoutRef = useRef<HTMLDivElement>(null);
+    /** Scrollable content wrapper — its height is the total height of all rows. */
+    const contentRef = useRef<HTMLDivElement>(null);
     const rowsLayerRef = useRef<HTMLDivElement>(null);
     const pinnedLeftRowsLayerRef = useRef<HTMLDivElement>(null);
     const pinnedRightRowsLayerRef = useRef<HTMLDivElement>(null);
@@ -148,8 +173,34 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const [scrollbarInsets, setScrollbarInsets] = useState<{ right: number; bottom: number }>({ right: 0, bottom: 0 });
     const scrollFrameRef = useRef<{ id: number; top: number; left: number; lastTop: number; lastTime: number }>({ id: 0, top: 0, left: 0, lastTop: 0, lastTime: 0 });
     const scrollVelocityRef = useRef<number>(0);
+    /** Timestamp of the last processed scroll frame — used to age out the velocity. */
+    const lastScrollTimeRef = useRef<number>(0);
+    /** Anchoring correction accumulated while a fast scroll was in progress. */
+    const pendingAnchorRef = useRef<number>(0);
+    /** Timer that applies the accumulated anchoring correction after the scroll settles. */
+    const anchorTimerRef = useRef<number | null>(null);
+    /** Number of row heights measured since the last geometry flush. */
+    const pendingHeightCountRef = useRef<number>(0);
+    /** Anchoring correction of the row heights measured since the last flush. */
+    const pendingHeightCorrectionRef = useRef<number>(0);
+    /** rAF handle of the scheduled row-height flush. */
+    const heightFlushRef = useRef<number | null>(null);
+    /**
+     * Scrollable content height frozen at the start of a user scroll gesture.
+     *
+     * While the user drags the scrollbar thumb, measured row heights keep
+     * replacing estimates and `totalHeight` changes every frame. Rewriting the
+     * content height mid-drag makes the browser reposition the native
+     * scrollbar thumb (`scrollTop / (scrollHeight - clientHeight)`), so the
+     * thumb detaches from the mouse on the very first scroll of a
+     * variable-height grid. The height is therefore frozen to this snapshot
+     * for the duration of the gesture — row positions still use the measured
+     * offsets — and the real height is reapplied once the scroll settles.
+     */
     const optionsRef = useRef<GridProps<T>>(options);
     const columnWindowKeyRef = useRef("");
+    /** Content size the scrollbar insets were measured for. */
+    const contentSizeKeyRef = useRef("");
     const scrollbarWidthRef = useRef(0);
     const slotComponentsRef = useRef<SlotRendererRegistry<T>>({});
 
@@ -197,6 +248,35 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const headerRowCount = viewportData.headerRowCount;
     const hasGroups = headerRowCount > 0;
     const headerHeight = (headerRowCount + 1) * rowHeight;
+
+    /**
+     * Writes the scrollable content height (and the height of the row
+     * layers) into the DOM.
+     *
+     * The total height changes with every measured row. Writing it through
+     * React would re-render the whole grid per measurement — during a fast
+     * scroll that starves the frame budget and the grid lags behind the
+     * native scroll position. The imperative write keeps the scroll range
+     * correct without a re-render.
+     */
+    const applyContentHeight = (totalHeight: number): void => {
+        const layerHeight: string = `${totalHeight}px`;
+        for (const ref of [rowsLayerRef, pinnedLeftRowsLayerRef, pinnedRightRowsLayerRef]) {
+            const element: HTMLDivElement | null = ref.current;
+            if (element && element.style.height !== layerHeight) element.style.height = layerHeight;
+        }
+        const contentHeight: string = `${totalHeight + headerHeight}px`;
+        const content: HTMLDivElement | null = contentRef.current;
+        if (content && content.style.height !== contentHeight) content.style.height = contentHeight;
+        if (autoHeight) {
+            // Auto-height grids grow with their content. React renders the
+            // height from the state, which is only updated on a re-render —
+            // the measured heights do not trigger one — so the viewport height
+            // is written here as well.
+            const viewport: HTMLDivElement | null = viewportRef.current;
+            if (viewport && viewport.style.height !== contentHeight) viewport.style.height = contentHeight;
+        }
+    };
 
     /**
      * For each leaf column, `columnGroupDepth` maps its flat visible index to the
@@ -429,11 +509,118 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         return presentation;
     };
 
+    /**
+     * Whether the user is currently fast-scrolling.
+     *
+     * The velocity is sampled on scroll frames only, so it is aged out: when
+     * the last scroll frame is older than `FAST_SCROLL_WINDOW` the scroll has
+     * settled and the grid returns to its normal (fully bound) mode.
+     */
+    function isFastScrolling(): boolean {
+        if (scrollVelocityRef.current <= FAST_SCROLL_VELOCITY) return false;
+        return performance.now() - lastScrollTimeRef.current < FAST_SCROLL_WINDOW;
+    }
+
+    /**
+     * Applies the anchoring corrections that were deferred during a fast scroll.
+     *
+     * A row ABOVE the viewport that changes its height shifts the content
+     * below it. While the user drags the scrollbar that correction fights the
+     * input (the scroll position jumps back and forth), so it is accumulated
+     * instead of applied. As soon as the scroll settles the accumulated offset
+     * is applied in one step — the anchored row stays where it was.
+     */
+    function flushPendingAnchor(): void {
+        anchorTimerRef.current = null;
+        const pending: number = pendingAnchorRef.current;
+        if (pending === 0) return;
+        if (isFastScrolling()) {
+            // The user started scrolling again — the correction stays pending.
+            anchorTimerRef.current = window.setTimeout(flushPendingAnchor, FAST_SCROLL_WINDOW);
+            return;
+        }
+        pendingAnchorRef.current = 0;
+        const element: HTMLDivElement | null = viewportRef.current;
+        const current: number = element ? element.scrollTop : grid.getScrollPosition().scrollTop;
+        grid.scrollTo({ scrollTop: Math.max(0, current + pending) });
+    }
+
+    /** Schedules the deferred anchoring flush after the scroll has settled. */
+    function scheduleAnchorFlush(): void {
+        if (anchorTimerRef.current !== null) window.clearTimeout(anchorTimerRef.current);
+        anchorTimerRef.current = window.setTimeout(flushPendingAnchor, FAST_SCROLL_WINDOW);
+    }
+
+    /**
+     * Applies the row heights measured during the current frame.
+     *
+     * The measured heights are pushed into the virtualizer as soon as they
+     * arrive, but the DOM geometry is updated HERE — once per frame, after
+     * every measurement of the frame has been read.
+     *
+     * Measuring a row reads the DOM (`scrollHeight`), which forces a layout.
+     * A DOM write between two measurements invalidates that layout, so the
+     * next measurement forces it again: 30 measured rows would then cost 30
+     * full layouts of the grid (hundreds of milliseconds — the grid freezes
+     * for a second when the scrollbar thumb is dragged). Batching the writes
+     * keeps the cost at one layout per frame.
+     */
+    function flushPendingHeights(): void {
+        heightFlushRef.current = null;
+        const measured: number = pendingHeightCountRef.current;
+        if (measured === 0) return;
+        pendingHeightCountRef.current = 0;
+        const fast: boolean = isFastScrolling();
+        const correction: number = pendingHeightCorrectionRef.current;
+        pendingHeightCorrectionRef.current = 0;
+        if (correction !== 0) {
+            if (fast) {
+                // The correction fights the user's input while they are
+                // scrolling — it is applied once the scroll settles.
+                pendingAnchorRef.current += correction;
+                scheduleAnchorFlush();
+            } else {
+                const element: HTMLDivElement | null = viewportRef.current;
+                const current: number = element ? element.scrollTop : grid.getScrollPosition().scrollTop;
+                grid.scrollTo({ scrollTop: Math.max(0, current + correction) });
+            }
+        }
+        // The measured heights changed the offsets of the rows below: push the
+        // new geometry into the pools.
+        syncPool(false, fast);
+    }
+
+    /** Schedules the row-height flush for the next frame. */
+    function scheduleHeightFlush(): void {
+        if (heightFlushRef.current !== null) return;
+        heightFlushRef.current = window.requestAnimationFrame(flushPendingHeights);
+    }
+
     /** Row panel callbacks: close over grid/options, never over DOM. */
     function buildRowCallbacks(bridgeArg: ContentBridge<T>): PooledRowCallbacks<T> {
         const current = () => optionsRef.current;
         return {
             rowHeight,
+            onRowHeightChange: (rowIndex: number, height: number): void => {
+                // The measured height goes into the virtualizer right away —
+                // it does NOT touch the DOM, so the measurements of the
+                // current frame stay readable without a forced layout in
+                // between (see `flushPendingHeights`).
+                //
+                // `anchor: false` — the scroll anchoring correction is
+                // collected and applied in one step by the flush: applying it
+                // per measurement would move the scroll position several
+                // times per frame and fight the user's input.
+                //
+                // `notify: false` — the row heights are geometry, not grid
+                // state. A Store notification would re-render the whole grid
+                // (header included) for every measured row; the geometry is
+                // written to the DOM imperatively instead.
+                const correction: number = grid.setRowHeight(rowIndex, height, { anchor: false, notify: false });
+                if (correction !== 0) pendingHeightCorrectionRef.current += correction;
+                pendingHeightCountRef.current += 1;
+                scheduleHeightFlush();
+            },
             renderCellContent: (info) => {
                 const column = info.column;
                 const value = getCellValue(info.data, column);
@@ -550,7 +737,8 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     // widths come from the span origin's summed geometry and
                     // covered leaves are skipped — no clipping or overlap when
                     // a span crosses the virtual window boundary.
-                    const viewport = grid.getViewportData();
+                    const viewport = layer.viewport;
+                    if (!viewport) return;
                     const spans = getCachedRowSpans(viewport, row.data, row.index);
                     const isLeft: boolean = layer === layers.left;
                     const isRight: boolean = layer === layers.right;
@@ -560,6 +748,14 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     // (scrollable) while pinned layers render their full group.
                     const sliced = sliceSpanLayoutForLayer(viewport, layer.columns, !isLeft && !isRight, layout);
                     pane.bind(row, layer.columns, layer.originX, sliced);
+                },
+                resizeRow: (host, height) => {
+                    const pane = paneMap.get(host);
+                    if (pane) pane.resize(height);
+                },
+                updateRowIndex: (host, rowIndex) => {
+                    const pane = paneMap.get(host);
+                    if (pane) pane.setRowIndex(rowIndex);
                 },
                 transformRow: (host, offsetY) => {
                     const pane = paneMap.get(host);
@@ -598,10 +794,16 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             pool.invalidate();
         }
 
+        // Cached for the row binds below — the viewport data of THIS sync.
+        layer.viewport = viewportData;
+
         pool.update({
             data: processed,
             rowRange: viewportData.rowRange,
             rowHeight: state.rowHeight,
+            rowOffsets: viewportData.rowOffsets,
+            rowHeights: viewportData.rowHeights,
+            visibleRowRange: viewportData.visibleRowRange,
             rowWidth: layer.rowWidth,
             skipBind,
         });
@@ -624,6 +826,23 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const syncPool = (synchronousColumnWindow = false, skipContentBind = false): void => {
         const state = grid.getState();
         const currentViewportData = grid.getViewportData();
+
+        // The scrollable content height follows the measured row heights.
+        // It is written imperatively: a Store notification per measured row
+        // would re-render the whole grid, and the grid would then lag behind
+        // the native scroll position (the user sees the previous rows).
+        //
+        // During an active user scroll gesture the height is frozen to the
+        // snapshot taken at gesture start (see `handleScroll`). Otherwise the
+        // browser recomputes the scrollbar thumb (`scrollTop /
+        // (scrollHeight - clientHeight)`) every time a measured row height
+        // replaces an estimate and `totalHeight` changes mid-drag — on the
+        // first scroll of a variable-height grid the thumb then lags behind
+        // the mouse pointer. Row positions still use the live measured
+        // offsets; only the scrollbar range is frozen until the scroll
+        // settles.
+        const effectiveTotalHeight: number = currentViewportData.totalHeight;
+        applyContentHeight(effectiveTotalHeight);
 
         const pinnedLeftWidth = currentViewportData.pinnedLeftColumns.reduce((sum, item) => sum + item.width, 0);
         const pinnedRightWidth = currentViewportData.pinnedRightColumns.reduce((sum, item) => sum + item.width, 0);
@@ -762,10 +981,17 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         return () => observer.disconnect();
     }, [grid, measureViewport, syncScrollbarInsets]);
 
-    // Scrollbars can appear or disappear after any render (content or column changes).
+    // Scrollbars can appear or disappear when the CONTENT size changes (the
+    // rows are measured, a column is resized). Measuring the insets after
+    // EVERY render forces a synchronous layout of the whole page — during a
+    // fast scroll that alone blows the frame budget, and the grid then lags
+    // behind the native scroll (the user sees the previous rows).
+    const contentSizeKey: string = `${viewportData.totalWidth}x${viewportData.totalHeight}`;
     useLayoutEffect(() => {
+        if (contentSizeKeyRef.current === contentSizeKey) return;
+        contentSizeKeyRef.current = contentSizeKey;
         if (viewportRef.current) syncScrollbarInsets(viewportRef.current);
-    });
+    }, [contentSizeKey]);
 
     useLayoutEffect(() => {
         if (autoHeight) return;
@@ -784,6 +1010,14 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         return unsubscribe;
     }, [grid]);
 
+    useEffect(
+        () => () => {
+            if (anchorTimerRef.current !== null) window.clearTimeout(anchorTimerRef.current);
+            if (heightFlushRef.current !== null) window.cancelAnimationFrame(heightFlushRef.current);
+        },
+        [],
+    );
+
     /**
      * Sync the DomPool after every structural re-render.
      *
@@ -794,17 +1028,23 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
      * in the rAF already handled the DomPool sync and a redundant invalidate()
      * here would force-rebind every visible row for no reason.
      *
-     * Adapter options (rowClassRules closures, getRowStyle, plugins) can
-     * change between renders WITHOUT touching the grid revision or the data
-     * reference — e.g. a rule toggled by a useState in the host component.
-     * Force-rebind the visible nodes so row classes/styles are re-evaluated
-     * with the fresh options on structural re-renders.
+     * The pools are invalidated only when the grid's STRUCTURAL revision
+     * changed. Row-height updates (variable-height mode) also notify the
+     * Store, but they are pure geometry changes: re-binding every visible row
+     * for them would re-render every cell and re-trigger the row measurement
+     * — a feedback loop that starves the scroll frame budget and leaves the
+     * grid with overlapping rows while scrolling.
      */
+    const lastStructuralRevisionRef = useRef<number>(-1);
     useEffect(() => {
-        for (const layer of [layers.left, layers.central, layers.right]) {
-            if (layer.pool) layer.pool.invalidate();
+        const revision: number = grid.getRevision();
+        if (revision !== lastStructuralRevisionRef.current) {
+            lastStructuralRevisionRef.current = revision;
+            for (const layer of [layers.left, layers.central, layers.right]) {
+                if (layer.pool) layer.pool.invalidate();
+            }
         }
-         syncPool(false, false);  // skipContentBind=false: structural changes always bind fully
+        syncPool(false, false);  // skipContentBind=false: structural changes always bind fully
     }, [state]);
 
     useEffect(() => {
@@ -828,17 +1068,11 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         frame.top = element.scrollTop;
         frame.left = element.scrollLeft;
 
-        // Detect scrollbar appearance/disappearance. When the vertical
-        // scrollbar appears it reduces clientWidth; if the grid previously
-        // measured without the scrollbar, we re-measure to avoid a phantom
-        // horizontal scrollbar. (With `scrollbar-gutter: stable` this is a
-        // no-op in modern browsers.)
-        const scrollbarWidth = element.offsetWidth - element.clientWidth;
-        if (scrollbarWidth !== scrollbarWidthRef.current) {
-            scrollbarWidthRef.current = scrollbarWidth;
-            syncScrollbarInsets(element);
-            grid.setViewport({ width: element.clientWidth });
-        }
+        // The scrollbar width is NOT measured here: reading `offsetWidth` /
+        // clientWidth forces a synchronous layout of the whole page, and a
+        // scroll event fires several times per frame during a thumb drag.
+        // The ResizeObserver reports the content box size instead — it fires
+        // exactly when the scrollbar appears or disappears.
 
         if (frame.id) return;
         frame.id = window.requestAnimationFrame(() => {
@@ -862,11 +1096,17 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             scrollVelocityRef.current = deltaT > 8 ? Math.abs(scrollTop - frame.lastTop) / deltaT : 0;
             frame.lastTop = scrollTop;
             frame.lastTime = now;
+            lastScrollTimeRef.current = now;
             // setViewport with scroll-only updates does NOT notify the Store,
             // so this does NOT trigger a React re-render. The DomPool is
             // updated imperatively below.
             grid.setViewport({ scrollTop, scrollLeft });
-            const skipContentBind = scrollVelocityRef.current > 2.0;
+            const skipContentBind = scrollVelocityRef.current > FAST_SCROLL_VELOCITY;
+            if (!skipContentBind && pendingAnchorRef.current !== 0) {
+                // The scroll settled — the deferred anchoring correction can be
+                // applied now without fighting the user's input.
+                flushPendingAnchor();
+            }
             syncPool(true, skipContentBind);
         });
     };
@@ -998,7 +1238,6 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     // correctly on the horizontal axis because sticky positioning is not
     // affected by the clip.
     const needsHorizontalScroll = viewportData.totalWidth > grid.getState().viewport.width;
-    const overlayHeight: number = Math.max(0, (autoHeight ? measuredHeight : state.viewport.height) - headerHeight);
 
     const renderHeaderCells = (columns: PooledColumn<T>[], originX: number): ReactNode =>
         columns.map((item) => {
@@ -1207,6 +1446,9 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             ref={ref}
             data-pool-layer="true"
             style={{
+                // The layer's height follows the measured row heights — it is
+                // updated imperatively (see `syncPool`) so a measurement does
+                // not re-render the whole grid.
                 height: viewportData.totalHeight,
                 left: 0,
                 overflow: "hidden",
@@ -1250,6 +1492,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     }}
                     >
                     <div
+                        ref={contentRef}
                         style={{
                             display: "flex",
                             height: rowTotalHeight,
@@ -1261,7 +1504,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                             <div
                                 className="omnigrid-pinned omnigrid-pinned-left"
                                 style={{
-                                    height: rowTotalHeight,
+                                    height: "100%",
                                     left: 0,
                                     position: "sticky",
                                     top: 0,
@@ -1290,7 +1533,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                             <div
                                 className="omnigrid-pinned omnigrid-pinned-right"
                                 style={{
-                                    height: rowTotalHeight,
+                                    height: "100%",
                                     position: "sticky",
                                     right: 0,
                                     top: 0,
@@ -1311,7 +1554,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                         className="omnigrid-overlay omnigrid-overlay-body"
                         role="status"
                         style={{
-                            height: overlayHeight,
+                            bottom: 0,
                             left: 0,
                             pointerEvents: "auto",
                             position: "absolute",

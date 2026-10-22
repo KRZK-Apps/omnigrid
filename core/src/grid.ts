@@ -1,4 +1,4 @@
-import { flattenColumns, getColumnGroups, getRowSpans, resolveColSpan } from "./columns";
+import { applyWrapText, flattenColumns, getColumnGroups, getRowSpans, resolveColSpan } from "./columns";
 import { EventBus } from "./events";
 import { applyFilterModel, applyQuickFilter, isActiveCondition } from "./filtering";
 import type { ColumnFilterModel, FilterCondition, FilterModel } from "./filtering";
@@ -16,7 +16,9 @@ import type {
     GridOptions,
     GridPlugin,
     GridState,
+    Range,
     RowClickEvent,
+    RowHeightUpdateOptions,
     RowHoverEvent,
     RowId,
     RowSpanLayout,
@@ -61,6 +63,8 @@ export class Grid<T> implements GridApi<T> {
     private loadError: unknown;
     private overlayState: OverlayState = { type: null };
     private overlayManual = false;
+    /** Grid-level `wrapText` flag — applied to every column without an explicit one. */
+    private wrapTextAll: boolean | undefined;
 
     /**
      * Separate ephemeral scroll position that is NOT stored in the Store.
@@ -75,7 +79,7 @@ export class Grid<T> implements GridApi<T> {
     public constructor(options: GridOptions<T>) {
         const state: GridState<T> = {
             data: options.data ?? [],
-            columns: options.columns,
+            columns: applyWrapText(options.columns, options.wrapText),
             viewport: { width: 0, height: 0, scrollTop: 0, scrollLeft: 0 },
             rowHeight: options.rowHeight ?? 32,
             rowOverscan: options.rowOverscan ?? 5,
@@ -88,9 +92,18 @@ export class Grid<T> implements GridApi<T> {
         this.resolveRowId = options.getRowId ?? ((_row, index) => index);
         this.loading = options.loading ?? false;
         this.hasData = options.data !== undefined && options.data !== null;
+        this.wrapTextAll = options.wrapText;
         if (options.filterModel) this.filterModel = Grid.cloneFilterModel(options.filterModel);
         this.virtualizer = new Virtualizer({
             rowHeight: state.rowHeight,
+            estimatedRowHeight: options.estimatedRowHeight ?? options.rowHeight,
+            getRowHeight: options.getRowHeight
+                ? (rowIndex: number): number | undefined => {
+                      const data: T[] = this.getProcessedData();
+                      const row: T | undefined = data[rowIndex];
+                      return row !== undefined ? options.getRowHeight!(rowIndex, row) : undefined;
+                  }
+                : undefined,
             rowOverscan: state.rowOverscan,
             columnOverscan: state.columnOverscan,
         });
@@ -216,7 +229,25 @@ export class Grid<T> implements GridApi<T> {
             : { start: 0, end: 0 };
         const columnRange = Grid.expandColumnRangeForSpans(scrollable, baseColumnRange);
 
-        const rowRange = this.virtualizer.getRowRange(processedData.length, this.scrollPosition.scrollTop, state.viewport.height);
+        const hasVariable: boolean = this.virtualizer.hasVariableHeights;
+        const rowRange: Range = this.virtualizer.getRowRange(processedData.length, this.scrollPosition.scrollTop, state.viewport.height, hasVariable);
+        // The rows that actually intersect the viewport (no overscan): the
+        // adapter binds them eagerly so a recycled node never shows the data
+        // of a different row.
+        const visibleRowRange: Range = this.virtualizer.getVisibleRowRange(
+            processedData.length,
+            this.scrollPosition.scrollTop,
+            state.viewport.height,
+        );
+
+        const rowOffsets: number[] | undefined = hasVariable
+            ? Array.from({ length: rowRange.end - rowRange.start }, (_: unknown, i: number): number =>
+                  this.virtualizer.getRowTop(rowRange.start + i, processedData.length),
+              )
+            : undefined;
+        const rowHeights: number[] | undefined = hasVariable
+            ? Array.from({ length: rowRange.end - rowRange.start }, (_: unknown, i: number): number => this.virtualizer.getRowHeight(rowRange.start + i))
+            : undefined;
 
         // Offset composition:
         //   pinned-left: absolute from 0
@@ -250,8 +281,14 @@ export class Grid<T> implements GridApi<T> {
 
         return {
             rows: processedData.slice(rowRange.start, rowRange.end).map((data, index) => {
-                const rowIndex = rowRange.start + index;
-                return { id: this.getRowId(data, rowIndex), data, index: rowIndex, offset: rowIndex * state.rowHeight };
+                const rowIndex: number = rowRange.start + index;
+                return {
+                    id: this.getRowId(data, rowIndex),
+                    data,
+                    index: rowIndex,
+                    offset: rowOffsets ? (rowOffsets[index] as number) : rowIndex * state.rowHeight,
+                    height: rowHeights ? (rowHeights[index] as number) : state.rowHeight,
+                };
             }),
             columns,
             pinnedLeftColumns,
@@ -266,7 +303,10 @@ export class Grid<T> implements GridApi<T> {
             headerRowCount,
             columnGroupDepth,
             rowRange,
+            visibleRowRange,
             columnRange,
+            rowOffsets,
+            rowHeights,
             totalWidth,
             totalHeight: this.virtualizer.getTotalHeight(processedData.length),
         };
@@ -487,6 +527,83 @@ export class Grid<T> implements GridApi<T> {
         return this.resolveRowId(row, index);
     }
 
+    /**
+     * Records the measured DOM height of a row (variable-height mode).
+     * Returns the scrollTop correction (px) the adapter must apply to keep
+     * the anchored row visually stable when rows above the viewport change.
+     *
+     * A height change is a GEOMETRY change, not a structural one: the row
+     * content stays valid, so the grid does not bump its structural revision
+     * (which would force the DOM pool to re-bind every visible row).
+     * @param rowIndex - Zero-based index in the processed dataset.
+     * @param height - Measured row height in pixels (must be finite and > 0).
+     * @param options - Set `anchor: false` to suppress the built-in scroll
+     * anchoring correction (the caller applies it later).
+     * @api
+     */
+    public setRowHeight(rowIndex: number, height: number, options?: RowHeightUpdateOptions): number {
+        this.assertActive();
+        const count: number = this.getProcessedData().length;
+        const scrollTop: number = this.scrollPosition.scrollTop;
+        const previousHeight: number = this.virtualizer.getRowHeight(rowIndex);
+        const correction: number = this.virtualizer.setRowHeight(rowIndex, height, scrollTop, count);
+        if (this.virtualizer.getRowHeight(rowIndex) === previousHeight) return 0;
+        if (options?.notify !== false) this.store.setState({});
+        if (correction !== 0 && options?.anchor !== false) {
+            this.scrollTo({ scrollTop: scrollTop + correction });
+        }
+        return correction;
+    }
+
+    /**
+     * Removes a measured row height (falls back to the estimate).
+     * Returns the scrollTop correction like `setRowHeight`.
+     * @param rowIndex - Zero-based index in the processed dataset.
+     * @param options - Set `anchor: false` to suppress the built-in scroll
+     * anchoring correction (the caller applies it later).
+     * @api
+     */
+    public resetRowHeight(rowIndex: number, options?: RowHeightUpdateOptions): number {
+        this.assertActive();
+        const count: number = this.getProcessedData().length;
+        const scrollTop: number = this.scrollPosition.scrollTop;
+        const correction: number = this.virtualizer.resetRowHeight(rowIndex, scrollTop, count);
+        if (options?.notify !== false) this.store.setState({});
+        if (correction !== 0 && options?.anchor !== false) {
+            this.scrollTo({ scrollTop: scrollTop + correction });
+        }
+        return correction;
+    }
+
+    /** Removes all measured row heights (e.g. after `setColumns`). @api */
+    public resetAllRowHeights(): void {
+        this.assertActive();
+        this.virtualizer.resetAllRowHeights();
+        this.revision += 1;
+        this.store.setState({});
+    }
+
+    /**
+     * Returns the absolute vertical offset (px) of the top of a row,
+     * accounting for variable heights. Falls back to `index * rowHeight`
+     * when no measurements exist.
+     * @param rowIndex - Zero-based index in the processed dataset.
+     * @api
+     */
+    public getRowTop(rowIndex: number): number {
+        const count: number = this.getProcessedData().length;
+        return this.virtualizer.getRowTop(rowIndex, count);
+    }
+
+    /**
+     * Returns the current (measured, resolved, or estimated) height of a row.
+     * @param rowIndex - Zero-based index in the processed dataset.
+     * @api
+     */
+    public getRowHeight(rowIndex: number): number {
+        return this.virtualizer.getRowHeight(rowIndex);
+    }
+
     public setData(data: T[] | null | undefined): void {
         this.assertActive();
         this.loadError = undefined;
@@ -494,6 +611,7 @@ export class Grid<T> implements GridApi<T> {
         const nextData: T[] = data ?? [];
         this.filteredDataCache = null;
         this.processedDataCache = null;
+        this.virtualizer.resetAllRowHeights();
         this.revision += 1;
         this.store.setState({ data: nextData });
         this.events.emit("dataChange", nextData);
@@ -588,7 +706,7 @@ export class Grid<T> implements GridApi<T> {
         this.filteredDataCache = null;
         this.processedDataCache = null;
         this.revision += 1;
-        this.store.setState({ columns });
+        this.store.setState({ columns: applyWrapText(columns, this.wrapTextAll) });
         this.recomputeOverlay();
     }
 
