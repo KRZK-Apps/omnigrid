@@ -325,7 +325,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
 
     private refresh(): void {
         if (!this.api || this.api.isDestroyed()) return;
-        this.api.setData(this.api.getState().data);
+        this.api.refresh();
         this.onSelectionChange?.(this.getSelectionState());
     }
 

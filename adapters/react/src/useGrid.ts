@@ -96,7 +96,24 @@ export function useGrid<T>(options: GridOptions<T>): UseGridResult<T> {
         const next = options.columns ?? [];
         if (prev.length !== next.length || prev.some((column, index) => column !== next[index])) {
             lastSyncedColumnsRef.current = options.columns;
-            grid.setColumns(options.columns);
+            // Merge the user's column definitions into the current (plugin-enriched)
+            // columns instead of replacing them wholesale. Plugins such as the resize
+            // plugin inject properties (e.g. `headerRenderer`) into columns that are
+            // not part of the user's column definitions; replacing columns with the
+            // raw definitions would strip them and break e.g. column resize handles.
+            const current = grid.getState().columns;
+            const merged = next.map((column, index) => {
+                const currentColumn = current[index];
+                if (
+                    currentColumn &&
+                    column.headerRenderer === undefined &&
+                    currentColumn.headerRenderer !== undefined
+                ) {
+                    return { ...column, headerRenderer: currentColumn.headerRenderer };
+                }
+                return column;
+            });
+            grid.setColumns(merged);
         }
     }, [grid, options.columns]);
 

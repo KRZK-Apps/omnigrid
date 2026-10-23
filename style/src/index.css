@@ -430,6 +430,7 @@
     flex-shrink: 0;
     gap: 6px;
     margin-left: auto;
+    margin-right: 12px;
 }
 
 .omnigrid-header-cell[data-sortable="true"] {

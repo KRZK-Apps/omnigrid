@@ -1253,7 +1253,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 alignItems: "center",
                 display: "flex",
                 fontWeight: 600,
-                overflow: "hidden",
+                overflow: "hidden", 
                 padding: "0 12px",
                 whiteSpace: "nowrap",
                 ...(customHeaderStyle as CSSProperties),
@@ -1400,7 +1400,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             className="omnigrid-header"
             style={{
                 height: headerHeight,
-                overflow: "hidden",
+                overflow: "visible",
                 position: "sticky",
                 top: 0,
                 zIndex: isPinned ? 4 : 2,
@@ -1430,7 +1430,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 style={{
                     height: rowHeight,
                     left: 0,
-                    overflow: hasGroups ? "visible" : "hidden",
+                    overflow: "visible",
                     position: "absolute",
                     top: headerRowCount * rowHeight,
                     width: "100%",
