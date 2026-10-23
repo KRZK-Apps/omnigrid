@@ -47,6 +47,10 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
     private readonly onResize?: (columnId: string, width: number) => void;
     private readonly onResizeStart?: (columnId: string, width: number) => void;
     private readonly onResizeEnd?: (columnId: string, width: number) => void;
+    /** Set while an actual drag occurred during the current resize session. */
+    private resizeDragged = false;
+    /** Suppress the click synthesized right after a completed drag-resize. */
+    private suppressNextClick = false;
 
     public constructor(options: ColumnResizePluginOptions<T> = {}) {
         this.onResize = options.onResize;
@@ -168,6 +172,8 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
             startWidth: currentWidth,
             direction: column?.pinned === "right" ? -1 : 1,
         };
+        this.resizeDragged = false;
+        this.suppressNextClick = false;
         this.guide = { columnId, x: clientX, visible: true };
         this.onResizeStart?.(columnId, currentWidth);
         return currentWidth;
@@ -212,6 +218,7 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
      */
     public resizeBy(delta: number): number {
         if (!this.activeResize) return 0;
+        this.resizeDragged = true;
 
         const { columnId, startWidth } = this.activeResize;
         const nextWidth = this.setColumnWidth(columnId, startWidth + delta);
@@ -230,6 +237,8 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         const width = this.getColumnWidth(active.columnId) ?? active.startWidth;
         this.onResizeEnd?.(active.columnId, width);
         this.clearGuide();
+        this.suppressNextClick = this.resizeDragged;
+        this.resizeDragged = false;
         this.activeResize = undefined;
         return width;
     }
@@ -427,14 +436,25 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
             this.endResize();
         };
 
+        // Swallow the click synthesized right after a completed drag-resize so it does
+        // not bubble up to the column header and trigger sorting. Capture phase stops it
+        // before it reaches React's root listener.
+        const handleClick = (event: MouseEvent) => {
+            if (!this.suppressNextClick) return;
+            this.suppressNextClick = false;
+            event.stopPropagation();
+        };
+
         document.addEventListener("pointermove", handlePointerMove);
         document.addEventListener("pointerup", handlePointerUp);
         document.addEventListener("pointercancel", handlePointerUp);
+        document.addEventListener("click", handleClick, true);
 
         return () => {
             document.removeEventListener("pointermove", handlePointerMove);
             document.removeEventListener("pointerup", handlePointerUp);
             document.removeEventListener("pointercancel", handlePointerUp);
+            document.removeEventListener("click", handleClick, true);
         };
     }
 

@@ -108,6 +108,7 @@ export class PooledRowPane<T> {
     private originX = 0;
     private variableHeight = false;
     private heightMeasureId = 0;
+    private rowHasWrapText = false;
 
     public constructor(
         private readonly host: HTMLDivElement,
@@ -146,11 +147,14 @@ export class PooledRowPane<T> {
             const observer = new ResizeObserver(() => {
                 const currentRow = this.row;
                 if (!currentRow) return;
-                const measured = host.scrollHeight;
+                // Non-wrap rows are single-line and keep the fixed rowHeight;
+                // only wrapText rows need the unconstrained natural-height
+                // measurement (see measureRowHeight).
+                const measured = this.rowHasWrapText ? this.measureRowHeight() : this.host.scrollHeight;
                 if (Math.abs(measured - currentRow.height) < 1) return;
                 this.callbacks.onRowHeightChange?.(currentRow.index, measured);
             });
-            observer.observe(host);
+            observer.observe(this.host);
         }
     }
     /** Binds a row to the panel and fully rebuilds content. */
@@ -161,6 +165,7 @@ export class PooledRowPane<T> {
         this.host.dataset.rowIndex = String(row.index);
         this.host.classList.remove("omnigrid-row-hover");
         this.originX = originX;
+        this.rowHasWrapText = columns.some((column) => column.column.wrapText);
         this.applyRowSizing(row);
         this.mapColumns(columns, true, spans);
         this.applyRowPresentation(row);
@@ -217,6 +222,32 @@ export class PooledRowPane<T> {
         if (!row || row.height === height) return;
         row.height = height;
         this.applyRowSizing(row);
+    }
+
+    /**
+     * Measures the natural content height of the bound row.
+     *
+     * The row node is sized to the (possibly stale) reserved row height with
+     * `overflow: hidden`, so reading `scrollHeight` on it clamps to that
+     * reserved height whenever the content fits inside it. That makes the
+     * measurement a one-way ratchet: rows grow when content overflows but can
+     * never shrink when a wider column needs fewer wrapped lines. Temporarily
+     * releasing the height constraint lets `scrollHeight` reflect the real
+     * (wrapped) content height in both directions.
+     */
+    private measureRowHeight(): number {
+        const host = this.host;
+        const prevHeight = host.style.height;
+        const prevMinHeight = host.style.minHeight;
+        const prevOverflow = host.style.overflow;
+        host.style.height = "auto";
+        host.style.minHeight = "";
+        host.style.overflow = "visible";
+        const measured = host.scrollHeight;
+        host.style.height = prevHeight;
+        host.style.minHeight = prevMinHeight;
+        host.style.overflow = prevOverflow;
+        return measured;
     }
 
     /** Moves an unused row far off-screen (outside viewport). */
@@ -460,14 +491,14 @@ export class PooledRowPane<T> {
 
     private scheduleHeightMeasurement(row: PooledRow<T>): void {
         const id = ++this.heightMeasureId;
-        const measure = (): void => {
-            if (id !== this.heightMeasureId) return;
-            if (this.row?.index !== row.index) return;
-            const measured = this.host.scrollHeight;
-            if (measured > 0 && Math.abs(measured - this.row.height) > 1) {
-                this.callbacks.onRowHeightChange?.(this.row.index, measured);
-            }
-        };
+            const measure = (): void => {
+                if (id !== this.heightMeasureId) return;
+                if (this.row?.index !== row.index) return;
+                const measured = this.rowHasWrapText ? this.measureRowHeight() : this.host.scrollHeight;
+                if (measured > 0 && Math.abs(measured - this.row.height) > 1) {
+                    this.callbacks.onRowHeightChange?.(this.row.index, measured);
+                }
+            };
         // The rAF callback runs before the layout of its frame — reading
         // `scrollHeight` there forces the layout of the freshly bound content.
         // The second pass catches the React commit of complex cell content,
