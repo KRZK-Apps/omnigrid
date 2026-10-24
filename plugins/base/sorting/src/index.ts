@@ -77,6 +77,10 @@ export class SortingPlugin<T> implements GridPlugin<T> {
         const initialSort = columns.filter((column) => column.sortState !== undefined).map((column) => ({ columnId: column.id, direction: column.sortState! }));
         if (initialSort.length > 0) {
             this.setSortModel(initialSort);
+        } else {
+            // Ensure sortable columns advertise themselves from the start so the
+            // header cursor (data-sortable) is correct before any header click.
+            this.updateColumnMetadata();
         }
     }
 
