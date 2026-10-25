@@ -816,6 +816,53 @@ export interface GridPlugin<T> {
     getRowStyle?(params: RowRenderParams<T>): RowStyle | undefined;
 }
 
+/**
+ * A single targeted row transaction: add, update, or remove rows by their
+ * stable identifier (`getRowId`) without recreating the whole data array.
+ *
+ * Rows are matched against the current dataset by their row id. `add`
+ * appends new rows (optionally at `addIndex`), `update` replaces existing
+ * rows matched by id, and `remove` drops rows matched by id or by row object
+ * reference. Use a stable `getRowId` (a business key, not the row index) so
+ * row identity survives reordering and transactions.
+ *
+ * @api
+ */
+export interface RowTransaction<T> {
+    /** Rows to add. Each row receives a stable id via `getRowId`. */
+    add?: T[];
+    /**
+     * Zero-based index at which added rows are inserted.
+     * Defaults to appending at the end of the dataset.
+     * @default dataset length
+     * @api
+     */
+    addIndex?: number;
+    /** Rows to update. Each row is matched by id and replaced with the new data. */
+    update?: T[];
+    /**
+     * Rows to remove, given either as row objects (matched by id/reference)
+     * or as raw row ids.
+     * @api
+     */
+    remove?: Array<T | RowId>;
+}
+
+/**
+ * Outcome of `Grid.applyTransaction`: the added, updated and removed rows
+ * with their resolved ids and indexes in the dataset.
+ *
+ * @api
+ */
+export interface TransactionResult<T> {
+    /** Rows that were added, with their resolved id and index. */
+    added: RowNode<T>[];
+    /** Rows that were updated, with their resolved id and index. */
+    updated: RowNode<T>[];
+    /** Rows that were removed, with their resolved id and previous index. */
+    removed: RowNode<T>[];
+}
+
 /* ------------------------------------------------------------------ */
 /* Slot Architecture — blocks where plugins mount their widgets       */
 /* ------------------------------------------------------------------ */
@@ -970,6 +1017,22 @@ export interface GridApi<T> {
      * @api
      */
     appendData(rows: T[] | null | undefined): void;
+    /**
+     * Applies a targeted row transaction (add / update / remove) to the State
+     * Store without recreating the whole data array.
+     *
+     * Rows are matched by their stable id (`getRowId`). The pipeline caches
+     * (filtered / processed data) are invalidated and the virtualizer's
+     * row-height cache is reset only for the affected rows (or fully when the
+     * dataset size changes), avoiding heavy recomputation.
+     *
+     * Emits a single `dataChange` with the resulting dataset and bumps the
+     * grid revision.
+     * @param transaction - The rows to add, update and/or remove.
+     * @returns The added, updated and removed rows with resolved ids/indexes.
+     * @api
+     */
+    applyTransaction(transaction: RowTransaction<T>): TransactionResult<T>;
     /**
      * Records the measured DOM height of a row (variable-height mode).
      * Heights below 1px delta are ignored to prevent feedback loops between

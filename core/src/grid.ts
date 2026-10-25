@@ -21,10 +21,13 @@ import type {
     RowHeightUpdateOptions,
     RowHoverEvent,
     RowId,
+    RowNode,
     RowSpanLayout,
     ScrollPosition,
     SlotMount,
     SlotName,
+    TransactionResult,
+    RowTransaction,
     ViewportData,
     ViewportState,
 } from "./types";
@@ -637,6 +640,117 @@ export class Grid<T> implements GridApi<T> {
         this.store.setState({ data: nextData });
         this.events.emit("dataChange", nextData);
         this.recomputeOverlay();
+    }
+
+    /**
+     * Applies a targeted row transaction (add / update / remove) to the State
+     * Store without recreating the whole data array.
+     *
+     * Rows are matched by their stable id (`getRowId`). The pipeline caches
+     * (filtered / processed data) are invalidated and the virtualizer's
+     * row-height cache is reset only for the affected rows (or fully when the
+     * dataset size changes), avoiding heavy recomputation.
+     *
+     * Emits a single `dataChange` with the resulting dataset and bumps the
+     * grid revision.
+     * @param transaction - The rows to add, update and/or remove.
+     * @returns The added, updated and removed rows with resolved ids/indexes.
+     * @api
+     */
+    public applyTransaction(transaction: RowTransaction<T>): TransactionResult<T> {
+        this.assertActive();
+
+        const currentData: T[] = this.store.getState().data;
+
+        const added: RowNode<T>[] = [];
+        const updated: RowNode<T>[] = [];
+        const removed: RowNode<T>[] = [];
+
+        // Row indexes whose measured height must be discarded because the row
+        // content changed (update) or the dataset size changed (add / remove).
+        const affectedIndexes = new Set<number>();
+        let structuralChange = false;
+
+        // Resolves the id of a row object, preferring its current position so
+        // index-based `getRowId` implementations keep matching existing rows.
+        const resolveIdOf = (row: T): RowId => {
+            const index: number = currentData.indexOf(row);
+            return this.resolveRowId(row, index >= 0 ? index : -1);
+        };
+
+        // ---------- removals ----------
+        const removeIds = new Set<RowId>();
+        if (transaction.remove) {
+            for (const item of transaction.remove) {
+                removeIds.add(typeof item === "object" && item !== null ? resolveIdOf(item as T) : (item as RowId));
+            }
+        }
+
+        const afterRemove: T[] = [];
+        currentData.forEach((row, index) => {
+            const id: RowId = this.resolveRowId(row, index);
+            if (removeIds.has(id)) {
+                removed.push({ id, index, data: row });
+                affectedIndexes.add(index);
+            } else {
+                afterRemove.push(row);
+            }
+        });
+
+        // ---------- updates ----------
+        let nextData: T[] = afterRemove;
+        if (transaction.update) {
+            const updateIdToIndex = new Map<RowId, number>();
+            afterRemove.forEach((row, index) => updateIdToIndex.set(this.resolveRowId(row, index), index));
+
+            nextData = [...afterRemove];
+            for (const row of transaction.update) {
+                const id: RowId = resolveIdOf(row);
+                const index: number | undefined = updateIdToIndex.get(id);
+                if (index === undefined) continue;
+                nextData[index] = row;
+                updated.push({ id, index, data: row });
+                affectedIndexes.add(index);
+            }
+        }
+
+        // ---------- adds ----------
+        const insertAt: number = Math.min(Math.max(transaction.addIndex ?? nextData.length, 0), nextData.length);
+        if (transaction.add) {
+            transaction.add.forEach((row, position) => {
+                const index: number = insertAt + position;
+                const id: RowId = this.resolveRowId(row, index);
+                nextData.splice(index, 0, row);
+                added.push({ id, index, data: row });
+                affectedIndexes.add(index);
+            });
+            structuralChange = true;
+        }
+        if (removed.length > 0) structuralChange = true;
+
+        const changed = added.length > 0 || updated.length > 0 || removed.length > 0;
+        if (!changed) {
+            return { added, updated, removed };
+        }
+
+        // ---------- invalidate caches & patch the store ----------
+        if (structuralChange) {
+            // Adding or removing rows shifts every subsequent index, so the
+            // index-based row-height registry can no longer be trusted row by row.
+            this.virtualizer.resetAllRowHeights();
+        } else {
+            // Pure update: only the affected rows may have changed height.
+            affectedIndexes.forEach((index) => this.virtualizer.rowHeights.reset(index));
+        }
+
+        this.filteredDataCache = null;
+        this.processedDataCache = null;
+        this.revision += 1;
+        this.store.setState({ data: nextData });
+        this.events.emit("dataChange", nextData);
+        this.recomputeOverlay();
+
+        return { added, updated, removed };
     }
 
     public setViewport(viewport: Partial<ViewportState>): void {

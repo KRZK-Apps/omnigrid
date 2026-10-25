@@ -677,3 +677,184 @@ describe("Grid — Variable Row Height", () => {
         expect((columns[1] as { wrapText?: boolean }).wrapText).toBe(false);
     });
 });
+
+describe("Grid.applyTransaction — targeted row mutations", () => {
+    interface Item {
+        id: number;
+        name: string;
+    }
+
+    function makeItemGrid(data: Item[] = []): Grid<Item> {
+        const grid = new Grid<Item>({
+            columns: [
+                { id: "id", field: "id" },
+                { id: "name", field: "name" },
+            ],
+            data,
+            getRowId: (row) => row.id,
+            rowHeight: 32,
+        });
+        grid.setViewport({ width: 800, height: 400 });
+        return grid;
+    }
+
+    it("adds rows to the end and returns added nodes with resolved ids/indexes", () => {
+        const grid = makeItemGrid([
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+        ]);
+        const listener = vi.fn();
+        grid.on("dataChange", listener);
+        const before = grid.getRevision();
+
+        const result = grid.applyTransaction({
+            add: [{ id: 3, name: "c" }, { id: 4, name: "d" }],
+        });
+
+        expect(result.added).toEqual([
+            { id: 3, index: 2, data: { id: 3, name: "c" } },
+            { id: 4, index: 3, data: { id: 4, name: "d" } },
+        ]);
+        expect(result.updated).toEqual([]);
+        expect(result.removed).toEqual([]);
+        expect(grid.getState().data).toEqual([
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+            { id: 3, name: "c" },
+            { id: 4, name: "d" },
+        ]);
+        expect(grid.getRevision()).toBe(before + 1);
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener).toHaveBeenCalledWith(grid.getState().data);
+    });
+
+    it("inserts added rows at addIndex", () => {
+        const grid = makeItemGrid([
+            { id: 1, name: "a" },
+            { id: 3, name: "c" },
+        ]);
+        const result = grid.applyTransaction({ add: [{ id: 2, name: "b" }], addIndex: 1 });
+
+        expect(result.added).toEqual([{ id: 2, index: 1, data: { id: 2, name: "b" } }]);
+        expect(grid.getState().data.map((row) => row.id)).toEqual([1, 2, 3]);
+    });
+
+    it("updates existing rows by id and returns updated nodes", () => {
+        const grid = makeItemGrid([
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+        ]);
+        const result = grid.applyTransaction({ update: [{ id: 2, name: "B" }] });
+
+        expect(result.updated).toEqual([{ id: 2, index: 1, data: { id: 2, name: "B" } }]);
+        expect(result.added).toEqual([]);
+        expect(result.removed).toEqual([]);
+        expect(grid.getState().data).toEqual([{ id: 1, name: "a" }, { id: 2, name: "B" }]);
+        expect(grid.getState().data.length).toBe(2);
+    });
+
+    it("ignores updates for unknown ids", () => {
+        const grid = makeItemGrid([{ id: 1, name: "a" }]);
+        const before = grid.getRevision();
+        const result = grid.applyTransaction({ update: [{ id: 99, name: "x" }] });
+
+        expect(result.updated).toEqual([]);
+        expect(grid.getState().data).toEqual([{ id: 1, name: "a" }]);
+        expect(grid.getRevision()).toBe(before);
+    });
+
+    it("removes rows by id", () => {
+        const grid = makeItemGrid([
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+            { id: 3, name: "c" },
+        ]);
+        const result = grid.applyTransaction({ remove: [2] });
+
+        expect(result.removed).toEqual([{ id: 2, index: 1, data: { id: 2, name: "b" } }]);
+        expect(grid.getState().data.map((row) => row.id)).toEqual([1, 3]);
+    });
+
+    it("removes rows by row object reference", () => {
+        const grid = makeItemGrid([
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+        ]);
+        const row: Item = grid.getState().data[1];
+        const result = grid.applyTransaction({ remove: [row] });
+
+        expect(result.removed).toEqual([{ id: 2, index: 1, data: { id: 2, name: "b" } }]);
+        expect(grid.getState().data.map((row) => row.id)).toEqual([1]);
+    });
+
+    it("combines add, update and remove in a single transaction", () => {
+        const grid = makeItemGrid([
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+            { id: 3, name: "c" },
+        ]);
+        const result = grid.applyTransaction({
+            add: [{ id: 4, name: "d" }],
+            update: [{ id: 2, name: "B" }],
+            remove: [3],
+        });
+
+        expect(result.added).toEqual([{ id: 4, index: 2, data: { id: 4, name: "d" } }]);
+        expect(result.updated).toEqual([{ id: 2, index: 1, data: { id: 2, name: "B" } }]);
+        expect(result.removed).toEqual([{ id: 3, index: 2, data: { id: 3, name: "c" } }]);
+        expect(grid.getState().data.map((row) => row.id)).toEqual([1, 2, 4]);
+    });
+
+    it("is a no-op for an empty transaction", () => {
+        const grid = makeItemGrid([{ id: 1, name: "a" }]);
+        const before = grid.getRevision();
+        const result = grid.applyTransaction({});
+
+        expect(result.added).toEqual([]);
+        expect(result.updated).toEqual([]);
+        expect(result.removed).toEqual([]);
+        expect(grid.getRevision()).toBe(before);
+        expect(grid.getState().data).toEqual([{ id: 1, name: "a" }]);
+    });
+
+    it("invalidates the processed data cache so the next read reflects the transaction", () => {
+        const grid = makeItemGrid([
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+        ]);
+        const cached = grid.getProcessedData();
+        grid.applyTransaction({ add: [{ id: 3, name: "c" }] });
+
+        expect(grid.getProcessedData()).not.toBe(cached);
+        expect(grid.getProcessedData().length).toBe(3);
+    });
+
+    it("resets measured row heights for updated rows only (no size change)", () => {
+        const grid = makeItemGrid([
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+        ]);
+        grid.setRowHeight(0, 60);
+        grid.setRowHeight(1, 80);
+        expect(grid.getRowHeight(0)).toBe(60);
+        expect(grid.getRowHeight(1)).toBe(80);
+
+        grid.applyTransaction({ update: [{ id: 2, name: "B" }] });
+        expect(grid.getRowHeight(0)).toBe(60);
+        expect(grid.getRowHeight(1)).toBe(32);
+    });
+
+    it("resets all row heights when the dataset size changes", () => {
+        const grid = makeItemGrid([
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+        ]);
+        grid.setRowHeight(0, 60);
+        grid.setRowHeight(1, 80);
+
+        grid.applyTransaction({ add: [{ id: 3, name: "c" }] });
+        expect(grid.getRowHeight(0)).toBe(32);
+        expect(grid.getRowHeight(1)).toBe(32);
+        expect(grid.getRowHeight(2)).toBe(32);
+    });
+});
