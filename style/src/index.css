@@ -35,6 +35,29 @@
     background: var(--omnigrid-cell-selected-background);
 }
 
+/* Cell flash on update: one-shot CSS animation.
+   The .omnigrid-cell-flashed class is applied by the core when a cell's
+   value changes via applyTransaction; the animation plays once on
+   the GPU and fades out over --omnigrid-flash-duration (defaults to 1s).
+   The adapter resets the animation imperatively on re-flash so it
+   restarts every time the cell is updated. */
+[role="cell"] {
+    transition: background-color var(--omnigrid-flash-duration, 1000ms) ease-out;
+}
+
+.omnigrid-cell-flashed {
+    animation: omnigrid-cell-flash var(--omnigrid-flash-duration, 1000ms) ease-out forwards;
+}
+
+@keyframes omnigrid-cell-flash {
+    0% {
+        background-color: color-mix(in srgb, var(--omnigrid-checkbox-accent) 20%, transparent);
+    }
+    100% {
+        background-color: var(--omnigrid-cell-background, transparent);
+    }
+}
+
 .omnigrid-no-row-hover [role="cell"]:hover {
     background: unset;
 }

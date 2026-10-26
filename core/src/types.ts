@@ -155,6 +155,10 @@ export interface CellRenderParams<T> {
     data: T;
     column: ColumnLeafDef<T>;
     value?: unknown;
+    /** Whether the cell was recently updated and is currently flashing. */
+    isFlashed?: boolean;
+    /** Timestamp (ms) when the flash started; used by adapters to restart CSS animation on re-flash. */
+    flashTimestamp?: number;
 }
 
 export type CellClassRules<T> = Record<string, (params: CellRenderParams<T>) => boolean>;
@@ -492,6 +496,16 @@ export interface GridOptions<T> {
     /** Columns to render beyond the visible viewport (left + right buffer). @default 2 */
     columnOverscan?: number;
     suppressRowHoverHighlight?: boolean;
+    /**
+     * Enables automatic cell flashing when data is mutated via
+     * `grid.applyTransaction()`. Cells whose values changed are highlighted
+     * with a CSS transition that fades out automatically. Pass `true` for the
+     * default duration (1000ms), or a number for a custom duration in
+     * milliseconds. `false` / `0` / `undefined` disables the feature.
+     * @default false
+     * @api
+     */
+    cellFlash?: boolean | number;
     rowStyle?: RowStyle;
     getRowStyle?: (params: RowRenderParams<T>) => RowStyle | undefined;
     rowClass?: string | ((params: RowRenderParams<T>) => string | undefined);
@@ -654,6 +668,8 @@ export interface GridState<T> {
     rowHeight: number;
     rowOverscan: number;
     columnOverscan: number;
+    /** Cells currently flashed, keyed by `${rowId}:${columnId}` → expiry timestamp. */
+    flashedCells: Map<string, number>;
     /** Active overlay state — updated automatically by the grid's overlay manager. */
     overlay: OverlayState;
     /**

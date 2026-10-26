@@ -1,4 +1,4 @@
-import { applyWrapText, flattenColumns, getColumnGroups, getRowSpans, resolveColSpan } from "./columns";
+import { applyWrapText, flattenColumns, getColumnGroups, getCellValue, getRowSpans, resolveColSpan } from "./columns";
 import { EventBus } from "./events";
 import { applyFilterModel, applyQuickFilter, isActiveCondition } from "./filtering";
 import type { ColumnFilterModel, FilterCondition, FilterModel } from "./filtering";
@@ -69,6 +69,11 @@ export class Grid<T> implements GridApi<T> {
     /** Grid-level `wrapText` flag — applied to every column without an explicit one. */
     private wrapTextAll: boolean | undefined;
 
+    /** Normalized cell flash configuration. `false` when disabled. */
+    private cellFlash: { enabled: boolean; durationMs: number } | false = false;
+    /** Cells currently flashed: key `${rowId}:${columnId}` → expiry timestamp. */
+    private flashedCells = new Map<string, number>();
+
     /**
      * Separate ephemeral scroll position that is NOT stored in the Store.
      *
@@ -87,6 +92,7 @@ export class Grid<T> implements GridApi<T> {
             rowHeight: options.rowHeight ?? 32,
             rowOverscan: options.rowOverscan ?? 5,
             columnOverscan: options.columnOverscan ?? 2,
+            flashedCells: new Map(),
             overlay: { type: null },
             quickFilter: options.quickFilter ?? "",
         };
@@ -96,6 +102,13 @@ export class Grid<T> implements GridApi<T> {
         this.loading = options.loading ?? false;
         this.hasData = options.data !== undefined && options.data !== null;
         this.wrapTextAll = options.wrapText;
+        const raw = options.cellFlash;
+        this.cellFlash =
+            raw === true
+                ? { enabled: true, durationMs: 1000 }
+                : typeof raw === "number" && raw > 0
+                    ? { enabled: true, durationMs: raw }
+                    : false;
         if (options.filterModel) this.filterModel = Grid.cloneFilterModel(options.filterModel);
         this.virtualizer = new Virtualizer({
             rowHeight: state.rowHeight,
@@ -714,6 +727,35 @@ export class Grid<T> implements GridApi<T> {
             }
         }
 
+        // ---------- cell flash on update ----------
+        if (this.cellFlash !== false && updated.length > 0) {
+            const state = this.store.getState();
+            const leafColumns = flattenColumns(state.columns).filter(
+                (column): column is ColumnLeafDef<T> & { field: string | keyof T } => column.field !== undefined
+            );
+            // Lazy cleanup: drop entries older than the flash duration so the map
+            // doesn't grow unboundedly and cells can re-flash later.
+            const cutoff = Date.now() - this.cellFlash.durationMs;
+            for (const [key, ts] of this.flashedCells) {
+                if (ts < cutoff) {
+                    this.flashedCells.delete(key);
+                }
+            }
+            const now = Date.now();
+            for (const { id, index, data: newRow } of updated) {
+                const oldRow = currentData[index];
+                if (oldRow === undefined) continue;
+                for (const column of leafColumns) {
+                    const oldValue = getCellValue(oldRow, column);
+                    const newValue = getCellValue(newRow, column);
+                    if (oldValue !== newValue) {
+                        this.flashedCells.set(`${id}:${column.id}`, now);
+                    }
+                }
+            }
+            this.store.setState({ flashedCells: new Map(this.flashedCells) });
+        }
+
         // ---------- adds ----------
         const insertAt: number = Math.min(Math.max(transaction.addIndex ?? nextData.length, 0), nextData.length);
         if (transaction.add) {
@@ -994,6 +1036,7 @@ export class Grid<T> implements GridApi<T> {
 
     public destroy(): void {
         if (this.destroyed) return;
+        this.flashedCells.clear();
         this.cleanupPlugins.forEach((cleanup) => cleanup());
         this.cleanupPlugins.clear();
         this.dataProcessors.clear();

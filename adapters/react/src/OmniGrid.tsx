@@ -296,8 +296,15 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const measuredHeight = viewportData.totalHeight + headerHeight;
     const hasVerticalOverflow = !autoHeight && measuredHeight > state.viewport.height;
     const verticalScrollbarGutter = hasVerticalOverflow ? "stable" : "auto";
-    const viewportStyle = { ...style, height: autoHeight ? measuredHeight : style?.height };
     const suppressRowHoverHighlight = options.suppressRowHoverHighlight ?? false;
+    const cellFlashRaw = options.cellFlash;
+    const cellFlashDurationMs: number | false =
+        cellFlashRaw === true ? 1000 : typeof cellFlashRaw === "number" && cellFlashRaw > 0 ? cellFlashRaw : false;
+    const viewportStyle = {
+        ...style,
+        height: autoHeight ? measuredHeight : style?.height,
+        ...(cellFlashDurationMs !== false ? { "--omnigrid-flash-duration": `${cellFlashDurationMs}ms` } : {}),
+    };
     const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null].filter(Boolean).join(" ");
     const overlayState: OverlayState | undefined = state.overlay;
     const filterModelSnapshot: FilterModel = grid.getFilterModel();
@@ -668,12 +675,36 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 );
             },
             resolveCellClasses: (info) => {
-                const cellParams: CellRenderParams<T> = { id: info.rowId, index: info.rowIndex, data: info.data, column: info.column };
+                const flashedCells = grid.getState().flashedCells;
+                const flashTimestamp = flashedCells.get(`${info.rowId}:${info.column.id}`);
+                const isFlashed = cellFlashDurationMs !== false && flashTimestamp !== undefined && Date.now() - flashTimestamp <= cellFlashDurationMs;
+                const cellParams: CellRenderParams<T> = {
+                    id: info.rowId,
+                    index: info.rowIndex,
+                    data: info.data,
+                    column: info.column,
+                    isFlashed,
+                    flashTimestamp,
+                };
                 const columnPresentation: ResolvedColumnPresentation = getColumnPresentation(info.column);
-                return resolveCellClasses(info.column, cellParams, columnPresentation.classes);
+                let classes = resolveCellClasses(info.column, cellParams, columnPresentation.classes);
+                if (isFlashed) {
+                    classes = classes ? `${classes} omnigrid-cell-flashed` : "omnigrid-cell-flashed";
+                }
+                return classes;
             },
             resolveCellStyle: (info) => {
-                const cellParams: CellRenderParams<T> = { id: info.rowId, index: info.rowIndex, data: info.data, column: info.column };
+                const flashedCells = grid.getState().flashedCells;
+                const flashTimestamp = flashedCells.get(`${info.rowId}:${info.column.id}`);
+                const isFlashed = cellFlashDurationMs !== false && flashTimestamp !== undefined && Date.now() - flashTimestamp <= cellFlashDurationMs;
+                const cellParams: CellRenderParams<T> = {
+                    id: info.rowId,
+                    index: info.rowIndex,
+                    data: info.data,
+                    column: info.column,
+                    isFlashed,
+                    flashTimestamp,
+                };
                 const columnPresentation: ResolvedColumnPresentation = getColumnPresentation(info.column);
                 return resolveCellStyle(info.column, cellParams, columnPresentation.style);
             },

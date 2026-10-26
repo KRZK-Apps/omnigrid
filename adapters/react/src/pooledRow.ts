@@ -409,6 +409,18 @@ export class PooledRowPane<T> {
 
     private applyCellPresentation(cell: CellPane<T>, cellInfo: PooledCellRenderInfo<T>): void {
         const cellClasses = this.callbacks.resolveCellClasses(cellInfo);
+
+        // When a cell is re-flashed, the CSS class is the same
+        // (omnigrid-cell-flashed) so the selector matches continuously and
+        // the browser does not restart the animation. Reset it imperatively:
+        // remove the flash class, force a reflow, then apply the new one.
+        const hasFlashClass = cell.element.classList.contains("omnigrid-cell-flashed");
+        const nextHasFlashClass = /omnigrid-cell-flashed/.test(cellClasses ?? "");
+        if (hasFlashClass && nextHasFlashClass) {
+            cell.element.classList.remove("omnigrid-cell-flashed");
+            cell.element.offsetHeight; // force reflow
+        }
+
         cell.element.className = cellClasses ?? "";
 
         for (const key of cell.appliedStyleKeys) cell.element.style.removeProperty(cssPropertyName(key));
