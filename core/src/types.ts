@@ -758,6 +758,20 @@ export interface DomPoolBindings<T> {
      * @api
      */
     updateRowIndex?(host: RowHost<T>, rowIndex: number): void;
+    /**
+     * Synchronously updates scalar cell content (textContent / innerHTML) for
+     * visible rows during fast scroll — a lightweight complement to
+     * `transformRow`: rows are already repositioned, but the scalar text in
+     * their cells may still show stale data. This callback writes only text-
+     * based values (no React roots); cells that need a React root are left
+     * untouched and are fully rendered by the subsequent `bindRow` in the
+     * rAF callback.
+     *
+     * Optional: when it is not implemented the visible rows keep their previous
+     * content until the full bind arrives.
+     * @api
+     */
+    syncContent?(host: RowHost<T>, row: PooledRow<T>): void;
 }
 
 /**

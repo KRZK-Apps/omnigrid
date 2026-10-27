@@ -196,7 +196,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     /** rAF handle of the scheduled row-height flush. */
     const heightFlushRef = useRef<number | null>(null);
     /** Latest `syncPool` — read imperatively from `measureViewport`/ResizeObserver so the callback stays stable. */
-    const syncPoolRef = useRef<((synchronousColumnWindow?: boolean, skipContentBind?: boolean) => void) | null>(null);
+    const syncPoolRef = useRef<((synchronousColumnWindow?: boolean, skipContentBind?: boolean, transformsOnly?: boolean) => void) | null>(null);
     /**
      * Scrollable content height frozen at the start of a user scroll gesture.
      *
@@ -819,6 +819,18 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     const pane = paneMap.get(host);
                     if (pane) pane.recycle();
                 },
+                syncContent: (host, row) => {
+                    const pane = paneMap.get(host);
+                    if (!pane) return;
+                    const viewport = layer.viewport;
+                    if (!viewport) return;
+                    const spans = getCachedRowSpans(viewport, row.data, row.index);
+                    const isLeft: boolean = layer === layers.left;
+                    const isRight: boolean = layer === layers.right;
+                    const layout = isLeft ? spans.left : isRight ? spans.right : spans.central;
+                    const sliced = sliceSpanLayoutForLayer(viewport, layer.columns, !isLeft && !isRight, layout);
+                    pane.syncScalarContent(row, layer.columns, layer.originX, sliced);
+                },
             },
         });
     };
@@ -876,8 +888,13 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
      *   avoids synchronous React commits (~200 cell roots) that exceed the 16ms
      *   frame budget, causing flicker/frame drops. Rows remain visible with
      *   previous content at the correct new position.
+     * @param transformsOnly — when `true`, ONLY row transforms/heights are
+     *   updated via `DomPool.syncTransforms`. No content binding, no column
+     *   window updates, no `flushSync`. This is the synchronous fast path
+     *   called directly from `handleScroll` so the browser repaints rows at
+     *   their correct position in the same frame as the native scroll.
      */
-    const syncPool = (synchronousColumnWindow = false, skipContentBind = false): void => {
+    const syncPool = (synchronousColumnWindow = false, skipContentBind = false, transformsOnly = false): void => {
         const state = grid.getState();
         const currentViewportData = grid.getViewportData();
 
@@ -916,6 +933,37 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         layers.right.columns = currentViewportData.pinnedRightColumns;
         layers.right.originX = pinnedLeftWidth + scrollableWidth;
         layers.right.rowWidth = pinnedRightWidth;
+
+        // Publish viewport data so the syncContent binding (invoked from
+        // syncTransforms below) sees the column layout of THIS frame, not a
+        // stale snapshot from the previous rAF callback.
+        layers.left.viewport = currentViewportData;
+        layers.central.viewport = currentViewportData;
+        layers.right.viewport = currentViewportData;
+
+        // Synchronous fast path: update ONLY row transforms/heights — no node
+        // creation, no content binding, no column-window updates. Called from
+        // handleScroll so the browser repaints rows at their correct position in
+        // the same frame as the native scroll, eliminating the blank-frame flash
+        // on scrollbar thumb drags. The rAF callback still runs syncPool(false,
+        // skipContentBind) for content binding.
+        if (transformsOnly) {
+            const processed = grid.getProcessedData();
+            for (const layer of [layers.left, layers.central, layers.right]) {
+                if (layer.pool) {
+                    layer.pool.syncTransforms({
+                        data: processed,
+                        rowRange: currentViewportData.rowRange,
+                        rowHeight: state.rowHeight,
+                        rowOffsets: currentViewportData.rowOffsets,
+                        rowHeights: currentViewportData.rowHeights,
+                        rowWidth: layer.rowWidth,
+                        visibleRowRange: currentViewportData.visibleRowRange,
+                    });
+                }
+            }
+            return;
+        }
 
         // Cell content rendering (root.render) is async under React concurrent
         // mode — without flushSync, rows are repositioned but their cell content
@@ -1145,6 +1193,19 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         // scroll event fires several times per frame during a thumb drag.
         // The ResizeObserver reports the content box size instead — it fires
         // exactly when the scrollbar appears or disappears.
+
+        // Synchronous transform-only update: repositions existing pool nodes to
+        // their correct offsets IN THIS FRAME so the browser paints with rows at
+        // the right place, eliminating the blank-frame flash on scrollbar thumb
+        // drags. This is a lightweight operation (transforms only, ~$0.1ms for
+        // 30–40 rows) — no content binding, no node creation. The rAF callback
+        // below still handles velocity detection, content binding, and column
+        // window updates.
+        //
+        // setViewport with scroll-only updates does NOT notify the Store, so this
+        // does NOT trigger a React re-render.
+        grid.setViewport({ scrollTop: element.scrollTop, scrollLeft: element.scrollLeft });
+        syncPoolRef.current?.(true, false, true);
 
         if (frame.id) return;
         frame.id = window.requestAnimationFrame(() => {

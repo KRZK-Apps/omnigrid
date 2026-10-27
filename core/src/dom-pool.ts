@@ -254,6 +254,85 @@ export class DomPool<T> {
         };
     }
 
+     /**
+     * Updates ONLY the positions (transforms) and heights of existing pool
+     * nodes — no node creation, no content binding, no recycling.
+     *
+     * This is the synchronous fast path invoked from the scroll handler so
+     * the browser repaints rows at their correct position in the same frame as
+     * the native scroll, eliminating the blank-frame flash on scrollbar thumb
+     * drags. The subsequent `update` call (in the rAF callback) handles
+     * content binding for rows whose index changed.
+     *
+     * Unlike `update`, this method does NOT modify `hostRowIndex` or
+     * `hostContentBound` — so `update` will still detect index changes and
+     * bind content. It also does not grow the pool or recycle nodes.
+     * @param viewport - DOM pool update options for the current scroll position.
+     * @returns Number of nodes whose transform was updated this call.
+     * @api
+     */
+    public syncTransforms(viewport: DomPoolUpdateOptions<T>): number {
+        this.assertActive();
+        const { rowRange, rowHeight, rowOffsets, rowHeights, visibleRowRange, data, rowWidth } = viewport;
+        const poolSize: number = this.hosts.length;
+        if (poolSize === 0 || rowRange.end <= rowRange.start) return 0;
+
+        const rangeSize: number = rowRange.end - rowRange.start;
+        const activeSlots: boolean[] = new Array<boolean>(poolSize).fill(false);
+        let positioned: number = 0;
+
+        for (let i: number = 0; i < rangeSize; i += 1) {
+            const rowIndex: number = rowRange.start + i;
+            const slot: number = rowIndex % poolSize;
+            activeSlots[slot] = true;
+
+            const offsetY: number = rowOffsets ? (rowOffsets[i] ?? rowIndex * rowHeight) : rowIndex * rowHeight;
+            const currentHeight: number = rowHeights ? (rowHeights[i] ?? rowHeight) : rowHeight;
+            const host: RowHost<T> = this.hosts[slot];
+
+            if (this.hostOffsetY[slot] !== offsetY) {
+                this.hostOffsetY[slot] = offsetY;
+                this.bindings.transformRow(host, offsetY);
+                positioned += 1;
+            }
+            if (rowHeights && this.hostHeight[slot] !== currentHeight && this.bindings.resizeRow) {
+                this.hostHeight[slot] = currentHeight;
+                this.bindings.resizeRow(host, currentHeight);
+            }
+
+            // For rows intersecting the viewport: synchronously push scalar
+            // content so the user sees correct text in the same frame as the
+            // scroll. The subsequent `update` call in the rAF callback handles
+            // root-managed cells and overscan content.
+            if (visibleRowRange && rowIndex >= visibleRowRange.start && rowIndex < visibleRowRange.end && this.bindings.syncContent) {
+                const dataRow: T = data[rowIndex];
+                if (dataRow !== undefined) {
+                    this.bindings.syncContent(host, {
+                        index: rowIndex,
+                        rowId: this.getRowId(dataRow, rowIndex),
+                        data: dataRow,
+                        offsetY,
+                        height: currentHeight,
+                        width: rowWidth,
+                    });
+                }
+            }
+        }
+
+        // Move any pool slot no longer covered by the window off-screen so it
+        // never paints stale geometry at a wrong position during a teleport.
+        for (let slot: number = 0; slot < poolSize; slot += 1) {
+            if (activeSlots[slot]) continue;
+            if (this.hostOffsetY[slot] !== OFFSCREEN_Y) {
+                this.hostOffsetY[slot] = OFFSCREEN_Y;
+                this.bindings.transformRow(this.hosts[slot], OFFSCREEN_Y);
+                positioned += 1;
+            }
+        }
+
+        return positioned;
+    }
+
     /**
      * Force-rebinds all visible nodes on the next frame.
      * Used by the adapter on `refresh()` or data replacement when

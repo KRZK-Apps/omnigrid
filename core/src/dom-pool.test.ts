@@ -430,3 +430,153 @@ describe("DomPool — window shrink and invalidate", () => {
         expect(log).toContain("pos:1@80");
     });
 });
+
+describe("DomPool — syncTransforms (synchronous position-only update)", () => {
+    it("updates transforms of existing nodes without binding content or creating nodes", () => {
+        const log: string[] = [];
+        const { bindings, hosts } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        step(pool, data, { start: 0, end: 10 });
+        log.length = 0;
+
+        // Sync-transform to a new range — no new nodes, no binds.
+        const positioned = pool.syncTransforms({
+            data,
+            rowRange: { start: 5, end: 15 },
+            rowHeight: ROW_HEIGHT,
+            rowWidth: 100,
+        });
+
+        // Rows 10–14 are new to the window (slots 0–4): their transforms change.
+        // Rows 5–9 are already at the correct offsets — no transform needed.
+        expect(positioned).toBe(5);
+        // No content binds — syncTransforms is position-only.
+        expect(log.filter((entry) => entry.startsWith("bind:"))).toHaveLength(0);
+        // No new nodes created.
+        expect(hosts).toHaveLength(10);
+        // Host 0 (row 10) repositioned to 300px; host 4 (row 14) to 420px.
+        expect(log).toContain("pos:0@300");
+        expect(log).toContain("pos:4@420");
+    });
+
+    it("does not modify hostRowIndex or hostContentBound — update() still binds content after", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        step(pool, data, { start: 0, end: 10 });
+        log.length = 0;
+
+        // Fast scroll: sync transforms to a new range.
+        pool.syncTransforms({
+            data,
+            rowRange: { start: 20, end: 30 },
+            rowHeight: ROW_HEIGHT,
+            rowWidth: 100,
+        });
+        expect(log.filter((entry) => entry.startsWith("bind:"))).toHaveLength(0);
+
+        // Recovery: full update should bind the stale slots. invalidate()
+        // ensures the quota doesn't limit the first recovery bind.
+        pool.invalidate();
+        const update = step(pool, data, { start: 20, end: 30 });
+        expect(update.bound).toHaveLength(10);
+        expect(update.bound.map((item) => item.row.index)).toEqual([20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
+    });
+
+    it("moves nodes that left the window off-screen", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        step(pool, data, { start: 0, end: 10 });
+        log.length = 0;
+
+        // Window shifts to rows 20..24 (5 rows) — slots 5–9 are no longer active.
+        pool.syncTransforms({
+            data,
+            rowRange: { start: 20, end: 25 },
+            rowHeight: ROW_HEIGHT,
+            rowWidth: 100,
+        });
+
+        // Slots 5–9 are not in the new window: they are parked off-screen.
+        const offScreen = log.filter((entry) => entry.includes("@-200000"));
+        expect(offScreen.length).toBe(5);
+        // Slots 0–4 (rows 20–24) are repositioned to their new offsets.
+        expect(log).toContain("pos:0@600");
+        expect(log).toContain("pos:4@720");
+    });
+
+    it("respects rowOffsets and rowHeights for variable-height mode", () => {
+        const log: string[] = [];
+        const resized: number[] = [];
+        const { bindings } = makeBindings(log);
+        bindings.resizeRow = (host: RowHost<Row>, height: number): void => {
+            resized.push(height);
+        };
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        step(pool, data, { start: 0, end: 5 });
+        log.length = 0;
+        resized.length = 0;
+
+        // Sync to a window with different offsets and heights.
+        // Rows 10–14 map to slots 0–4 (10%5=0, 11%5=1, ...).
+        pool.syncTransforms({
+            data,
+            rowRange: { start: 10, end: 15 },
+            rowHeight: ROW_HEIGHT,
+            rowOffsets: [100, 200, 300, 400, 500],
+            rowHeights: [50, 60, 70, 80, 90],
+            rowWidth: 100,
+        });
+
+        // Host 0 (row 10) at offset 100; host 4 (row 14) at offset 500.
+        expect(log).toContain("pos:0@100");
+        expect(log).toContain("pos:4@500");
+        expect(resized).toEqual([50, 60, 70, 80, 90]);
+    });
+
+    it("is a no-op when the pool has no nodes", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        const positioned = pool.syncTransforms({
+            data,
+            rowRange: { start: 0, end: 5 },
+            rowHeight: ROW_HEIGHT,
+            rowWidth: 100,
+        });
+
+        expect(positioned).toBe(0);
+        expect(log).toHaveLength(0);
+    });
+
+    it("is a no-op when the range is empty", () => {
+        const log: string[] = [];
+        const { bindings } = makeBindings(log);
+        const pool = new DomPool<Row>({ rowHeight: ROW_HEIGHT, bindings });
+        const data = makeData(100);
+
+        step(pool, data, { start: 0, end: 5 });
+        log.length = 0;
+
+        const positioned = pool.syncTransforms({
+            data,
+            rowRange: { start: 0, end: 0 },
+            rowHeight: ROW_HEIGHT,
+            rowWidth: 100,
+        });
+
+        // Empty range: nothing to position.
+        expect(positioned).toBe(0);
+    });
+});

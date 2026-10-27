@@ -118,6 +118,8 @@ interface Harness {
 interface MakeOptions {
     /** Cell value served as complex (root-rendered) content — simulates a React cellRenderer. */
     complexContent?: boolean;
+    /** Value returned by renderCellContent; `complex` returns an object (root-rendered). */
+    contentFn?: (info: PooledCellRenderInfo<Row>) => unknown;
     /** Value returned by renderCellPlaceholder; `undefined` = callback not provided. */
     placeholder?: string | null;
     /** Enables the variable-height mode (the grid measures the row height). */
@@ -141,6 +143,7 @@ function makeHarness(options: MakeOptions = {}): Harness {
     const callbacks: PooledRowCallbacks<Row> = {
         rowHeight: 32,
         renderCellContent: (info) => {
+            if (options.contentFn) return options.contentFn(info);
             if (options.complexContent) return { kind: "badge", label: info.data.name };
             return info.data.name;
         },
@@ -216,6 +219,8 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
         pane.bind(row(1, { name: "Bob", age: 40 }), [col(0, 0)], 0);
 
         // Rebind goes through the SAME root — no second root, no staging.
+        // Writing textContent on a root-managed element would corrupt React's
+        // DOM, so existing roots keep their content until the new commit lands.
         expect(createRootCalls).toHaveLength(1);
         expect(renderCalls).toHaveLength(2);
         expect(placeholders).toHaveLength(0);
@@ -257,6 +262,96 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
         expect(createRootCalls).toHaveLength(0);
         expect(renderCalls).toHaveLength(0);
         expect(placeholders).toHaveLength(0);
+    });
+});
+
+describe("PooledRowPane.syncScalarContent (synchronous scalar update)", () => {
+    it("writes scalar textContent without creating roots or calling root.render", () => {
+        const { pane, host, createRootCalls, renderCalls } = makeHarness({ placeholder: null });
+
+        pane.syncScalarContent(row(0, { name: "Alice", age: 30 }), [col(0, 0)], 0);
+
+        expect(firstCell(host).textContent).toBe("Alice");
+        expect(createRootCalls).toHaveLength(0);
+        expect(renderCalls).toHaveLength(0);
+    });
+
+    it("skips cells that already hold a React root", () => {
+        const { pane, host, createRootCalls, renderCalls, placeholders } = makeHarness({
+            complexContent: true,
+            placeholder: "prev",
+        });
+
+        // First bind creates a root for complex content.
+        pane.bind(row(0, { name: "Alice", age: 30 }), [col(0, 0)], 0);
+        expect(createRootCalls).toHaveLength(1);
+
+        // Simulate React having committed (root DOM exists).
+        firstCell(host).textContent = "committed";
+        placeholders.length = 0;
+
+        // syncScalarContent with scalar content: root cells are skipped.
+        pane.syncScalarContent(row(1, { name: "Bob", age: 40 }), [col(0, 0)], 0);
+
+        // No new root, no new render — the root cell is left untouched.
+        expect(createRootCalls).toHaveLength(1);
+        expect(renderCalls).toHaveLength(1);
+        expect(firstCell(host).textContent).toBe("committed");
+    });
+
+    it("updates textContent of a previously bound scalar cell with a different row's data", () => {
+        const { pane, host } = makeHarness({ placeholder: null });
+
+        // Bind row 0 (scalar content "Alice").
+        pane.bind(row(0, { name: "Alice", age: 30 }), [col(0, 0)], 0);
+        expect(firstCell(host).textContent).toBe("Alice");
+
+        // Sync scalar content for row 1 — only textContent should change.
+        pane.syncScalarContent(row(1, { name: "Bob", age: 40 }), [col(0, 0)], 0);
+
+        expect(firstCell(host).textContent).toBe("Bob");
+    });
+
+    it("skips complex content (does not create roots or stage placeholders)", () => {
+        const { pane, host, createRootCalls, placeholders } = makeHarness({
+            contentFn: () => ({ kind: "badge", label: "x" }),
+            placeholder: "ph",
+        });
+
+        pane.syncScalarContent(row(0, { name: "Alice", age: 30 }), [col(0, 0)], 0);
+
+        // No root created, no placeholder — complex content is deferred to rAF bind.
+        expect(createRootCalls).toHaveLength(0);
+        expect(placeholders).toHaveLength(0);
+        expect(firstCell(host).textContent).toBe("");
+    });
+
+    it("handles multiple columns — scalar cells updated, root cells skipped", () => {
+        const COLUMN2: ColumnLeafDef<Row> = { id: "age", field: "age", width: 100 };
+        const columns = [col(0, 0), { column: COLUMN2, index: 1, offset: 120, width: 100 }];
+
+        const { pane, host, createRootCalls } = makeHarness({
+            contentFn: (info) => {
+                // First column returns scalar (name), second returns complex.
+                if (info.columnIndex === 0) return info.data.name;
+                return { kind: "badge", label: String(info.data.age) };
+            },
+            placeholder: null,
+        });
+
+        pane.bind(row(0, { name: "Alice", age: 30 }), columns, 0);
+
+        // First bind: cell 0 (scalar, no root) gets textContent; cell 1 (complex) creates a root.
+        const cell0 = (host.children as FakeElement[])[0];
+        const cell1 = (host.children as FakeElement[])[1];
+        expect(cell0.textContent).toBe("Alice");
+        expect(createRootCalls).toHaveLength(1);
+
+        // syncScalarContent for row 1: cell 0 gets updated, cell 1 skipped.
+        pane.syncScalarContent(row(1, { name: "Bob", age: 40 }), columns, 0);
+        expect(cell0.textContent).toBe("Bob");
+        // Cell 1 root still exists — no new root created.
+        expect(createRootCalls).toHaveLength(1);
     });
 });
 

@@ -191,6 +191,65 @@ export class PooledRowPane<T> {
         }
     }
 
+    /**
+     * Synchronously refreshes scalar cell content (textContent / innerHTML)
+     * for the given row — WITHOUT touching cells that hold a React root.
+     *
+     * Called from the scroll handler's synchronous fast path: rows are already
+     * repositioned by `syncTransforms`, but their text cells may still show the
+     * PREVIOUS row's data. This method pushes the new row's scalar values
+     * so the user reads correct text in the same frame as the scroll. Cells
+     * with roots are left untouched — they are fully rendered by the
+     * asynchronous `bindRow` in the rAF callback.
+     *
+     * This method does NOT need the pane to already be bound to `row`; it
+     * computes content from `row` directly. It does NOT create or destroy roots,
+     * resize the row, or modify row presentation — those are handled by the
+     * full `bind` / `updateColumns` flow.
+     * @param row - Row data to render into scalar cells.
+     * @param columns - Current column window (absolute table-space coordinates).
+     * @param originX - Horizontal origin of the pane (subtracted from column offsets).
+     * @param spans - Optional span layout for merged cells.
+     */
+    public syncScalarContent(row: PooledRow<T>, columns: PooledColumn<T>[], originX = 0, spans?: RowSpanLayout | null): void {
+        this.ensureCells(columns.length);
+
+        for (let slot: number = 0; slot < this.cells.length; slot += 1) {
+            const cell: CellPane<T> = this.cells[slot];
+            const layout: PooledColumn<T> | null = slot < columns.length ? columns[slot] : null;
+
+            if (!layout) continue;
+            const covered: boolean = spans?.spans[slot]?.covered ?? false;
+            if (covered) continue;
+
+            // Skip root-managed cells: writing textContent corrupts React's
+            // DOM and breaks reconciliation on the next root.render.
+            if (cell.root) continue;
+
+            // Compute cell info from the LAYOUT (current column window),
+            // not from stored cell state — the cell may be bound to a
+            // different row/column from a previous frame.
+            const cellInfo: PooledCellRenderInfo<T> = {
+                data: row.data,
+                column: layout.column,
+                columnIndex: layout.index,
+                rowId: row.rowId,
+                rowIndex: row.index,
+                colSpan: spans?.spans[slot]?.span ?? 1,
+            };
+
+            const content = this.callbacks.renderCellContent(cellInfo);
+            const contentType = typeof content;
+            if (contentType === "string" || contentType === "number" || contentType === "boolean") {
+                cell.element.textContent = String(content);
+            } else if (isSlotHtmlContent(content)) {
+                cell.element.innerHTML = content.html;
+            }
+            // Complex content (React components) is skipped — the async
+            // bindRow in the rAF callback will handle it via root.render.
+        }
+    }
+
     /** Single row positioning operation — transform only (no reflow). */
     public setOffsetY(offsetY: number): void {
         this.host.style.transform = `translate3d(0, ${Math.round(offsetY)}px, 0)`;
@@ -464,6 +523,9 @@ export class PooledRowPane<T> {
 
         const contentType = typeof content;
         // Fast path: scalars written directly to textContent — no React.
+        // When a root already exists, render through the root instead:
+        // writing textContent would replace React's managed DOM and break
+        // reconciliation on the subsequent root.render call.
         if (contentType === "string" || contentType === "number" || contentType === "boolean") {
             if (cell.root) {
                 cell.root.render(String(content));
@@ -492,7 +554,8 @@ export class PooledRowPane<T> {
         // React's first commit replaces the container contents entirely (see
         // createRoot docs), so the placeholder never outlives the real content.
         // Cells that already hold a committed root keep their (stale) content
-        // instead — never empty, so no placeholder is needed there.
+        // instead — never empty, so no placeholder is needed there. Writing
+        // textContent on a root-managed element would corrupt React's DOM.
         if (!cell.root) {
             const placeholder = this.callbacks.renderCellPlaceholder?.(cellInfo);
             if (placeholder) cell.element.textContent = placeholder;
