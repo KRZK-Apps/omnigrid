@@ -501,7 +501,13 @@ export class Virtualizer<T> {
     public getColumnRange(columns: ColumnLeafDef<T>[], scrollLeft: number, viewportWidth: number, offsets?: VirtualItem[]): Range {
         const computed = offsets ?? this.getColumnOffsets(columns, viewportWidth);
         const start = this.findStart(computed, scrollLeft);
-        const end = this.findEnd(computed, scrollLeft + viewportWidth);
+        // When the viewport width is unknown (0 on first paint), we cannot
+        // determine how many columns fit. Return all columns so none are
+        // missing from the initial render — they will be resized correctly
+        // once measureViewport() sets the real width.
+        const end = viewportWidth === 0
+            ? columns.length
+            : this.findEnd(computed, scrollLeft + viewportWidth);
         return {
             start: Math.max(0, start - this.options.columnOverscan),
             end: Math.min(columns.length, end + 1 + this.options.columnOverscan),

@@ -64,6 +64,16 @@ type OverlayComponent<T> =
 export interface GridProps<T> extends Omit<GridOptions<T>, "overlayComponents"> {
     className?: string;
     style?: CSSProperties;
+    /**
+     * Minimum grid height in rows when `style.height` is not set (auto-height
+     * mode). The viewport will be at least `headerHeight + minHeight *
+     * rowHeight` tall so the grid does not collapse when it has few or no
+     * rows. Set to `0` to disable.
+     *
+     * @api
+     * @default 3
+     */
+    minHeight?: number;
     slotComponents?: SlotRendererRegistry<T>;
     overlayComponents?: Record<string, OverlayComponent<T>>;
 }
@@ -185,6 +195,8 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const pendingHeightCorrectionRef = useRef<number>(0);
     /** rAF handle of the scheduled row-height flush. */
     const heightFlushRef = useRef<number | null>(null);
+    /** Latest `syncPool` — read imperatively from `measureViewport`/ResizeObserver so the callback stays stable. */
+    const syncPoolRef = useRef<((synchronousColumnWindow?: boolean, skipContentBind?: boolean) => void) | null>(null);
     /**
      * Scrollable content height frozen at the start of a user scroll gesture.
      *
@@ -222,6 +234,10 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     // of the header — row DOM nodes remain managed by the DomPool and are
     // never touched by React's reconciliation.
     const [, setColumnWindowVersion] = useState(0);
+    /** Set to `true` once the viewport dimensions have been measured against
+     *  the real DOM element. Before that the grid content is hidden so the
+     *  user never sees flex columns collapsed to minWidth at width === 0. */
+    const [isViewportMeasured, setIsViewportMeasured] = useState(false);
 
     optionsRef.current = options;
     slotComponentsRef.current = slotComponents ?? {};
@@ -248,6 +264,8 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const headerRowCount = viewportData.headerRowCount;
     const hasGroups = headerRowCount > 0;
     const headerHeight = (headerRowCount + 1) * rowHeight;
+    const minHeightRows: number = options.minHeight ?? 3;
+    const minViewportHeight: number = autoHeight ? headerHeight + minHeightRows * rowHeight : 0;
 
     /**
      * Writes the scrollable content height (and the height of the row
@@ -295,7 +313,12 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
 
     const measuredHeight = viewportData.totalHeight + headerHeight;
     const hasVerticalOverflow = !autoHeight && measuredHeight > state.viewport.height;
-    const verticalScrollbarGutter = hasVerticalOverflow ? "stable" : "auto";
+    // Use "auto" instead of "stable" so the viewport does not reserve space for
+    // a vertical scrollbar before it actually appears. With "stable" the header
+    // container is drawn narrower than full width on first render, then jumps
+    // when the scrollbar materializes. "auto" keeps the header full width and
+    // only cedes space to the scrollbar once it is really needed.
+    const verticalScrollbarGutter = "auto";
     const suppressRowHoverHighlight = options.suppressRowHoverHighlight ?? false;
     const cellFlashRaw = options.cellFlash;
     const cellFlashDurationMs: number | false =
@@ -963,6 +986,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             }
         }
     };
+    syncPoolRef.current = syncPool;
 
     /**
      * Measures viewport dimensions from the DOM and syncs them to the core.
@@ -988,9 +1012,22 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         scrollbarWidthRef.current = scrollbarWidth;
         const width = element.clientWidth;
         const height = element.clientHeight;
-        if (width === 0 || height === 0) return;
-        grid.setViewport({ width, height });
-    }, [grid, syncScrollbarInsets]);
+        if (width === 0) {
+            // Layout may not be computed yet on the first paint. Retry on the
+            // next animation frame so flex columns are sized against the real
+            // client width instead of collapsing to minWidth at width === 0.
+            requestAnimationFrame(() => {
+                measureViewport();
+            });
+            return;
+        }
+        grid.setViewport({
+            width,
+            ...(height > 0 ? { height } : {}),
+        });
+        syncPoolRef.current?.(false, false);
+        setIsViewportMeasured(true);
+    }, [grid, syncScrollbarInsets, setIsViewportMeasured]);
 
     useEffect(() => {
         const element = viewportRef.current;
@@ -1006,11 +1043,13 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             const height = element.clientHeight;
             if (width === 0 || height === 0) return;
             grid.setViewport({ width, height });
+            syncPoolRef.current?.(false, false);
+            setIsViewportMeasured(true);
         });
         observer.observe(element, { box: "content-box" });
         measureViewport();
         return () => observer.disconnect();
-    }, [grid, measureViewport, syncScrollbarInsets]);
+    }, [grid, measureViewport, syncScrollbarInsets, setIsViewportMeasured]);
 
     // Scrollbars can appear or disappear when the CONTENT size changes (the
     // rows are measured, a column is resized). Measuring the insets after
@@ -1025,9 +1064,11 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     }, [contentSizeKey]);
 
     useLayoutEffect(() => {
-        if (autoHeight) return;
-        // Scrollbar and gutter changes alter clientWidth; sync it before paint
-        // so columns remain aligned when an overlay locks vertical scrolling.
+        // Measure the viewport on mount so flex column widths are computed
+        // against the real client width before the first paint. Without this
+        // the header cells render with viewport.width === 0 (flex columns fall
+        // back to minWidth) and only snap to the correct size after the
+        // ResizeObserver-driven useEffect runs — a visible flash on first load.
         measureViewport();
     }, [autoHeight, hasVerticalOverflow, measureViewport, overlayScope]);
 
@@ -1293,6 +1334,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 top: fullHeight ? -(gapRows * rowHeight) : 0,
                 bottom: 0,
                 touchAction: "none",
+                visibility: isViewportMeasured ? undefined : "hidden",
                 width: item.width,
             };
 
@@ -1397,6 +1439,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 left: Math.round(segment.left),
                 top: 0,
                 bottom: 0,
+                visibility: isViewportMeasured ? undefined : "hidden",
                 width: segment.width,
             };
 
@@ -1485,6 +1528,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 overflow: "hidden",
                 position: "absolute",
                 top: headerHeight,
+                visibility: isViewportMeasured ? undefined : "hidden",
                 width,
             }}
         />
@@ -1513,7 +1557,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                         ...viewportStyle,
                         flex: "1 1 0",
                         height: autoHeight ? measuredHeight : "100%",
-                        minHeight: 0,
+                        minHeight: minViewportHeight,
                         minWidth: 0,
                         overflowX: overlayBlocksHorizontalScroll ? "hidden" : needsHorizontalScroll ? "auto" : "hidden",
                         overflowY: overlayScope || autoHeight ? "hidden" : "auto",
