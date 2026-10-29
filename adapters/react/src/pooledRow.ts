@@ -120,6 +120,13 @@ export class PooledRowPane<T> {
         host.style.position = "absolute";
         host.style.top = "0";
         host.style.left = "0";
+        // Hardware layer isolation: keep the row on its own GPU layer so the
+        // compositor can re-position it via transform without style recalculation
+        // or layout. This is the key to eliminating the blank-frame flash during
+        // fast scroll — rows are already on the right layer, waiting for the
+        // transform update.
+        host.style.willChange = "transform";
+        host.style.contain = "layout style paint";
 
         host.addEventListener("mousedown", (event: MouseEvent) => {
             // Shift + click should not select text (same as React version).
@@ -222,8 +229,9 @@ export class PooledRowPane<T> {
             const covered: boolean = spans?.spans[slot]?.covered ?? false;
             if (covered) continue;
 
-            // Skip root-managed cells: writing textContent corrupts React's
-            // DOM and breaks reconciliation on the next root.render.
+            // Root-managed cells (React components) are handled by bindRow →
+            // applyContent which uses cell.root.render synchronously under
+            // flushSync. Only scalar/plain cells are bound here.
             if (cell.root) continue;
 
             // Compute cell info from the LAYOUT (current column window),
@@ -245,8 +253,8 @@ export class PooledRowPane<T> {
             } else if (isSlotHtmlContent(content)) {
                 cell.element.innerHTML = content.html;
             }
-            // Complex content (React components) is skipped — the async
-            // bindRow in the rAF callback will handle it via root.render.
+            // Complex content (React components) is handled by bindRow →
+            // applyContent via cell.root.render under flushSync.
         }
     }
 
@@ -521,44 +529,14 @@ export class PooledRowPane<T> {
             return;
         }
 
-        const contentType = typeof content;
-        // Fast path: scalars written directly to textContent — no React.
-        // When a root already exists, render through the root instead:
-        // writing textContent would replace React's managed DOM and break
-        // reconciliation on the subsequent root.render call.
-        if (contentType === "string" || contentType === "number" || contentType === "boolean") {
-            if (cell.root) {
-                cell.root.render(String(content));
-            } else {
-                cell.element.textContent = String(content);
-            }
-            return;
-        }
-
-        // HTML fragment — directly into innerHTML.
-        if (isSlotHtmlContent(content)) {
-            if (cell.root) {
-                cell.root.render(contentToReactNode(content, this.bridge));
-            } else {
-                cell.element.innerHTML = content.html;
-            }
-            return;
-        }
-
-        // Everything complex (React components, CheckboxControl, SlotNode):
-        // render through an isolated root. The cell node is NOT recreated.
-        //
-        // The first commit into a fresh root is ASYNC (concurrent mode) — on
-        // fast scroll a newly created cell would be visibly empty for a frame
-        // or two. Staging: synchronously paint a cheap scalar preview first;
-        // React's first commit replaces the container contents entirely (see
-        // createRoot docs), so the placeholder never outlives the real content.
-        // Cells that already hold a committed root keep their (stale) content
-        // instead — never empty, so no placeholder is needed there. Writing
-        // textContent on a root-managed element would corrupt React's DOM.
+        // Render every content type — scalar, HTML, or complex — through the
+        // cell's isolated React root. React's reconciliation handles transitions
+        // between content types (complex → scalar → complex) without DOM desync,
+        // so there is no NotFoundError: removeChild during synchronous scroll
+        // binds. Imperative textContent/innerHTML writes would desync React's
+        // fiber tree from the actual DOM, causing React's later unmount to call
+        // removeChild on nodes that no longer exist.
         if (!cell.root) {
-            const placeholder = this.callbacks.renderCellPlaceholder?.(cellInfo);
-            if (placeholder) cell.element.textContent = placeholder;
             cell.root = this.callbacks.createRoot(cell.element);
         }
         cell.root.render(contentToReactNode(content, this.bridge));
@@ -585,12 +563,24 @@ export class PooledRowPane<T> {
     }
 
     private clearContent(cell: CellPane<T>): void {
-        if (cell.root) {
-            // Keep the root mounted while the pooled cell is reused. Calling
-            // root.unmount() during another React commit causes a race warning.
-            cell.root.render(null);
+        const root = cell.root;
+        if (root) {
+            // Unmount React content but keep the root alive so it can be
+            // reused on the next bind via root.render(newContent). Matches
+            // recycle() where roots stay mounted and are released with the
+            // row host.
+            root.render(null);
         } else if (cell.element.textContent !== "" || cell.element.childElementCount > 0) {
             cell.element.replaceChildren();
+        }
+    }
+
+    /** Clears every cell's text content on this row node — used by the pool
+     *  when the node is recycled to a different row index, so no stale content
+     *  can flash between the transform update and the new content bind. */
+    public clearAllContent(): void {
+        for (const cell of this.cells) {
+            this.clearContent(cell);
         }
     }
 

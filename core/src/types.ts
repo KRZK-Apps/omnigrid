@@ -772,6 +772,17 @@ export interface DomPoolBindings<T> {
      * @api
      */
     syncContent?(host: RowHost<T>, row: PooledRow<T>): void;
+    /**
+     * Clears a recycled cell's text content before it is rebound to a new
+     * row/column. Guarantees that no stale content from a previous row or
+     * column can flash on screen between the transform update and the new
+     * content bind.
+     *
+     * Optional: when not implemented, the cell keeps its old content until
+     * `bindRow` overwrites it.
+     * @api
+     */
+    clearContent?(host: RowHost<T>): void;
 }
 
 /**
@@ -800,24 +811,22 @@ export interface DomPoolUpdateOptions<T> {
      * Rows that intersect the viewport (a subset of `rowRange`, without the
      * overscan buffer).
      *
-     * These rows are bound even when `skipBind` is set: a recycled node that
-     * is not re-bound keeps the content of a completely unrelated row, and
-     * the user would see the wrong data in the visible area. The off-screen
-     * rows follow the rebind quota.
+     * These rows are bound eagerly so a recycled node never shows the data
+     * of a different row.
      * @api
      */
     visibleRowRange?: Range;
     /** Pixel width of each row (sum of all column widths). */
     rowWidth: number;
     /**
-     * When `true`, row position (transform) is updated but content binding
-     * (`bindRow`) is skipped — the row displays previous content at the
-     * correct new position. Used during fast scroll to avoid synchronous
-     * React commits that exceed the 16ms frame budget.
-     *
+     * When `true`, forces `renderContent` for every cell in every bound row,
+     * even when the row index hasn't changed. Used during horizontal scroll
+     * when the column window changes but row indices stay the same — without
+     * this, cells would keep showing content from the previous column.
      * @default false
+     * @api
      */
-    skipBind?: boolean;
+    forceContent?: boolean;
 }
 
 /** Result of a viewport frame update (informational for tests/debugging). */
