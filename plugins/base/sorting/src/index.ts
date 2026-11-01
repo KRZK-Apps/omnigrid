@@ -1,6 +1,7 @@
 import type { ColumnDef, ColumnLeafDef, GridApi, GridPlugin, SortDirection } from "@omnigrid/core";
 import { flattenColumns, isColumnGroup } from "@omnigrid/core";
 import type { SortModelItem } from "./types";
+
 export type { SortModelItem } from "./types";
 
 /** Configuration for the sorting plugin. */
@@ -36,6 +37,7 @@ export class SortingPlugin<T> implements GridPlugin<T> {
     private sortModel: SortModelItem[] = [];
     private unregisterProcessor?: () => void;
     private unregisterHeaderClick?: () => void;
+    private unregisterMethods?: () => void;
     private readonly compare: (left: unknown, right: unknown, column: ColumnLeafDef<T>) => number;
     private readonly mode: "client" | "server";
     private readonly onChange?: (sortModel: SortModelItem[]) => void;
@@ -51,19 +53,32 @@ export class SortingPlugin<T> implements GridPlugin<T> {
     public register(api: GridApi<T>): () => void {
         this.api = api;
         if (this.mode === "client") {
-            this.unregisterProcessor = api.registerDataProcessor((data) => this.sortData(data));
+            this.unregisterProcessor = api.pipeline.registerProcessor({
+                stage: "sort",
+                priority: 0,
+                process: (data) => this.sortData(data),
+            });
         }
         this.unregisterHeaderClick = api.on("headerClick", ({ columnId, multiSort }) => {
             this.toggle(columnId, multiSort);
+        });
+        this.unregisterMethods = api.registerMethods({
+            setSortModel: (model: SortModelItem[]) => this.setSortModel(model),
+            getSortModel: () => this.getSortModel(),
         });
         this.initializeSortModel();
 
         return () => {
             this.unregisterProcessor?.();
             this.unregisterHeaderClick?.();
+            this.unregisterMethods?.();
             this.unregisterProcessor = undefined;
             this.unregisterHeaderClick = undefined;
+            this.unregisterMethods = undefined;
             this.sortModel = [];
+            if (this.api && !this.api.isDestroyed()) {
+                this.api.setState((prev) => ({ ...prev, sortModel: [] }));
+            }
             this.stripColumnMetadata();
             this.api = undefined;
         };
@@ -99,12 +114,13 @@ export class SortingPlugin<T> implements GridPlugin<T> {
     public setSortModel(sortModel: SortModelItem[]): void {
         this.sortModel = sortModel.map((item) => ({ ...item }));
         this.updateColumnMetadata();
+        const model: SortModelItem[] = this.getSortModel();
+        this.api?.setState((prev) => ({ ...prev, sortModel: model }));
         if (this.mode === "client") {
             this.api?.setData(this.api.getState().data);
         }
-        const model = this.getSortModel();
         this.api?.emit("sortingChanged", model);
-        this.onChange?.(this.getSortModel());
+        this.onChange?.(model);
     }
 
     /**

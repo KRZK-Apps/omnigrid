@@ -15,9 +15,15 @@ import type {
 import { flattenColumns } from "@omnigrid/core";
 import { inferColumnDataType, resolveFilterType } from "./inference";
 import { ALL_OPERATOR_LABELS, DATE_OPERATORS, NUMBER_OPERATORS, TEXT_OPERATORS } from "./operators";
+import type { ColumnFilterColumnDef } from "./types";
 
 export { inferColumnDataType, resolveFilterType } from "./inference";
 export { ALL_OPERATOR_LABELS, DATE_OPERATORS, NUMBER_OPERATORS, TEXT_OPERATORS } from "./operators";
+export type { ColumnFilterColumnDef } from "./types";
+
+declare module "@omnigrid/core" {
+    interface ColumnLeafDef<T> extends ColumnFilterColumnDef<T> {}
+}
 
 const POPUP_PREFIX: string = "omnigrid-filter:";
 

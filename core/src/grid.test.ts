@@ -858,3 +858,166 @@ describe("Grid.applyTransaction — targeted row mutations", () => {
         expect(grid.getRowHeight(2)).toBe(32);
     });
 });
+
+describe("Grid grouping", () => {
+    interface GroupedRow {
+        id: number;
+        region: string;
+        department: string;
+        sales: number;
+    }
+
+    const columns: ColumnDef<GroupedRow>[] = [
+        { id: "region", field: "region", header: "Region" },
+        { id: "department", field: "department", header: "Department" },
+        { id: "sales", field: "sales", header: "Sales", aggFunc: "sum" },
+    ];
+
+    const data: GroupedRow[] = [
+        { id: 1, region: "Europe", department: "Sales", sales: 100 },
+        { id: 2, region: "Europe", department: "Sales", sales: 200 },
+        { id: 3, region: "Europe", department: "Engineering", sales: 300 },
+        { id: 4, region: "Asia", department: "Sales", sales: 50 },
+        { id: 5, region: "Asia", department: "Engineering", sales: 400 },
+    ];
+
+    function makeGroupedGrid(): Grid<GroupedRow> {
+        const grid = new Grid<GroupedRow>({ columns, data, rowHeight: 32 });
+        grid.setGroupBy(["region", "department"]);
+        grid.setViewport({ width: 1000, height: 500 });
+        return grid;
+    }
+
+    it("exposes groupBy in state and flattens grouped rows", () => {
+        const grid = makeGroupedGrid();
+        expect(grid.getState().groupBy).toEqual(["region", "department"]);
+
+        const rows = grid.getViewportData().rows;
+        expect(rows.length).toBeGreaterThan(data.length);
+        const groups = rows.filter((r) => r.type === "group");
+        expect(groups.length).toBe(6);
+        const leaves = rows.filter((r) => r.type === "leaf");
+        expect(leaves.length).toBe(data.length);
+    });
+
+    it("marks group rows with level and id path", () => {
+        const grid = makeGroupedGrid();
+        const europe = grid.getViewportData().rows.find((r) => r.type === "group" && r.group?.key === "Europe");
+        expect(europe).toBeDefined();
+        expect(europe!.level).toBe(0);
+        expect(europe!.group!.id).toBe("__root__/region:Europe");
+
+        const sales = grid.getViewportData().rows.find((r) => r.type === "group" && r.group?.key === "Sales");
+        expect(sales!.level).toBe(1);
+    });
+
+    it("computes aggregates on group rows", () => {
+        const grid = makeGroupedGrid();
+        grid.registerAggregationFuncs({ sales: "sum" });
+        const europeSales = grid.getViewportData().rows.find(
+            (r) => r.type === "group" && r.group?.field === "department" && r.group!.key === "Sales" && r.group!.level === 1,
+        );
+        expect(europeSales).toBeDefined();
+        // Note: there are two "Sales" groups (Europe & Asia). The viewport only
+        // shows the windowed slice; assert aggregate presence instead of which.
+        const europeGroup = grid.getViewportData().rows.find((r) => r.type === "group" && r.group!.key === "Europe");
+        expect(europeGroup!.group!.aggregations["sales"]).toBe(600);
+    });
+
+    it("toggleGroup collapses / expands a group and changes row count", () => {
+        const grid = makeGroupedGrid();
+        const before = grid.getViewportData().rows.length;
+
+        const europeId = "__root__/region:Europe";
+        grid.toggleGroup(europeId);
+
+        const after = grid.getViewportData().rows.length;
+        expect(after).toBeLessThan(before);
+        // Europe group stays, its descendants removed.
+        expect(grid.getViewportData().rows.some((r) => r.type === "group" && r.group?.id === europeId)).toBe(true);
+
+        grid.toggleGroup(europeId);
+        expect(grid.getViewportData().rows.length).toBe(before);
+    });
+
+    it("expandAll / collapseAll", () => {
+        const grid = makeGroupedGrid();
+        grid.collapseAll();
+        const collapsed = grid.getViewportData().rows.length;
+        expect(collapsed).toBe(2); // only the two region groups
+
+        grid.expandAll();
+        expect(grid.getViewportData().rows.length).toBeGreaterThan(collapsed);
+    });
+
+    it("setGroupBy disables grouping when empty", () => {
+        const grid = makeGroupedGrid();
+        grid.setGroupBy([]);
+        expect(grid.getState().groupBy).toEqual([]);
+        expect(grid.getViewportData().rows.length).toBe(data.length);
+        expect(grid.getViewportData().rows.every((r) => r.type === "leaf")).toBe(true);
+    });
+
+    it("getGroupedRows returns empty when grouping disabled", () => {
+        const grid = makeGroupedGrid();
+        grid.setGroupBy(null);
+        expect(grid.getGroupedRows()).toEqual([]);
+    });
+
+    it("leaf rows show values in non-group columns when all groups expanded", () => {
+        const grid = makeGroupedGrid();
+        const leaves = grid.getViewportData().rows.filter((r) => r.type === "leaf");
+        // Europe/Sales leaf (id=1) should show sales=100 in the sales column.
+        const leaf1 = leaves.find((r) => (r as { data: GroupedRow }).data.id === 1);
+        expect(leaf1).toBeDefined();
+        const europeSalesGroup = grid.getViewportData().rows.find(
+            (r) => r.type === "group" && r.group?.key === "Europe" && r.group!.level === 0,
+        );
+        expect(europeSalesGroup).toBeDefined();
+    });
+
+    it("group column header is overridable via setGroupColumnConfig", () => {
+        const grid = makeGroupedGrid();
+        grid.setGroupColumnConfig({ mode: "single", header: "Group" });
+        expect(grid.getState().groupColumnHeader).toBe("Group");
+        expect(grid.getState().groupColumnMode).toBe("single");
+    });
+
+    it("perLevel mode is settable via setGroupColumnConfig", () => {
+        const grid = makeGroupedGrid();
+        grid.setGroupColumnConfig({ mode: "perLevel" });
+        expect(grid.getState().groupColumnMode).toBe("perLevel");
+    });
+
+    it("hides non-primary grouped columns in single mode", () => {
+        const grid = makeGroupedGrid();
+        expect(grid.getState().groupColumnMode).toBe("single");
+
+        const visibleIds = grid.getViewportData().columns.map((item) => item.column.id);
+        // The primary group column (groupBy[0] = region) stays visible.
+        expect(visibleIds).toContain("region");
+        // The secondary group column (groupBy[1] = department) is hidden.
+        expect(visibleIds).not.toContain("department");
+        // Non-grouped columns remain visible.
+        expect(visibleIds).toContain("sales");
+    });
+
+    it("hides non-primary grouped columns from leafColumns in single mode", () => {
+        const grid = makeGroupedGrid();
+        const leafIds = grid.getViewportData().leafColumns.map((c) => c.id);
+        expect(leafIds).toContain("region");
+        expect(leafIds).not.toContain("department");
+        expect(leafIds).toContain("sales");
+    });
+
+    it("does not hide grouped columns in perLevel mode", () => {
+        const grid = makeGroupedGrid();
+        grid.setGroupColumnConfig({ mode: "perLevel" });
+        const visibleIds = grid.getViewportData().columns.map((item) => item.column.id);
+        // In perLevel mode all grouped columns remain visible.
+        expect(visibleIds).toContain("region");
+        expect(visibleIds).toContain("department");
+        expect(visibleIds).toContain("sales");
+    });
+});
+

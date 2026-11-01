@@ -7,6 +7,9 @@ export { Grid } from "./grid";
 export { Grid as GridCore } from "./grid";
 export { SlotManager } from "./slots";
 export { Store } from "./store";
+export type { StateUpdater } from "./store";
+export { DataPipeline, PIPELINE_STAGE_ORDER } from "./pipeline";
+export type { PipelineProcessor, PipelineStage } from "./pipeline";
 export { applyFilterModel, applyQuickFilter, isActiveCondition, isFilterModelActive, matchesColumnFilter } from "./filtering";
 export type { ColumnFilterModel, FilterCondition, FilterModel, FilterOperator } from "./filtering";
 export type {
@@ -28,6 +31,7 @@ export type { OverlayOptions, OverlayScope, OverlayState, OverlayType } from "./
 export type {
     BlockConfig,
     CellAlign,
+    AggregationFunc,
     CellRenderParams,
     CellClassRules,
     CellSpan,
@@ -45,14 +49,22 @@ export type {
     ColumnStyle,
     ColumnStyleParams,
     DataProcessor,
+    DataRowNode,
     DomPoolBindings,
     DomPoolUpdate,
     DomPoolUpdateOptions,
+    GroupRowNode,
+    GroupRowRenderParams,
+    GroupRowRenderer,
+    CoreGridApi,
+    CoreGridState,
     GridApi,
     GridEvents,
     GridOptions,
     GridPlugin,
     GridState,
+    PluginApiExtensions,
+    PluginStateExtensions,
     HeaderClassRules,
     HeaderGroupClassRules,
     HeaderGroupRenderParams,
@@ -88,6 +100,7 @@ export type {
     SlotRenderContext,
     SortDirection,
     TransactionResult,
+    TreeRowNode,
     ViewportData,
     ViewportState,
     VirtualItem,

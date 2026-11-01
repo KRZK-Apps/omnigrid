@@ -3,6 +3,10 @@ import type { SlotManager } from "./slots";
 import type { IconRegistry } from "./icons";
 import type { FilterCondition, FilterModel, FilterOperator } from "./filtering";
 import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
+import type { StateUpdater } from "./store";
+import type { DataPipeline, PipelineProcessor, PipelineStage } from "./pipeline";
+
+export type { PipelineProcessor, PipelineStage } from "./pipeline";
 
 export type RowId = string | number;
 export type SortDirection = "asc" | "desc";
@@ -49,6 +53,91 @@ export interface RowNode<T> {
     /** Raw row data object. */
     data: T;
 }
+
+/** Aggregation function applied to column values within a group. */
+export type AggregationFunc<T = unknown> = (values: unknown[]) => unknown;
+
+/**
+ * A group (aggregated) row produced by the Row Grouping engine.
+ *
+ * `id` is a stable path such as `"Region:Europe/Country:France"`. `key` is the
+ * group value at this level (e.g. `"Europe"`), `level` is the nesting depth
+ * (0 = outermost), and `expanded` reflects whether its children are visible in
+ * the flattened output. `aggregations` holds pre-computed per-column
+ * aggregates (sum, avg, min, max, count, ...).
+ *
+ * @api
+ */
+export interface GroupRowNode<T> {
+    type: 'group';
+    /** Stable path identifying the group, e.g. "Region:Europe/Country:France". */
+    id: string;
+    /** Column field this group levels on. */
+    field: string;
+    /** Group value at this level, e.g. "Europe". */
+    key: string;
+    /** Nesting depth (0 = outermost group level). */
+    level: number;
+    /** Whether the group's children are currently visible in the flat output. */
+    expanded: boolean;
+    /** Total number of descendant leaf rows in this group. */
+    childrenCount: number;
+    /** Pre-computed per-column aggregates, keyed by column id. */
+    aggregations: Record<string, unknown>;
+    /** Child nodes (sub-groups and leaf rows). */
+    children: TreeRowNode<T>[];
+}
+
+/**
+ * Context passed to a custom group row renderer (`groupRowRenderer`).
+ *
+ * @api
+ */
+export interface GroupRowRenderParams<T> {
+    /** The group node being rendered. */
+    node: GroupRowNode<T>;
+    /** The column the group cell belongs to. */
+    column: ColumnLeafDef<T>;
+    /** Stable row id of the group. */
+    id: RowId;
+    /** Zero-based index in the processed dataset. */
+    index: number;
+    /** The grid API instance. */
+    api: GridApi<T>;
+    /** Current grid state. */
+    state: GridState<T>;
+}
+
+/**
+ * Custom renderer for group rows. May return any headless content accepted by
+ * the active UI adapter (string, number, ReactNode, slot node, ...).
+ *
+ * @api
+ */
+export type GroupRowRenderer<T> = (params: GroupRowRenderParams<T>) => unknown;
+
+/**
+ * A leaf (data) row produced by the Row Grouping engine.
+ *
+ * Wraps a single raw data row together with the group it belongs to and its
+ * depth in the group hierarchy.
+ *
+ * @api
+ */
+export interface DataRowNode<T> {
+    type: 'leaf';
+    /** Stable row identifier (from `getRowId`). */
+    id: RowId;
+    /** Raw row data object. */
+    data: T;
+    /** Nesting depth (equals the number of group levels). */
+    level: number;
+    /** The group this row belongs to. */
+    parent: GroupRowNode<T>;
+}
+
+/** A row in the flattened grouped output — either a group or a data row. */
+export type TreeRowNode<T> = GroupRowNode<T> | DataRowNode<T>;
 
 /**
  * Context passed to the `colSpan` resolver of a column.
@@ -296,36 +385,6 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     maxWidth?: number;
     /** Whether this column can be sorted. */
     sortable?: boolean;
-    /**
-     * Nature of the values in this column. When omitted, the filtering plugin
-     * infers it by sampling the data.
-     */
-    dataType?: ColumnDataType;
-    /**
-     * Kind of filter UI rendered for this column. When omitted, it is derived
-     * from `dataType` (and, failing that, from the sampled data).
-     */
-    filterType?: ColumnFilterType;
-    /**
-     * Identifier of a custom filter registered with the filtering plugin.
-     * Required when `filterType` is `"custom"`.
-     */
-    filterTypeId?: string;
-    /**
-     * Whether this column offers a filter menu. Set to `false` to opt the column out of
-     * filtering UI (the header filter icon is hidden).
-     * @default true
-     */
-    filterable?: boolean;
-    /**
-     * Custom subset of operators allowed for this column's filter menu.
-     */
-    allowedOperators?: FilterOperator[];
-    /**
-     * Fixed option list used by the `"set"` filter. When provided, the column
-     * defaults to `filterType: "set"` unless `filterType` is set explicitly.
-     */
-    filterOptions?: Array<{ label: string; value: any }>;
     /** Horizontal alignment of cell content. */
     align?: CellAlign;
     /** Enables automatic text wrapping instead of ellipsis truncation. @default false @api */
@@ -584,7 +643,23 @@ export interface ColumnGroupViewport<T> {
 }
 
 export interface ViewportData<T> {
-    rows: Array<{ id: RowId; data: T; index: number; offset: number; height?: number }>;
+    rows: Array<{
+        id: RowId;
+        /** Raw row data for leaf rows; `undefined` for group rows. */
+        data: T | undefined;
+        /** Zero-based index of the row in the flattened output. */
+        index: number;
+        /** Nesting depth (0 = outermost group, equal to groupBy length for leaves). */
+        level: number;
+        /** `'group'` for a group row, `'leaf'` for a data row. */
+        type: 'group' | 'leaf';
+        /** The group node when `type === 'group'`, otherwise `undefined`. */
+        group: GroupRowNode<T> | undefined;
+        /** Absolute vertical offset (px) of the row top. */
+        offset: number;
+        /** Row height in pixels. */
+        height?: number;
+    }>;
     /** Scrollable (virtualized) leaf columns of the current horizontal window. */
     columns: Array<{ column: ColumnLeafDef<T>; index: number; offset: number; width: number }>;
     /** Left-pinned leaf columns — always visible, absolute offsets from 0. */
@@ -661,7 +736,13 @@ export interface ViewportData<T> {
     totalHeight: number;
 }
 
-export interface GridState<T> {
+/**
+ * Fundamental state owned directly by the Grid Core engine.
+ * Contains only rendering, geometry, viewport, and core overlay state.
+ *
+ * @api
+ */
+export interface CoreGridState<T> {
     data: T[];
     columns: ColumnDef<T>[];
     viewport: ViewportState;
@@ -672,10 +753,53 @@ export interface GridState<T> {
     flashedCells: Map<string, number>;
     /** Active overlay state — updated automatically by the grid's overlay manager. */
     overlay: OverlayState;
+}
+
+/**
+ * Open interface for plugin-contributed state slices.
+ * Plugins augment this interface via TypeScript module augmentation.
+ *
+ * @api
+ */
+export interface PluginStateExtensions<T> {
+    /** Fields the rows are currently grouped by (empty = no grouping). */
+    groupBy?: string[];
+    /** Expanded state of groups, keyed by group id. */
+    expandedGroups?: Record<string, boolean>;
+    /** Group column render mode: `'single'` (one Group column) or `'perLevel'` (one column per group level). */
+    groupColumnMode?: "single" | "perLevel";
+    /** Header text for the Group column in `'single'` mode. */
+    groupColumnHeader?: string;
+    /** Whether group rows display the number of child rows. */
+    showChildCount?: boolean;
+    /** Custom renderer for group rows. */
+    groupRowRenderer?: GroupRowRenderer<T>;
     /**
      * Global quick filter query string. Applied across every column whose
      * `searchable` property is not `false`. Empty string means no quick filter.
      */
+    quickFilter?: string;
+}
+
+/**
+ * Unified grid state combining core state and modular plugin slices.
+ *
+ * @api
+ */
+export interface GridState<T> extends CoreGridState<T>, PluginStateExtensions<T> {
+    /** Fields the rows are currently grouped by (empty = no grouping). */
+    groupBy: string[];
+    /** Expanded state of groups, keyed by group id. */
+    expandedGroups: Record<string, boolean>;
+    /** Group column render mode: `'single'` (one Group column) or `'perLevel'` (one column per group level). */
+    groupColumnMode: "single" | "perLevel";
+    /** Header text for the Group column in `'single'` mode. */
+    groupColumnHeader: string;
+    /** Whether group rows display the number of child rows. */
+    showChildCount: boolean;
+    /** Custom renderer for group rows. */
+    groupRowRenderer?: GroupRowRenderer<T>;
+    /** Global quick filter query string. */
     quickFilter: string;
 }
 
@@ -985,8 +1109,39 @@ export interface SlotMount<T> {
     unmount(): void;
 }
 
-export interface GridApi<T> {
+/**
+ * Open interface for plugin-contributed API methods.
+ * Plugins augment this interface via TypeScript module augmentation.
+ *
+ * @api
+ */
+export interface PluginApiExtensions<T> {}
+
+/**
+ * Base grid API surface provided by the core engine.
+ *
+ * @api
+ */
+export interface CoreGridApi<T> {
     getState(): GridState<T>;
+    /**
+     * Updates the grid state via partial patch or reducer.
+     * @param updater - State slice patch or updater function.
+     * @api
+     */
+    setState(updater: StateUpdater<GridState<T>>): void;
+    /**
+     * Registers methods dynamically contributed by plugins.
+     * These methods are attached both to `api.methods` and directly to `api`.
+     * @param methods - Methods to register.
+     * @returns Cleanup callback to unregister the methods.
+     * @api
+     */
+    registerMethods(methods: Record<string, unknown>): () => void;
+    /** Extensible multi-stage data transformation pipeline. */
+    readonly pipeline: DataPipeline<T>;
+    /** Namespace for plugin-contributed methods. */
+    readonly methods: Record<string, unknown>;
     getScrollPosition(): ScrollPosition;
     /**
      * Requests a native scroll position update from the active adapter.
@@ -997,6 +1152,13 @@ export interface GridApi<T> {
     getViewportData(): ViewportData<T>;
     getColumnWidth(columnId: string): number | undefined;
     getProcessedData(): T[];
+    /**
+     * Returns the active dataset consumed by the virtualizer and DOM pool.
+     * When grouping or a custom row model is active, returns the transformed rows;
+     * otherwise returns the processed data rows.
+     * @api
+     */
+    getRows(): unknown[];
     getRowId(row: T, index: number): RowId;
     /**
      * Resolves the normalized horizontal span of a single body cell.
@@ -1219,3 +1381,10 @@ export interface GridApi<T> {
     destroy(): void;
     isDestroyed(): boolean;
 }
+
+/**
+ * Complete grid API surface combining core methods and modular plugin extensions.
+ *
+ * @api
+ */
+export interface GridApi<T> extends CoreGridApi<T>, PluginApiExtensions<T> {}

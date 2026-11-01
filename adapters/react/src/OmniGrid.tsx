@@ -1,10 +1,21 @@
-import { createElement, type ComponentType, type CSSProperties, type ReactNode, type UIEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+    createElement,
+    type ComponentType,
+    type CSSProperties,
+    type ReactNode,
+    type UIEvent,
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import { flushSync } from "react-dom";
 
 import type {
     CellRenderParams,
     CellSpan,
-    ColumnGroupDef,
     ColumnLeafDef,
     ColumnStyleParams,
     FilterModel,
@@ -17,7 +28,6 @@ import type {
     OverlayComponentProps as CoreOverlayComponentProps,
     OverlayScope,
     OverlayState,
-    OverlayType,
     RowRenderParams,
     RowSpanLayout,
     RowStyle,
@@ -27,10 +37,11 @@ import type {
     SlotRenderContext,
     ViewportData,
 } from "@omnigrid/core";
-import { DomPool, isActiveCondition } from "@omnigrid/core";
+import { DomPool, isActiveCondition, type GridApi, type RowId } from "@omnigrid/core";
 
 import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
 import { computeGroupSegments } from "./groupHeader";
+import { getGroupColumnRole, poolGetRowId, renderGroupCellContent, renderGroupCellPlaceholder } from "./groupCell";
 import { type PooledColumn, type PooledRowCallbacks, PooledRowPane } from "./pooledRow";
 import { createCellRoot } from "./reactRoot";
 import { renderDefaultOverlay } from "./overlays";
@@ -57,9 +68,7 @@ export interface SlotRendererRegistry<T> {
 
 export type OverlayComponentProps<T> = CoreOverlayComponentProps<T>;
 
-type OverlayComponent<T> =
-    | ComponentType<CoreOverlayComponentProps<T>>
-    | CoreOverlayComponent<T>;
+type OverlayComponent<T> = ComponentType<CoreOverlayComponentProps<T>> | CoreOverlayComponent<T>;
 
 export interface GridProps<T> extends Omit<GridOptions<T>, "overlayComponents"> {
     className?: string;
@@ -83,6 +92,11 @@ function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
     // `field` is `keyof T | string` (loose rows), so index via a string-keyed cast.
     if (column.field) return (row as Record<string, unknown>)[column.field as string];
     return undefined;
+}
+
+/** Returns the flat row array the virtualizer pools against: grouped rows when grouping, else raw data. */
+function getPoolData<T>(grid: GridApi<T>): unknown[] {
+    return grid.getRows();
 }
 
 const SLOT_POSITIONS: SlotPosition[] = ["start", "center", "end"];
@@ -181,7 +195,13 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const pinnedRightRowsLayerRef = useRef<HTMLDivElement>(null);
     /** Space taken by the viewport's native scrollbars; body slots stay clear of it. */
     const [scrollbarInsets, setScrollbarInsets] = useState<{ right: number; bottom: number }>({ right: 0, bottom: 0 });
-    const scrollFrameRef = useRef<{ id: number; top: number; left: number; lastTop: number; lastTime: number }>({ id: 0, top: 0, left: 0, lastTop: 0, lastTime: 0 });
+    const scrollFrameRef = useRef<{ id: number; top: number; left: number; lastTop: number; lastTime: number }>({
+        id: 0,
+        top: 0,
+        left: 0,
+        lastTop: 0,
+        lastTime: 0,
+    });
     const scrollVelocityRef = useRef<number>(0);
     /** Timestamp of the last processed scroll frame — used to age out the velocity. */
     const lastScrollTimeRef = useRef<number>(0);
@@ -321,8 +341,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const verticalScrollbarGutter = "auto";
     const suppressRowHoverHighlight = options.suppressRowHoverHighlight ?? false;
     const cellFlashRaw = options.cellFlash;
-    const cellFlashDurationMs: number | false =
-        cellFlashRaw === true ? 1000 : typeof cellFlashRaw === "number" && cellFlashRaw > 0 ? cellFlashRaw : false;
+    const cellFlashDurationMs: number | false = cellFlashRaw === true ? 1000 : typeof cellFlashRaw === "number" && cellFlashRaw > 0 ? cellFlashRaw : false;
     const viewportStyle = {
         ...style,
         height: autoHeight ? measuredHeight : style?.height,
@@ -338,9 +357,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
     const overlayScope: OverlayScope | undefined = overlayState.type
         ? (overlayState.scope ?? (overlayState.type === "error" ? "full" : "bodyOnly"))
         : undefined;
-    const overlayBlocksHorizontalScroll: boolean = overlayState.type
-        ? (overlayState.blockScroll ?? false)
-        : false;
+    const overlayBlocksHorizontalScroll: boolean = overlayState.type ? (overlayState.blockScroll ?? false) : false;
     const isFullOverlay: boolean = overlayScope === "full";
 
     /**
@@ -354,9 +371,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         };
     }
 
-    const columnPresentationCacheRef = useRef<
-        Map<string, { revision: number; data: unknown[] | null; presentation: ResolvedColumnPresentation }>
-    >(new Map());
+    const columnPresentationCacheRef = useRef<Map<string, { revision: number; data: unknown[] | null; presentation: ResolvedColumnPresentation }>>(new Map());
 
     /**
      * Memoized per-row span layouts, keyed by row index within one viewport
@@ -652,27 +667,38 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 scheduleHeightFlush();
             },
             renderCellContent: (info) => {
-                const column = info.column;
-                const value = getCellValue(info.data, column);
-                if (column.cellRenderer) {
-                    return column.cellRenderer({ value, data: info.data, column, id: info.rowId, index: info.rowIndex });
+                const groupContent = renderGroupCellContent(info, bridgeArg, grid);
+                if (groupContent !== undefined) {
+                    return groupContent;
                 }
-                return column.valueFormatter ? column.valueFormatter(value) : String(value ?? "");
+
+                const rawData = (info.data && typeof info.data === "object" && "data" in info.data
+                    ? (info.data as { data: T }).data
+                    : info.data) as T;
+                const value = getCellValue(rawData, info.column);
+                if (info.column.cellRenderer) {
+                    return info.column.cellRenderer({ value, data: rawData, column: info.column, id: info.rowId, index: info.rowIndex });
+                }
+                return info.column.valueFormatter ? info.column.valueFormatter(value) : String(value ?? "");
             },
             renderCellPlaceholder: (info) => {
-                // Cheap scalar preview mirroring the renderCellContent pipeline
-                // minus the (possibly expensive) cellRenderer: same value source,
-                // same formatter. Skipped when the raw value is not scalar and no
-                // formatter exists (e.g. CheckboxControl sources) — the cell
-                // stays empty for the one commit rather than showing garbage.
-                const column = info.column;
-                const value = getCellValue(info.data, column);
-                if (column.valueFormatter) return column.valueFormatter(value);
+                const groupPlaceholder = renderGroupCellPlaceholder(info, grid);
+                if (groupPlaceholder !== undefined) {
+                    return groupPlaceholder;
+                }
+
+                const rawData = (info.data && typeof info.data === "object" && "data" in info.data
+                    ? (info.data as { data: T }).data
+                    : info.data) as T;
+                const value = getCellValue(rawData, info.column);
+                if (info.column.valueFormatter) return info.column.valueFormatter(value);
                 const valueType = typeof value;
                 if (valueType === "string" || valueType === "number" || valueType === "boolean") return String(value);
                 return null;
             },
             resolveRowClasses: (row) => {
+                const isGroup = Boolean(row.data && typeof row.data === "object" && "type" in row.data && (row.data as { type: string }).type === "group");
+                const base = isGroup ? "omnigrid-row omnigrid-row-group" : "omnigrid-row";
                 const rowParams: RowRenderParams<T> = { id: row.rowId, index: row.index, data: row.data };
                 const currentOptions = current();
                 const rowClass = typeof currentOptions.rowClass === "function" ? currentOptions.rowClass(rowParams) : currentOptions.rowClass;
@@ -683,7 +709,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 const pluginClasses = (currentOptions.plugins ?? [])
                     .map((plugin) => plugin.getRowClass?.(rowParams))
                     .filter((rowClass): rowClass is string => Boolean(rowClass));
-                return ["omnigrid-row", rowClass, ...ruleClasses, dynamicRowClass, ...pluginClasses].filter(Boolean).join(" ");
+                return [base, rowClass, ...ruleClasses, dynamicRowClass, ...pluginClasses].filter(Boolean).join(" ");
             },
             resolveRowStyle: (row) => {
                 const rowParams: RowRenderParams<T> = { id: row.rowId, index: row.index, data: row.data };
@@ -731,20 +757,33 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 const columnPresentation: ResolvedColumnPresentation = getColumnPresentation(info.column);
                 return resolveCellStyle(info.column, cellParams, columnPresentation.style);
             },
-            onRowClick: (row, modifiers) =>
+            onRowClick: (row, modifiers) => {
+                if (row.data && typeof row.data === "object" && "type" in row.data && (row.data as { type: string }).type === "group") {
+                    if (typeof (grid as any).toggleGroup === "function") {
+                        (grid as any).toggleGroup((row.data as unknown as { id: string }).id);
+                    }
+                    return;
+                }
                 grid.rowClick({
                     id: row.rowId,
                     index: row.index,
                     data: row.data,
                     ctrlKey: modifiers.ctrlKey,
                     shiftKey: modifiers.shiftKey,
-                }),
+                });
+            },
             onRowHover: (row, hovered) => {
                 const rowElements = viewportRef.current?.querySelectorAll<HTMLElement>(`[data-row-index="${row.index}"]`);
                 rowElements?.forEach((element) => element.classList.toggle("omnigrid-row-hover", hovered));
                 grid.rowHover({ id: row.rowId, index: row.index, data: row.data, hovered });
             },
             onCellClick: (row, column, modifiers) => {
+                if (row.data && typeof row.data === "object" && "type" in row.data && (row.data as { type: string }).type === "group") {
+                    if (typeof (grid as any).toggleGroup === "function") {
+                        (grid as any).toggleGroup((row.data as unknown as { id: string }).id);
+                    }
+                    return;
+                }
                 if (column.stopRowClick) return;
                 grid.rowClick({
                     id: row.rowId,
@@ -774,7 +813,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         const { paneMap, panes } = layer;
         layer.pool = new DomPool<T>({
             rowHeight,
-            getRowId: (row, index) => grid.getRowId(row, index),
+            getRowId: (row, index) => poolGetRowId(grid, row, index),
             bindings: {
                 createRow: () => {
                     const element = document.createElement("div");
@@ -831,14 +870,19 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
      * Receives the pre-computed `viewportData` from `syncPool` to avoid redundant
      * getViewportData() calls — each layer no longer recomputes column geometry.
      */
-    const syncRowLayer = (layer: RowLayerState<T>, viewportData: ViewportData<T>, rowsLayerRef: React.MutableRefObject<HTMLDivElement | null>, skipBind = false): void => {
+    const syncRowLayer = (
+        layer: RowLayerState<T>,
+        viewportData: ViewportData<T>,
+        rowsLayerRef: React.MutableRefObject<HTMLDivElement | null>,
+        skipBind = false,
+    ): void => {
         const bridge = ensureLayerContext();
         ensureLayerPool(layer, rowsLayerRef.current, bridge);
         const pool = layer.pool;
         if (!pool || grid.isDestroyed()) return;
 
         const state = grid.getState();
-        const processed = grid.getProcessedData();
+        const processed = getPoolData(grid);
 
         const changed = layer.revision !== grid.getRevision() || layer.totalWidth !== viewportData.totalWidth || layer.processed !== processed;
         if (changed) {
@@ -852,7 +896,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         layer.viewport = viewportData;
 
         pool.update({
-            data: processed,
+            data: processed as T[],
             rowRange: viewportData.rowRange,
             rowHeight: state.rowHeight,
             rowOffsets: viewportData.rowOffsets,
@@ -972,7 +1016,11 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                             continue;
                         }
                         const spans = getCachedRowSpans(currentViewportData, paneRow.data, paneRow.index);
-                        pane.updateColumns(layers.central.columns, layers.central.originX, sliceSpanLayoutForLayer(currentViewportData, layers.central.columns, true, spans.central));
+                        pane.updateColumns(
+                            layers.central.columns,
+                            layers.central.originX,
+                            sliceSpanLayoutForLayer(currentViewportData, layers.central.columns, true, spans.central),
+                        );
                     }
                     setColumnWindowVersion((v) => v + 1);
                 };
@@ -1116,7 +1164,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 if (layer.pool) layer.pool.invalidate();
             }
         }
-        syncPool(false, false);  // skipContentBind=false: structural changes always bind fully
+        syncPool(false, false); // skipContentBind=false: structural changes always bind fully
     }, [state]);
 
     useEffect(() => {
@@ -1216,11 +1264,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
         if (groups.every((group) => group === null)) return null;
 
         const slotClass: string = slot === "down" ? "omnigrid-slot omnigrid-slot-bottom omnigrid-slot-down" : `omnigrid-slot omnigrid-slot-${slot}`;
-        return (
-            <div className={slotClass}>
-                {groups}
-            </div>
-        );
+        return <div className={slotClass}>{groups}</div>;
     };
 
     /** Renders slots that overlay the table body (absolute positioning, no layout shift). */
@@ -1325,7 +1369,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 alignItems: "center",
                 display: "flex",
                 fontWeight: 600,
-                overflow: "hidden", 
+                overflow: "hidden",
                 padding: "0 12px",
                 whiteSpace: "nowrap",
                 ...(customHeaderStyle as CSSProperties),
@@ -1365,22 +1409,23 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                         })
                     ) : (
                         <>
-                            <span className="omnigrid-header-label">{item.column.header ?? item.column.id}</span>
+                            <span className="omnigrid-header-label">
+                                {getGroupColumnRole(item.column, grid.getState().groupBy, grid.getState().groupColumnMode).isGroupColumn &&
+                                grid.getState().groupColumnMode === "single"
+                                    ? grid.getState().groupColumnHeader
+                                    : (item.column.header ?? item.column.id)}
+                            </span>
                             <span className="omnigrid-header-tools">
                                 {item.column.sortState && (
                                     <span className="omnigrid-sort-indicator" aria-hidden="true">
-                                        {contentToReactNode(
-                                            item.column.sortState === "asc"
-                                                ? grid.icons.get("arrow-up")
-                                                : grid.icons.get("arrow-down"),
-                                            { registry: slotComponentsRef.current, context: buildRenderContext },
-                                        )}
-                                        {item.column.sortIndex !== undefined && (
-                                            <span className="omnigrid-sort-priority">{item.column.sortIndex}</span>
-                                        )}
+                                        {contentToReactNode(item.column.sortState === "asc" ? grid.icons.get("arrow-up") : grid.icons.get("arrow-down"), {
+                                            registry: slotComponentsRef.current,
+                                            context: buildRenderContext,
+                                        })}
+                                        {item.column.sortIndex !== undefined && <span className="omnigrid-sort-priority">{item.column.sortIndex}</span>}
                                     </span>
                                 )}
-                                {grid.hasFilterMenu() && item.column.filterable !== false && (
+                                {grid.hasFilterMenu() && (item.column as any).filterable !== false && (
                                     <button
                                         type="button"
                                         className="omnigrid-filter-trigger"
@@ -1392,7 +1437,8 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                                         onClick={(event) => {
                                             event.stopPropagation();
                                             const rect: DOMRect = event.currentTarget.getBoundingClientRect();
-                                            const layoutRect: DOMRect = layoutRef.current?.getBoundingClientRect() ?? ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect);
+                                            const layoutRect: DOMRect =
+                                                layoutRef.current?.getBoundingClientRect() ?? ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect);
                                             grid.requestFilterMenu(item.column.id, {
                                                 x: rect.left - layoutRect.left,
                                                 y: rect.top - layoutRect.top,
@@ -1542,105 +1588,105 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 <div
                     className="omnigrid-viewport-container"
                     style={{
-                    flex: "1 1 0",
-                    minHeight: 0,
-                    minWidth: 0,
-                    position: "relative",
-                    width: "100%",
+                        flex: "1 1 0",
+                        minHeight: 0,
+                        minWidth: 0,
+                        position: "relative",
+                        width: "100%",
                     }}
                 >
                     <div
-                    ref={viewportRef}
-                    className={viewportClassName}
-                    onScroll={handleScroll}
-                    style={{
-                        ...viewportStyle,
-                        flex: "1 1 0",
-                        height: autoHeight ? measuredHeight : "100%",
-                        minHeight: minViewportHeight,
-                        minWidth: 0,
-                        overflowX: overlayBlocksHorizontalScroll ? "hidden" : needsHorizontalScroll ? "auto" : "hidden",
-                        overflowY: overlayScope || autoHeight ? "hidden" : "auto",
-                        position: "relative",
-                        scrollbarGutter: verticalScrollbarGutter,
-                        width: "100%",
-                    }}
-                    >
-                    <div
-                        ref={contentRef}
+                        ref={viewportRef}
+                        className={viewportClassName}
+                        onScroll={handleScroll}
                         style={{
-                            display: "flex",
-                            height: rowTotalHeight,
+                            ...viewportStyle,
+                            flex: "1 1 0",
+                            height: autoHeight ? measuredHeight : "100%",
+                            minHeight: minViewportHeight,
+                            minWidth: 0,
+                            overflowX: overlayBlocksHorizontalScroll ? "hidden" : needsHorizontalScroll ? "auto" : "hidden",
+                            overflowY: overlayScope || autoHeight ? "hidden" : "auto",
                             position: "relative",
-                            width: `max(100%, ${viewportData.totalWidth}px)`,
+                            scrollbarGutter: verticalScrollbarGutter,
+                            width: "100%",
                         }}
                     >
-                        {hasPinnedLeft && (
-                            <div
-                                className="omnigrid-pinned omnigrid-pinned-left"
-                                style={{
-                                    height: "100%",
-                                    left: 0,
-                                    position: "sticky",
-                                    top: 0,
-                                    width: `${pinnedLeftWidth}px`,
-                                    zIndex: 3,
-                                }}
-                            >
-                                {renderHeader(viewportData.pinnedLeftColumns, 0, `${pinnedLeftWidth}px`, true)}
-                                {renderRowsLayer(pinnedLeftRowsLayerRef, `${pinnedLeftWidth}px`)}
-                            </div>
-                        )}
                         <div
-                            className="omnigrid-scrollable"
+                            ref={contentRef}
                             style={{
-                                flex: hasPins ? `1 0 ${scrollableWidth}px` : "1 1 auto",
-                                minWidth: 0,
+                                display: "flex",
+                                height: rowTotalHeight,
                                 position: "relative",
-                                width: centralWidth,
-                                zIndex: 1,
+                                width: `max(100%, ${viewportData.totalWidth}px)`,
                             }}
                         >
-                            {renderHeader(viewportData.columns, pinnedLeftWidth, "100%", false)}
-                            {renderRowsLayer(rowsLayerRef, "100%")}
-                        </div>
-                        {hasPinnedRight && (
+                            {hasPinnedLeft && (
+                                <div
+                                    className="omnigrid-pinned omnigrid-pinned-left"
+                                    style={{
+                                        height: "100%",
+                                        left: 0,
+                                        position: "sticky",
+                                        top: 0,
+                                        width: `${pinnedLeftWidth}px`,
+                                        zIndex: 3,
+                                    }}
+                                >
+                                    {renderHeader(viewportData.pinnedLeftColumns, 0, `${pinnedLeftWidth}px`, true)}
+                                    {renderRowsLayer(pinnedLeftRowsLayerRef, `${pinnedLeftWidth}px`)}
+                                </div>
+                            )}
                             <div
-                                className="omnigrid-pinned omnigrid-pinned-right"
+                                className="omnigrid-scrollable"
                                 style={{
-                                    height: "100%",
-                                    position: "sticky",
-                                    right: 0,
-                                    top: 0,
-                                    width: `${pinnedRightWidth}px`,
-                                    zIndex: 3,
+                                    flex: hasPins ? `1 0 ${scrollableWidth}px` : "1 1 auto",
+                                    minWidth: 0,
+                                    position: "relative",
+                                    width: centralWidth,
+                                    zIndex: 1,
                                 }}
                             >
-                                {renderHeader(viewportData.pinnedRightColumns, pinnedLeftWidth + scrollableWidth, `${pinnedRightWidth}px`, true)}
-                                {renderRowsLayer(pinnedRightRowsLayerRef, `${pinnedRightWidth}px`)}
+                                {renderHeader(viewportData.columns, pinnedLeftWidth, "100%", false)}
+                                {renderRowsLayer(rowsLayerRef, "100%")}
                             </div>
-                        )}
-                    </div>
+                            {hasPinnedRight && (
+                                <div
+                                    className="omnigrid-pinned omnigrid-pinned-right"
+                                    style={{
+                                        height: "100%",
+                                        position: "sticky",
+                                        right: 0,
+                                        top: 0,
+                                        width: `${pinnedRightWidth}px`,
+                                        zIndex: 3,
+                                    }}
+                                >
+                                    {renderHeader(viewportData.pinnedRightColumns, pinnedLeftWidth + scrollableWidth, `${pinnedRightWidth}px`, true)}
+                                    {renderRowsLayer(pinnedRightRowsLayerRef, `${pinnedRightWidth}px`)}
+                                </div>
+                            )}
+                        </div>
                     </div>
                     {renderBodySlot("bodyTop")}
                     {renderBodySlot("bodyBottom")}
                     {overlayState.type && overlayScope === "bodyOnly" && (
-                    <div
-                        className="omnigrid-overlay omnigrid-overlay-body"
-                        role="status"
-                        style={{
-                            bottom: 0,
-                            left: 0,
-                            pointerEvents: "auto",
-                            position: "absolute",
-                            right: 0,
-                            top: headerHeight,
-                            width: "100%",
-                            zIndex: 4,
-                        }}
-                    >
-                        {renderOverlayContent(overlayState)}
-                    </div>
+                        <div
+                            className="omnigrid-overlay omnigrid-overlay-body"
+                            role="status"
+                            style={{
+                                bottom: 0,
+                                left: 0,
+                                pointerEvents: "auto",
+                                position: "absolute",
+                                right: 0,
+                                top: headerHeight,
+                                width: "100%",
+                                zIndex: 4,
+                            }}
+                        >
+                            {renderOverlayContent(overlayState)}
+                        </div>
                     )}
                 </div>
                 {renderSlot("right")}

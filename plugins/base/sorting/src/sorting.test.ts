@@ -1,6 +1,6 @@
 import type { ColumnDef } from "@omnigrid/core";
 import { Grid } from "@omnigrid/core";
-import { vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { SortingPlugin } from "./index";
 

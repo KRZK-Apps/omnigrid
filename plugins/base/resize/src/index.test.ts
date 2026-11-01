@@ -2,16 +2,26 @@ import { describe, expect, it } from "vitest";
 import { Grid } from "@omnigrid/core";
 import { ColumnResizePlugin } from "./index";
 
+interface ResizeRow {
+    name?: string;
+    first?: string;
+    second?: string;
+    pinned?: string;
+    status?: string;
+    locked?: string;
+    [key: string]: unknown;
+}
+
 describe("ColumnResizePlugin", () => {
   it("clamps widths inside minWidth and maxWidth", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [
         { id: "name", header: "Name", width: 120, minWidth: 80, maxWidth: 180 },
       ],
       data: [{ name: "Alice" }],
     });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     expect(plugin.setColumnWidth("name", 50)).toBe(80);
@@ -22,14 +32,14 @@ describe("ColumnResizePlugin", () => {
   });
 
   it("updates width while dragging and exposes the guide line", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [
         { id: "name", header: "Name", width: 120, minWidth: 80, maxWidth: 220 },
       ],
       data: [{ name: "Alice" }],
     });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     plugin.beginResize("name", 200);
@@ -44,7 +54,7 @@ describe("ColumnResizePlugin", () => {
   });
 
   it("starts flex resizing from the current calculated width", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [
         { id: "first", header: "First", flex: 1, minWidth: 80 },
         { id: "second", header: "Second", flex: 1, minWidth: 80 },
@@ -53,7 +63,7 @@ describe("ColumnResizePlugin", () => {
     });
     grid.setViewport({ width: 600, height: 400 });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     expect(plugin.getColumnWidth("first")).toBe(300);
@@ -65,7 +75,7 @@ describe("ColumnResizePlugin", () => {
   });
 
   it("freezes flex columns to the left and redistributes width only to the right", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [
         { id: "first", header: "First", flex: 1 },
         { id: "resized", header: "Resized", flex: 1 },
@@ -75,7 +85,7 @@ describe("ColumnResizePlugin", () => {
     });
     grid.setViewport({ width: 600, height: 400 });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     plugin.beginResize("resized", 200);
@@ -93,13 +103,13 @@ describe("ColumnResizePlugin", () => {
   });
 
   it("resizes right-pinned columns in the direction of their left-edge handle", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [{ id: "pinned", header: "Pinned", width: 120, pinned: "right" }],
       data: [{ pinned: "value" }],
     });
     grid.setViewport({ width: 600, height: 400 });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     plugin.beginResize("pinned", 200);
@@ -114,14 +124,14 @@ describe("ColumnResizePlugin", () => {
   });
 
   it("injects a resize handle into the header renderer without adapter-specific resize hooks", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [
         { id: "status", header: "Status", width: 80, minWidth: 60, maxWidth: 220 },
       ],
       data: [{ status: "approved" }, { status: "pending review" }],
     });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     const column = grid.getState().columns[0];
@@ -139,12 +149,12 @@ describe("ColumnResizePlugin", () => {
   });
 
   it("keeps the sort direction and priority visible in the resized header", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [{ id: "status", header: "Status", width: 120, sortState: "desc", sortIndex: 2 }],
       data: [{ status: "pending" }],
     });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     const column = grid.getState().columns[0];
@@ -163,12 +173,12 @@ describe("ColumnResizePlugin", () => {
   });
 
   it("places the resize handle on the left edge of right-pinned columns", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [{ id: "pinned", header: "Pinned", width: 120, pinned: "right" }],
       data: [{ pinned: "value" }],
     });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     const column = grid.getState().columns[0];
@@ -180,14 +190,14 @@ describe("ColumnResizePlugin", () => {
   });
 
   it("supports opting a column out of resizing via resizable: false", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [
         { id: "locked", header: "Locked", width: 120, resizable: false },
       ],
       data: [{ locked: "x" }],
     });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     const column = grid.getState().columns[0] as any;
@@ -199,14 +209,14 @@ describe("ColumnResizePlugin", () => {
   });
 
   it("auto-fits column width from content", () => {
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [
         { id: "status", header: "Status", width: 80, minWidth: 60, maxWidth: 220 },
       ],
       data: [{ status: "approved" }, { status: "pending review" }],
     });
 
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
     plugin.register(grid);
 
     const width = plugin.autoSizeColumn("status");
@@ -221,14 +231,14 @@ describe("ColumnResizePlugin", () => {
 describe("ColumnResizePlugin removal", () => {
   it("restores the original header renderers when the plugin is dropped", () => {
     const original = () => "Custom";
-    const grid = new Grid({
+    const grid = new Grid<ResizeRow>({
       columns: [
         { id: "name", header: "Name", width: 120, headerRenderer: original },
         { id: "age", header: "Age", width: 80 },
       ],
       data: [{ name: "Alice", age: 1 }],
     });
-    const plugin = new ColumnResizePlugin();
+    const plugin = new ColumnResizePlugin<ResizeRow>();
 
     grid.setPlugins([plugin]);
     expect(grid.getState().columns[0].headerRenderer).not.toBe(original);
