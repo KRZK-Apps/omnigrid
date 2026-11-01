@@ -7,15 +7,21 @@ import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
 import { evaluateAutoOverlay } from "./overlays";
 import { IconRegistry } from "./icons";
 import { SlotManager } from "./slots";
-import { Store } from "./store";
+import { Store, type StateUpdater } from "./store";
+import { DataPipeline } from "./pipeline";
+import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
 import type {
+    AggregationFunc,
     ColumnLeafDef,
     DataProcessor,
+    DataRowNode,
     GridApi,
     GridEvents,
     GridOptions,
     GridPlugin,
     GridState,
+    GroupRowNode,
+    GroupRowRenderer,
     Range,
     RowClickEvent,
     RowHeightUpdateOptions,
@@ -27,6 +33,7 @@ import type {
     SlotMount,
     SlotName,
     TransactionResult,
+    TreeRowNode,
     RowTransaction,
     ViewportData,
     ViewportState,
@@ -44,9 +51,16 @@ export class Grid<T> implements GridApi<T> {
     private readonly resolveRowId: NonNullable<GridOptions<T>["getRowId"]>;
     public readonly slots: SlotManager<T>;
     public readonly icons = new IconRegistry<T>();
+    public readonly pipeline: DataPipeline<T>;
+    public readonly methods: Record<string, unknown> = {};
     private processedDataCache: T[] | null = null;
     /** Output of the built-in filter stage; sits in front of every data processor. */
     private filteredDataCache: T[] | null = null;
+    /** Flattened grouped rows (TreeRowNode[]), invalidated on structural/group changes. */
+    private groupedRowsCache: TreeRowNode<T>[] | null = null;
+    private groupedRowsRevision = -1;
+    /** Column id -> aggregation function map, registered by aggregation plugins. */
+    private aggregationFuncs: Map<string, AggregationFunc<T>> = new Map();
     private filterModel: FilterModel = {};
     private filterMenuProviders = 0;
     private readonly popups = new PopupManager((popup) => this.events.emit("popupChange", popup));
@@ -90,6 +104,12 @@ export class Grid<T> implements GridApi<T> {
             columns: applyWrapText(options.columns, options.wrapText),
             viewport: { width: 0, height: 0, scrollTop: 0, scrollLeft: 0 },
             rowHeight: options.rowHeight ?? 32,
+            groupBy: [],
+            expandedGroups: {},
+            groupColumnMode: 'single',
+            groupColumnHeader: 'Group',
+            showChildCount: true,
+            groupRowRenderer: undefined,
             rowOverscan: options.rowOverscan ?? 5,
             columnOverscan: options.columnOverscan ?? 2,
             flashedCells: new Map(),
@@ -129,6 +149,12 @@ export class Grid<T> implements GridApi<T> {
                 this.events.emit("slotsChange", { slot, mounts });
             },
         });
+        this.pipeline = new DataPipeline<T>(() => {
+            this.processedDataCache = null;
+            this.groupedRowsCache = null;
+            this.groupedRowsRevision = -1;
+            if (!this.destroyed) this.recomputeOverlay();
+        });
         this.store.subscribe(() => this.events.emit("stateChange", this.store.getState()));
         options.plugins?.forEach((plugin) => this.registerPlugin(plugin));
         this.recomputeOverlay();
@@ -137,7 +163,7 @@ export class Grid<T> implements GridApi<T> {
     /** Returns the calculated width for a visible column, including off-screen columns. */
     public getColumnWidth(columnId: string): number | undefined {
         const state = this.getState();
-        const visibleColumns = flattenColumns(state.columns).filter((column) => !column.hidden);
+        const visibleColumns = this.getVisibleLeafColumns();
         if (!visibleColumns.some((column) => column.id === columnId)) return undefined;
 
         const pinnedLeft = visibleColumns.filter((column) => column.pinned === "left");
@@ -162,6 +188,46 @@ export class Grid<T> implements GridApi<T> {
         return this.store.getState();
     }
 
+    /**
+     * Updates the grid state via partial patch or functional updater.
+     * Accessible by plugins to update their contributed state slices.
+     * @param updater - Partial state patch or reducer function.
+     * @api
+     */
+    public setState(updater: StateUpdater<GridState<T>>): void {
+        this.assertActive();
+        this.filteredDataCache = null;
+        this.processedDataCache = null;
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
+        this.revision += 1;
+        this.store.setState(updater);
+        this.recomputeOverlay();
+    }
+
+    /**
+     * Registers methods dynamically contributed by plugins.
+     * These methods are attached both to `api.methods` and directly to `api`.
+     * @param methods - Methods to register.
+     * @returns Cleanup callback to unregister the methods.
+     * @api
+     */
+    public registerMethods(methods: Record<string, unknown>): () => void {
+        this.assertActive();
+        const registeredKeys: string[] = [];
+        for (const [key, value] of Object.entries(methods)) {
+            this.methods[key] = value;
+            (this as unknown as Record<string, unknown>)[key] = value;
+            registeredKeys.push(key);
+        }
+        return () => {
+            for (const key of registeredKeys) {
+                delete this.methods[key];
+                delete (this as unknown as Record<string, unknown>)[key];
+            }
+        };
+    }
+
     /** Returns the current ephemeral scroll position (not part of Store state). */
     public getScrollPosition(): ScrollPosition {
         return this.scrollPosition;
@@ -180,6 +246,30 @@ export class Grid<T> implements GridApi<T> {
         this.events.emit("scrollTo", nextPosition);
     }
 
+    /**
+     * Returns the flat array of visible leaf columns.
+     *
+     * A column is visible when it is not explicitly `hidden`. In `'single'` group
+     * column mode with active grouping, all grouped columns except the primary
+     * one are hidden.
+     */
+    private getVisibleLeafColumns(): ColumnLeafDef<T>[] {
+        const state = this.getState();
+        return flattenColumns(state.columns).filter((column) => {
+            if (column.hidden) return false;
+            if (state.groupBy.length > 0 && state.groupColumnMode === "single") {
+                const isGrouped = state.groupBy.some(
+                    (field) => column.id === field || column.field === field,
+                );
+                if (isGrouped) {
+                    const primary = state.groupBy[0];
+                    return column.id === primary || column.field === primary;
+                }
+            }
+            return true;
+        });
+    }
+
     public getViewportData(): ViewportData<T> {
         const state = this.getState();
         const processedData = this.getProcessedData();
@@ -190,8 +280,8 @@ export class Grid<T> implements GridApi<T> {
         // array of leaf columns. The hierarchy lives in `state.columns`;
         // groups are projected onto the visible leaf order in `columnGroups`
         // so adapters can render stacked group header rows.
-        const visibleColumns = flattenColumns(state.columns).filter((column) => !column.hidden);
-        const columnGroups = getColumnGroups(state.columns, (leaf) => !leaf.hidden);
+        const visibleColumns = this.getVisibleLeafColumns();
+        const columnGroups = getColumnGroups(state.columns, (leaf) => visibleColumns.includes(leaf));
 
         // Pre-compute group layout metadata for adapters:
         //  - `headerRowCount`: number of group header rows above the leaf row
@@ -246,22 +336,24 @@ export class Grid<T> implements GridApi<T> {
         const columnRange = Grid.expandColumnRangeForSpans(scrollable, baseColumnRange);
 
         const hasVariable: boolean = this.virtualizer.hasVariableHeights;
-        const rowRange: Range = this.virtualizer.getRowRange(processedData.length, this.scrollPosition.scrollTop, state.viewport.height, hasVariable);
+        const grouped: TreeRowNode<T>[] = this.getGroupedRows();
+        const rowCount: number = grouped.length > 0 ? grouped.length : processedData.length;
+        const rowRange: Range = this.virtualizer.getRowRange(rowCount, this.scrollPosition.scrollTop, state.viewport.height, hasVariable);
         // The rows that actually intersect the viewport (no overscan): the
         // adapter binds them eagerly so a recycled node never shows the data
         // of a different row.
         const visibleRowRange: Range = this.virtualizer.getVisibleRowRange(
-            processedData.length,
+            rowCount,
             this.scrollPosition.scrollTop,
             state.viewport.height,
         );
 
-        const rowOffsets: number[] | undefined = hasVariable
+        const rowOffsets: number[] | undefined = hasVariable && grouped.length === 0
             ? Array.from({ length: rowRange.end - rowRange.start }, (_: unknown, i: number): number =>
                   this.virtualizer.getRowTop(rowRange.start + i, processedData.length),
               )
             : undefined;
-        const rowHeights: number[] | undefined = hasVariable
+        const rowHeights: number[] | undefined = hasVariable && grouped.length === 0
             ? Array.from({ length: rowRange.end - rowRange.start }, (_: unknown, i: number): number => this.virtualizer.getRowHeight(rowRange.start + i))
             : undefined;
 
@@ -296,12 +388,41 @@ export class Grid<T> implements GridApi<T> {
         });
 
         return {
-            rows: processedData.slice(rowRange.start, rowRange.end).map((data, index) => {
+            rows: (grouped.length > 0 ? grouped : processedData as unknown as TreeRowNode<T>[]).slice(rowRange.start, rowRange.end).map((row, index) => {
                 const rowIndex: number = rowRange.start + index;
+                if (grouped.length > 0) {
+                    const node = row as TreeRowNode<T>;
+                    if (node.type === 'group') {
+                        return {
+                            id: node.id,
+                            data: undefined,
+                            index: rowIndex,
+                            level: node.level,
+                            type: 'group',
+                            group: node,
+                            offset: rowIndex * state.rowHeight,
+                            height: state.rowHeight,
+                        };
+                    }
+                    return {
+                        id: node.id,
+                        data: node.data,
+                        index: rowIndex,
+                        level: node.level,
+                        type: 'leaf',
+                        group: node.parent,
+                        offset: rowIndex * state.rowHeight,
+                        height: state.rowHeight,
+                    };
+                }
+                const data = row as T;
                 return {
                     id: this.getRowId(data, rowIndex),
                     data,
                     index: rowIndex,
+                    level: 0,
+                    type: 'leaf',
+                    group: undefined,
                     offset: rowOffsets ? (rowOffsets[index] as number) : rowIndex * state.rowHeight,
                     height: rowHeights ? (rowHeights[index] as number) : state.rowHeight,
                 };
@@ -324,7 +445,7 @@ export class Grid<T> implements GridApi<T> {
             rowOffsets,
             rowHeights,
             totalWidth,
-            totalHeight: this.virtualizer.getTotalHeight(processedData.length),
+            totalHeight: this.virtualizer.getTotalHeight(rowCount),
         };
     }
 
@@ -409,10 +530,198 @@ export class Grid<T> implements GridApi<T> {
         // registration. During scroll the pipeline is NOT re-run — critical
         // optimization for DOM Pool operation with large row counts.
         if (this.processedDataCache !== null) return this.processedDataCache;
-        const result = [...this.dataProcessors].reduce((data, processor) => processor(data), this.getFilteredData());
+        const state: GridState<T> = this.getState();
+        const filtered: T[] = this.getFilteredData();
+        const legacyProcessed: T[] = [...this.dataProcessors].reduce((data, processor) => processor(data), filtered);
+        const result: T[] = this.pipeline.process(legacyProcessed, state);
         this.processedDataCache = result;
         return result;
     }
+
+    /**
+     * Returns the active dataset consumed by the virtualizer and DOM pool.
+     * When grouping or a custom row model is active, returns the transformed rows;
+     * otherwise returns the processed data rows.
+     * @api
+     */
+    public getRows(): unknown[] {
+        const customRows = typeof (this as any).getGroupedRows === "function" ? (this as any).getGroupedRows() : undefined;
+        return customRows && customRows.length > 0 ? customRows : this.getProcessedData();
+    }
+
+    /**
+     * Returns the flattened `TreeRowNode[]` consumed by the virtualizer when
+     * grouping is active. Rebuilds the tree + aggregates only when the
+     * structural revision changes (data / columns / groupBy / expanded state).
+     *
+     * @returns The flattened group/data rows, empty when grouping is disabled.
+     * @api
+     */
+    public getGroupedRows(): TreeRowNode<T>[] {
+        const state = this.getState();
+        if (!state.groupBy || state.groupBy.length === 0) {
+            this.groupedRowsCache = null;
+            this.groupedRowsRevision = -1;
+            return [];
+        }
+
+        const revision = this.getRevision();
+        if (this.groupedRowsCache !== null && this.groupedRowsRevision === revision) {
+            return this.groupedRowsCache;
+        }
+
+        const processed = this.getProcessedData();
+        const root = buildGroupTree(processed, state.groupBy, state.expandedGroups, this.resolveRowId);
+        if (!root) return [];
+
+        const aggregations = Object.fromEntries(this.aggregationFuncs);
+        computeAggregations(root, aggregations);
+        const flat = flattenTree(root, state.expandedGroups);
+
+        this.groupedRowsCache = flat;
+        this.groupedRowsRevision = revision;
+        return flat;
+    }
+
+    /**
+     * Sets the grouping fields. Replaces any existing grouping and resets the
+     * expanded state to all-expanded. Scroll position is reset to the top.
+     *
+     * @param fields - Grouping fields in nesting order, or empty/null to disable grouping.
+     * @api
+     */
+    public setGroupBy(fields: string[] | null | undefined, expandedGroups?: Record<string, boolean>): void {
+        this.assertActive();
+        const next: string[] = fields ?? [];
+        const state = this.getState();
+        const changed =
+            next.length !== state.groupBy.length ||
+            next.some((field, index) => field !== state.groupBy[index]) ||
+            JSON.stringify(expandedGroups ?? {}) !== JSON.stringify(state.expandedGroups);
+        if (!changed) return;
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
+        this.revision += 1;
+        this.store.setState({ groupBy: next, expandedGroups: expandedGroups ?? {} });
+        this.scrollTo({ scrollTop: 0 });
+        this.recomputeOverlay();
+    }
+
+    /**
+     * Toggles the expanded state of a single group.
+     *
+     * @param groupId - Stable group id (the `id` field of a `GroupRowNode`).
+     * @api
+     */
+    public toggleGroup(groupId: string): void {
+        this.assertActive();
+        const state = this.getState();
+        // `undefined` means expanded, so toggling an unmarked group collapses it.
+        const next: Record<string, boolean> = { ...state.expandedGroups };
+        next[groupId] = state.expandedGroups[groupId] === false;
+        this.groupedRowsCache = null;
+        this.revision += 1;
+        this.store.setState({ expandedGroups: next });
+    }
+
+    /** Expands every group. @api */
+    public expandAll(): void {
+        this.assertActive();
+        const state = this.getState();
+        const next: Record<string, boolean> = { ...state.expandedGroups };
+        this.getGroupedRows()
+            .filter((row): row is GroupRowNode<T> => row.type === 'group')
+            .forEach((group) => {
+                next[group.id] = true;
+            });
+        this.groupedRowsCache = null;
+        this.revision += 1;
+        this.store.setState({ expandedGroups: next });
+    }
+
+    /** Collapses every group. @api */
+    public collapseAll(): void {
+        this.assertActive();
+        const state = this.getState();
+        const next: Record<string, boolean> = { ...state.expandedGroups };
+        this.getGroupedRows()
+            .filter((row): row is GroupRowNode<T> => row.type === 'group')
+            .forEach((group) => {
+                next[group.id] = false;
+            });
+        this.groupedRowsCache = null;
+        this.revision += 1;
+        this.store.setState({ expandedGroups: next });
+    }
+
+    /** Replaces the expanded-state map for groups. @api */
+    public setExpandedGroups(expandedGroups: Record<string, boolean>): void {
+        this.assertActive();
+        const state = this.getState();
+        const next = { ...expandedGroups };
+        const changed = JSON.stringify(next) !== JSON.stringify(state.expandedGroups);
+        if (!changed) return;
+        this.groupedRowsCache = null;
+        this.revision += 1;
+        this.store.setState({ expandedGroups: next });
+    }
+
+    /**
+     * Registers column id -> aggregation function mappings. Called by
+     * aggregation plugins (e.g. `@omnigrid/aggregation-plugin`). Replaces any
+     * previously registered functions.
+     * @param funcs - Column id to aggregation function map.
+     * @returns Unregister function.
+     * @api
+     */
+    public registerAggregationFuncs(funcs: Record<string, AggregationFunc<T>>): () => void {
+        this.assertActive();
+        for (const [key, func] of Object.entries(funcs)) {
+            this.aggregationFuncs.set(key, func);
+        }
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
+        const registeredKeys = Object.keys(funcs);
+        const unregister = (): void => {
+            for (const key of registeredKeys) {
+                this.aggregationFuncs.delete(key);
+            }
+            this.groupedRowsCache = null;
+            this.groupedRowsRevision = -1;
+            this.revision += 1;
+        };
+        return unregister;
+    }
+
+    /** Configures the group column UI mode and header. @api */
+    public setGroupColumnConfig(config: { mode: 'single' | 'perLevel'; header?: string; showChildCount?: boolean; groupRowRenderer?: any }): void {
+        this.assertActive();
+        const state = this.getState();
+        const nextMode = config.mode ?? state.groupColumnMode;
+        const nextHeader = config.header ?? state.groupColumnHeader;
+        const nextShowChildCount = config.showChildCount ?? state.showChildCount;
+        const nextGroupRowRenderer = config.groupRowRenderer === null ? undefined : (config.groupRowRenderer ?? state.groupRowRenderer);
+        if (
+            state.groupColumnMode === nextMode &&
+            state.groupColumnHeader === nextHeader &&
+            state.showChildCount === nextShowChildCount &&
+            state.groupRowRenderer === nextGroupRowRenderer
+        )
+            return;
+        this.revision += 1;
+        this.store.setState({
+            groupColumnMode: nextMode,
+            groupColumnHeader: nextHeader,
+            showChildCount: nextShowChildCount,
+            groupRowRenderer: nextGroupRowRenderer,
+        });
+    }
+    /** Sets or clears the custom group row renderer. @api */
+    public setGroupRowRenderer(): void {
+        // Group row rendering is handled by plugins/adapters.
+    }
+
+
 
     private getFilteredData(): T[] {
         if (this.filteredDataCache !== null) return this.filteredDataCache;
@@ -443,6 +752,8 @@ export class Grid<T> implements GridApi<T> {
         this.filterModel = next;
         this.filteredDataCache = null;
         this.processedDataCache = null;
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
         this.revision += 1;
         this.scrollTo({ scrollTop: 0 });
         this.store.setState({});
@@ -487,6 +798,8 @@ export class Grid<T> implements GridApi<T> {
         if (this.store.getState().quickFilter === nextQuery) return;
         this.filteredDataCache = null;
         this.processedDataCache = null;
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
         this.revision += 1;
         this.store.setState({ quickFilter: nextQuery });
         this.scrollTo({ scrollTop: 0 });
@@ -627,6 +940,8 @@ export class Grid<T> implements GridApi<T> {
         const nextData: T[] = data ?? [];
         this.filteredDataCache = null;
         this.processedDataCache = null;
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
         this.virtualizer.resetAllRowHeights();
         this.revision += 1;
         this.store.setState({ data: nextData });
@@ -649,6 +964,8 @@ export class Grid<T> implements GridApi<T> {
         this.hasData = true;
         this.filteredDataCache = null;
         this.processedDataCache = null;
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
         this.revision += 1;
         this.store.setState({ data: nextData });
         this.events.emit("dataChange", nextData);
@@ -787,6 +1104,8 @@ export class Grid<T> implements GridApi<T> {
 
         this.filteredDataCache = null;
         this.processedDataCache = null;
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
         this.revision += 1;
         this.store.setState({ data: nextData });
         this.events.emit("dataChange", nextData);
@@ -861,6 +1180,8 @@ export class Grid<T> implements GridApi<T> {
         this.assertActive();
         this.filteredDataCache = null;
         this.processedDataCache = null;
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
         this.revision += 1;
         this.store.setState({ columns: applyWrapText(columns, this.wrapTextAll) });
         this.recomputeOverlay();
@@ -870,6 +1191,8 @@ export class Grid<T> implements GridApi<T> {
         this.assertActive();
         this.dataProcessors.add(processor);
         this.processedDataCache = null;
+        this.groupedRowsCache = null;
+        this.groupedRowsRevision = -1;
         this.recomputeOverlay();
         const unregister = () => {
             this.dataProcessors.delete(processor);
@@ -1040,6 +1363,11 @@ export class Grid<T> implements GridApi<T> {
         this.cleanupPlugins.forEach((cleanup) => cleanup());
         this.cleanupPlugins.clear();
         this.dataProcessors.clear();
+        this.pipeline.clear();
+        for (const key of Object.keys(this.methods)) {
+            delete this.methods[key];
+            delete (this as unknown as Record<string, unknown>)[key];
+        }
         this.popups.close();
         this.filteredDataCache = null;
         this.processedDataCache = null;

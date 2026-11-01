@@ -1,140 +1,34 @@
 import type {
-    BlockConfig,
     ColumnDef,
     GridApi,
     GridPlugin,
-    IconDefinition,
     SlotContent,
     SlotMount,
     SlotNodeContent,
     SlotNodeEvent,
-    SlotPosition,
     SlotRenderContext,
 } from "@omnigrid/core";
+import type {
+    PaginationBlockConfig,
+    PaginationBlockName,
+    PaginationBlockOption,
+    PaginationIconName,
+    PaginationLabels,
+    PaginationPluginOptions,
+    PaginationSlotName,
+    PaginationState,
+} from "./types";
 
-/**
- * Current pagination values, including the computed number of pages.
- */
-export interface PaginationState {
-    /** The active page number, starting at 1. */
-    page: number;
-    /** The configured page size, or 0 when automatic sizing is enabled. */
-    pageSize: number;
-    /** Total number of rows in the dataset. */
-    totalRows: number;
-    /** Total number of pages, with a minimum of 1. */
-    totalPages: number;
-}
-
-/**
- * Labels and formatter callbacks used by pagination controls.
- */
-export interface PaginationLabels {
-    /** Accessible label for the first-page control. */
-    firstAriaLabel?: string;
-    /** Accessible label for the previous-page control. */
-    prevAriaLabel?: string;
-    /** Accessible label for the next-page control. */
-    nextAriaLabel?: string;
-    /** Accessible label for the last-page control. */
-    lastAriaLabel?: string;
-    /** Formats the current page and total page count when quick jump is disabled. */
-    pageInfo?: (page: number, totalPages: number) => string;
-    /** Formats the visible row range and total row count. */
-    rowInfo?: (from: number, to: number, totalRows: number) => string;
-    /** Visible label for the page-size selector. */
-    pageSizeLabel?: string;
-    /** Accessible label for the page-size options menu. */
-    pageSizesLabel?: string;
-    /** Formats the total page count shown next to the quick-jump input. */
-    pageCount?: (totalPages: number) => string;
-}
-
-/** Name of one of the four page-navigation icons. */
-export type PaginationIconName = "first" | "prev" | "next" | "last";
-/** Name of a pagination control block. */
-export type PaginationBlockName = "rowInfo" | "pageSize" | "navigation";
-
-/**
- * Placement of a pagination block in the grid's top or bottom slot.
- */
-export type PaginationBlockConfig = Omit<BlockConfig<PaginationBlockName>, "slot"> & {
-    slot?: PaginationSlotName;
+export type {
+    PaginationBlockConfig,
+    PaginationBlockName,
+    PaginationBlockOption,
+    PaginationIconName,
+    PaginationLabels,
+    PaginationPluginOptions,
+    PaginationSlotName,
+    PaginationState,
 };
-
-/** A pagination block name or its placement configuration. */
-export type PaginationBlockOption = PaginationBlockName | PaginationBlockConfig;
-/** Grid slot where pagination controls can be rendered. */
-export type PaginationSlotName = "top" | "bottom";
-
-/**
- * Configuration for the pagination plugin.
- */
-export interface PaginationPluginOptions<T> {
-    /**
-     * Number of rows per page. Set to 0 to fit whole rows into the grid viewport.
-     * @default 50
-     */
-    pageSize?: number;
-    /**
-     * Numeric page-size choices shown in the selector. A custom positive pageSize is added automatically.
-     * When automatic sizing is enabled, an Auto choice is prepended.
-     * @default [20, 50, 100]
-     */
-    pageSizes?: number[];
-    /**
-     * Client mode slices data locally; server mode leaves fetching to the host.
-     * @default "client"
-     */
-    mode?: "client" | "server";
-    /**
-     * Total dataset size, primarily used to calculate pages in server mode.
-     */
-    totalRows?: number;
-    /**
-     * Called in server mode when the requested page or page size changes.
-     */
-    onChange?: (params: { page: number; pageSize: number }) => void;
-    /**
-     * Page to show initially. Page numbers start at 1.
-     * @default 1
-     */
-    initialPage?: number;
-    /**
-     * Default slot for blocks that do not specify their own slot.
-     * @default "bottom"
-     */
-    slot?: PaginationSlotName;
-    /**
-     * Default alignment for blocks that do not specify their own position.
-     * @default "end"
-     */
-    position?: SlotPosition;
-    /**
-     * Default render priority for blocks that do not specify their own priority. Lower values render first.
-     * @default 0
-     */
-    priority?: number;
-    /**
-     * Visible blocks and their order or individual placement. Available names are rowInfo, pageSize, and navigation.
-     * @default ["navigation"]
-     */
-    blocks?: PaginationBlockOption[];
-    /**
-     * Show an input for entering a page number in the navigation block.
-     * @default false
-     */
-    quickJump?: boolean;
-    /**
-     * Width of the page-number input in characters when quickJump is enabled.
-     * @default 2
-     */
-    pageInputCharacters?: number;
-    /** Custom accessible labels and pagination text formatters. */
-    labels?: PaginationLabels;
-    /** Custom icon definitions for the first, previous, next, and last controls. */
-    icons?: Partial<Record<PaginationIconName, IconDefinition<T>>>;
-}
 
 const DEFAULT_PAGE_SIZE = 50;
 const DEFAULT_PAGE_SIZES = [20, 50, 100];
@@ -211,6 +105,7 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
     private readonly onChange: PaginationPluginOptions<T>["onChange"];
     private unsubscribeViewport: (() => void) | undefined;
     private unsubscribeState: (() => void) | undefined;
+    private unregisterMethods: (() => void) | undefined;
     private lastAutoPageSize: number | undefined;
 
     public constructor(options: PaginationPluginOptions<T> = {}) {
@@ -283,8 +178,18 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
     public register(api: GridApi<T>): () => void {
         this.api = api;
         if (this.mode === "client") {
-            this.unregisterProcessor = api.registerDataProcessor((data) => this.applyPagination(data));
+            this.unregisterProcessor = api.pipeline.registerProcessor({
+                stage: "paginate",
+                priority: 0,
+                process: (data) => this.applyPagination(data),
+            });
         }
+        this.unregisterMethods = api.registerMethods({
+            setPage: (page: number) => this.goToPage(page),
+            setPageSize: (pageSize: number) => this.setPageSize(pageSize),
+            getPaginationState: () => this.getState(),
+        });
+        api.setState((prev) => ({ ...prev, pagination: this.getState() }));
         this.lastAutoPageSize = this.pageSize === 0 ? this.getEffectivePageSize() : undefined;
         this.unsubscribeViewport = api.on("viewportChange", () => this.handleViewportChange());
         this.unsubscribeState = api.on("stateChange", () => this.handleViewportChange());
@@ -305,12 +210,21 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
         return () => {
             this.unregisterProcessor?.();
             this.unregisterProcessor = undefined;
+            this.unregisterMethods?.();
+            this.unregisterMethods = undefined;
             this.unsubscribeViewport?.();
             this.unsubscribeViewport = undefined;
             this.unsubscribeState?.();
             this.unsubscribeState = undefined;
             this.slotMounts.forEach((mount) => mount.unmount());
             this.slotMounts = [];
+            if (this.api && !this.api.isDestroyed()) {
+                this.api.setState((prev) => {
+                    const next = { ...prev };
+                    delete next.pagination;
+                    return next;
+                });
+            }
             this.api = undefined;
         };
     }
@@ -418,6 +332,7 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
     private refresh(): void {
         if (!this.api || this.api.isDestroyed()) return;
         this.api.setViewport({ scrollTop: 0 });
+        this.api.setState((prev) => ({ ...prev, pagination: this.getState() }));
         if (this.mode === "client") {
             this.api.setData(this.api.getState().data);
         } else {

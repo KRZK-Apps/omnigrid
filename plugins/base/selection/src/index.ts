@@ -1,7 +1,19 @@
 import type { CheckboxRenderParams, ColumnDef, GridApi, GridPlugin, RowClickEvent, RowId, RowRenderParams } from "@omnigrid/core";
+import type {
+    SelectionMode,
+    SelectionPluginOptions,
+    SelectionRenderer,
+    SelectionRendererParams,
+    SelectionState,
+} from "./types";
 
-/** Selection behavior supported by the plugin. */
-export type SelectionMode = "single" | "multiple";
+export type {
+    SelectionMode,
+    SelectionPluginOptions,
+    SelectionRenderer,
+    SelectionRendererParams,
+    SelectionState,
+};
 
 /**
  * CSS class applied to selected rows. The concrete selected-row color is
@@ -12,53 +24,6 @@ export const SELECTED_ROW_CLASS = "omnigrid-row-selected";
 
 /** Applied to rows rejected by `isRowSelectable`; themes supply muted colors. */
 export const UNSELECTABLE_ROW_CLASS = "omnigrid-row-unselectable";
-
-/** Values provided to a custom checkbox renderer. */
-export interface SelectionRendererParams<T> extends CheckboxRenderParams {
-    /** Row data for a row checkbox; absent for the header checkbox. */
-    data?: T;
-    /** Row identifier for a row checkbox. */
-    rowId?: RowId;
-    /** Row index for a row checkbox. */
-    index?: number;
-    /** Whether the renderer is being called for the header checkbox. */
-    header: boolean;
-}
-
-/** Renderer used to customize selection checkboxes. */
-export type SelectionRenderer<T> = (params: SelectionRendererParams<T>) => unknown;
-
-/** Configuration for the selection plugin. */
-export interface SelectionPluginOptions<T> {
-    /** Supports selecting one row or multiple rows. @default "single" */
-    mode?: SelectionMode;
-    /** Restricts selection changes to checkbox interaction. @default false */
-    checkboxOnly?: boolean;
-    /** In multiple mode, clicking a row replaces the current selection. @default false */
-    replaceSelectionOnClick?: boolean;
-    /** Adds a checkbox to each row. @default false */
-    showRowCheckboxes?: boolean;
-    /** Adds a select-all checkbox to the selection column header. @default false */
-    showHeaderCheckbox?: boolean;
-    /** Determines whether a row can be selected. */
-    isRowSelectable?: (row: T, index: number) => boolean;
-    /** Renders checkbox UI; defaults to the OmniGrid checkbox renderer. */
-    checkboxRenderer?: SelectionRenderer<T>;
-    /** Called when the selected rows change. */
-    onSelectionChange?: (state: SelectionState<T>) => void;
-    /** ID for the automatically inserted checkbox column. @default "__omnigrid_selection__" */
-    selectionColumnId?: string;
-    /** Width in pixels of the automatically inserted checkbox column. @default 44 */
-    selectionColumnWidth?: number;
-}
-
-/** Selected row identifiers and their corresponding row data. */
-export interface SelectionState<T> {
-    /** IDs of selected rows. */
-    selectedRowIds: RowId[];
-    /** Data objects for selected rows. */
-    selectedRows: T[];
-}
 
 const CHECKBOX_COLUMN_DEFAULT_ID = "__omnigrid_selection__";
 
@@ -83,6 +48,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
     private readonly selectedRowIds = new Set<RowId>();
     private anchorIndex?: number;
     private unregisterRowClick?: () => void;
+    private unregisterMethods?: () => void;
 
     public constructor(options: SelectionPluginOptions<T> = {}) {
         this.mode = options.mode ?? "single";
@@ -100,14 +66,34 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
     public register(api: GridApi<T>): () => void {
         this.api = api;
         this.unregisterRowClick = api.on("rowClick", (event) => this.handleRowClick(event));
+        this.unregisterMethods = api.registerMethods({
+            selectRow: (rowId: RowId) => {
+                this.selectedRowIds.add(rowId);
+                this.refresh();
+            },
+            deselectRow: (rowId: RowId) => {
+                this.selectedRowIds.delete(rowId);
+                this.refresh();
+            },
+            getSelection: () => this.getSelectionState(),
+            clearSelection: () => this.clearSelection(),
+        });
+        api.setState((prev) => ({ ...prev, selection: this.getSelectionState() }));
         this.updateColumns();
 
         return () => {
             this.unregisterRowClick?.();
             this.unregisterRowClick = undefined;
-            const api: GridApi<T> | undefined = this.api;
-            if (api && !api.isDestroyed()) {
-                api.setColumns(api.getState().columns.filter((column) => column.id !== this.selectionColumnId));
+            this.unregisterMethods?.();
+            this.unregisterMethods = undefined;
+            const targetApi: GridApi<T> | undefined = this.api;
+            if (targetApi && !targetApi.isDestroyed()) {
+                targetApi.setColumns(targetApi.getState().columns.filter((column) => column.id !== this.selectionColumnId));
+                targetApi.setState((prev) => {
+                    const next = { ...prev };
+                    delete next.selection;
+                    return next;
+                });
             }
             this.selectedRowIds.clear();
             this.anchorIndex = undefined;
@@ -325,6 +311,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
 
     private refresh(): void {
         if (!this.api || this.api.isDestroyed()) return;
+        this.api.setState((prev) => ({ ...prev, selection: this.getSelectionState() }));
         this.api.refresh();
         this.onSelectionChange?.(this.getSelectionState());
     }
