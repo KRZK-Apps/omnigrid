@@ -1,6 +1,6 @@
 import { expect, describe, it } from "vitest";
 import { Grid } from "@omnigrid/core";
-import type { RowHierarchy } from "@omnigrid/core";
+import type { DataRowNode, RowHierarchy, TreeRowNode } from "@omnigrid/core";
 
 import type { GroupingRow } from "./types";
 import { GroupingPlugin } from "./index";
@@ -73,6 +73,25 @@ describe("GroupingPlugin", () => {
         expect(hierarchy?.getLeafRowIds("__root__/region:Europe", "filtered")).toEqual([1, 2]);
         expect(hierarchy?.getLeafRowIds(1, "all")).toBeUndefined();
 
+        grid.destroy();
+    });
+
+    it("preserves the level of a collapsed single-child group on its leaf row", () => {
+        const plugin: GroupingPlugin<GroupingRow> = new GroupingPlugin<GroupingRow>({
+            groupBy: ["region", "department"],
+            collapseSingleChildGroups: true,
+        });
+        const grid: Grid<GroupingRow> = new Grid<GroupingRow>({
+            columns: groupingColumns,
+            data: groupingData,
+            plugins: [plugin],
+        });
+        const rows: TreeRowNode<GroupingRow>[] = plugin.getGroupedRows();
+        const collapsedRow: DataRowNode<GroupingRow> | undefined = rows.find(
+            (row): row is DataRowNode<GroupingRow> => row.type === "leaf" && row.collapsedGroup !== undefined,
+        );
+
+        expect(collapsedRow?.collapsedGroup).toEqual({ field: "department", key: "Engineering", level: 1 });
         grid.destroy();
     });
 

@@ -56,6 +56,12 @@ export interface GroupingPluginOptions<T> {
      * `'single'` and `'perLevel'` modes. @default true
      */
     showGroupValues?: boolean;
+
+    /**
+     * When `true`, groups that resolve to exactly one leaf row are rendered as
+     * a plain row instead of a collapsible group row. @default false
+     */
+    collapseSingleChildGroups?: boolean;
 }
 
 /** Column UI configuration managed by the grouping plugin. */

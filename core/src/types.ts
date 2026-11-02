@@ -154,6 +154,12 @@ export interface DataRowNode<T> {
     level: number;
     /** The group this row belongs to. */
     parent: GroupRowNode<T>;
+    /**
+     * Set when this leaf row is displayed as a collapsed single-child group
+     * (`collapseSingleChildGroups: true`). Contains the grouping field, value,
+     * and hierarchy level to display instead of the row's own field value.
+     */
+    collapsedGroup?: { field: string; key: string; level: number };
 }
 
 /** A row in the flattened grouped output — either a group or a data row. */

@@ -1,4 +1,4 @@
-import type { AggregationFunc, GridApi, GridPlugin, GridState, GroupRowNode, RowHierarchyScope, RowId, TreeRowNode } from "@omnigrid/core";
+import type { AggregationFunc, DataRowNode, GridApi, GridPlugin, GridState, GroupRowNode, RowHierarchyScope, RowId, TreeRowNode } from "@omnigrid/core";
 import type { ResolvedAggregationFunc } from "@omnigrid/aggregation-plugin";
 import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
 import type { BuildGroupNode } from "./groupingPipeline";
@@ -32,6 +32,7 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
     private unregisterMethods?: () => void;
     private unregisterRowHierarchy?: () => void;
     private readonly hierarchyCache = new Map<RowHierarchyScope, HierarchyCache<T>>();
+    private readonly collapseSingleChildGroups: boolean;
 
     public constructor(options: GroupingPluginOptions<T> = {}) {
         this.initialGroupBy = options.groupBy ?? [];
@@ -43,6 +44,7 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
             showChildCount: true,
             groupRowRenderer: undefined,
         };
+        this.collapseSingleChildGroups = options.collapseSingleChildGroups ?? false;
     }
 
     public register(api: GridApi<T>): () => void {
@@ -239,7 +241,29 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
 
         const aggregations = Object.fromEntries(this.aggregationFuncs);
         computeAggregations(root, aggregations);
-        const flat: TreeRowNode<T>[] = flattenTree(root, state.expandedGroups ?? {});
+        const flat: TreeRowNode<T>[] = flattenTree(root, state.expandedGroups ?? {}, this.collapseSingleChildGroups);
+
+        // When collapseSingleChildGroups is enabled, record the grouping field
+        // and value on leaf rows whose parent group was collapsed (i.e. not
+        // rendered as a separate group row). Adapters can read this to display
+        // the grouping value in the group column instead of the row's own field.
+        if (this.collapseSingleChildGroups) {
+            const renderedGroupIds = new Set<string>();
+            for (const row of flat) {
+                if (row.type === "group") {
+                    renderedGroupIds.add(row.id);
+                }
+            }
+            for (const row of flat) {
+                if (row.type === "leaf" && row.parent && !renderedGroupIds.has(row.parent.id)) {
+                    (row as DataRowNode<T>).collapsedGroup = {
+                        field: row.parent.field,
+                        key: row.parent.key,
+                        level: row.parent.level,
+                    };
+                }
+            }
+        }
 
         this.groupedRowsCache = flat;
         this.groupedRowsRevision = revision;

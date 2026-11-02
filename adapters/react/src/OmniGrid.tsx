@@ -41,7 +41,7 @@ import { DomPool, isActiveCondition, type GridApi, type RowId } from "@omnigrid/
 
 import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
 import { computeGroupSegments } from "./groupHeader";
-import { getGroupColumnRole, poolGetRowId, renderGroupCellContent, renderGroupCellPlaceholder } from "./groupCell";
+import { getCollapsedGroupDisplay, getGroupColumnRole, poolGetRowId, renderGroupCellContent, renderGroupCellPlaceholder } from "./groupCell";
 import { type PooledColumn, type PooledRowCallbacks, PooledRowPane } from "./pooledRow";
 import { createCellRoot } from "./reactRoot";
 import { renderDefaultOverlay } from "./overlays";
@@ -675,11 +675,29 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 const rawData = (info.data && typeof info.data === "object" && "data" in info.data
                     ? (info.data as { data: T }).data
                     : info.data) as T;
-                const value = getCellValue(rawData, info.column);
-                if (info.column.cellRenderer) {
-                    return info.column.cellRenderer({ value, data: rawData, column: info.column, id: info.rowId, index: info.rowIndex });
+                // When a leaf row is displayed as a collapsed single-child group,
+                // show the grouping field's value in the group column instead of
+                // the row's own field value.
+                const collapsedGroupDisplay = getCollapsedGroupDisplay(
+                    info.data,
+                    info.column,
+                    grid.getState().groupBy ?? [],
+                    grid.getState().groupColumnMode ?? "single",
+                );
+                const value: unknown = collapsedGroupDisplay !== undefined ? collapsedGroupDisplay.value : getCellValue(rawData, info.column);
+                const content: unknown = info.column.cellRenderer
+                    ? info.column.cellRenderer({ value, data: rawData, column: info.column, id: info.rowId, index: info.rowIndex })
+                    : info.column.valueFormatter
+                      ? info.column.valueFormatter(value)
+                      : String(value ?? "");
+                if (collapsedGroupDisplay && grid.getState().groupColumnMode === "single") {
+                    return createElement(
+                        "span",
+                        { style: { paddingLeft: collapsedGroupDisplay.level * 20 } },
+                        contentToReactNode(content, bridgeArg),
+                    );
                 }
-                return info.column.valueFormatter ? info.column.valueFormatter(value) : String(value ?? "");
+                return content;
             },
             renderCellPlaceholder: (info) => {
                 const groupPlaceholder = renderGroupCellPlaceholder(info, grid);
@@ -690,7 +708,13 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 const rawData = (info.data && typeof info.data === "object" && "data" in info.data
                     ? (info.data as { data: T }).data
                     : info.data) as T;
-                const value = getCellValue(rawData, info.column);
+                const collapsedGroupDisplay = getCollapsedGroupDisplay(
+                    info.data,
+                    info.column,
+                    grid.getState().groupBy ?? [],
+                    grid.getState().groupColumnMode ?? "single",
+                );
+                const value: unknown = collapsedGroupDisplay !== undefined ? collapsedGroupDisplay.value : getCellValue(rawData, info.column);
                 if (info.column.valueFormatter) return info.column.valueFormatter(value);
                 const valueType = typeof value;
                 if (valueType === "string" || valueType === "number" || valueType === "boolean") return String(value);

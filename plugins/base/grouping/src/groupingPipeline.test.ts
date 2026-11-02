@@ -91,4 +91,58 @@ describe("groupingPipeline", () => {
         const europe = asGroup(root!.children.find((c): c is GroupRowNode<GroupingRow> => c.type === "group" && c.key === "Europe")!);
         expect(europe.aggregations["sales"]).toBe(200); // (100 + 200 + 300) / 3
     });
+
+    it("flattenTree keeps group rows when collapseSingleChildGroups is false", () => {
+        const root = buildGroupTree(groupingData, ["region", "department"], {}, getRowId);
+        const flat = flattenTree(root, {}, false);
+
+        // 2 region groups + 4 department groups + 5 leaves = 11 rows
+        expect(flat.length).toBe(11);
+        expect(flat.filter((r) => r.type === "group").length).toBe(6);
+        expect(flat.filter((r) => r.type === "leaf").length).toBe(5);
+    });
+
+    it("flattenTree collapses single-child groups when enabled", () => {
+        const root = buildGroupTree(groupingData, ["region", "department"], {}, getRowId);
+        const flat = flattenTree(root, {}, true);
+
+        // Europe/Engineering (1 leaf), Asia/Sales (1 leaf), Asia/Engineering (1 leaf) collapse
+        // Europe/Sales (2 leaves) stays as group
+        // Europe + Asia + Europe/Sales stay as groups (upper levels never collapse)
+        // 3 groups + 5 leaves = 8 rows
+        expect(flat.length).toBe(8);
+        expect(flat.filter((r) => r.type === "group").length).toBe(3); // Europe, Asia, Europe/Sales
+        expect(flat.filter((r) => r.type === "leaf").length).toBe(5);
+    });
+
+    it("upper-level groups are never collapsed even with single child", () => {
+        const singleLeafData: GroupingRow[] = [
+            { id: 1, region: "Europe", department: "Sales", sales: 100 },
+        ];
+        const root = buildGroupTree(singleLeafData, ["region", "department"], {}, getRowId);
+        const flat = flattenTree(root, {}, true);
+
+        // Europe (level 0) has a child group → never collapsed
+        // Europe/Sales (level 1) has 1 leaf → collapsed
+        expect(flat.length).toBe(2);
+        expect(flat.filter((r) => r.type === "group").length).toBe(1); // Europe
+        expect(flat.filter((r) => r.type === "leaf").length).toBe(1);
+    });
+
+    it("flattenTree collapses nested single-child groups recursively at lowest level", () => {
+        const multiLevelSingle: GroupingRow[] = [
+            { id: 1, region: "Europe", department: "Sales", sales: 100 },
+            { id: 2, region: "Europe", department: "Engineering", sales: 200 },
+            { id: 3, region: "Asia", department: "Sales", sales: 300 },
+        ];
+        const root = buildGroupTree(multiLevelSingle, ["region", "department"], {}, getRowId);
+        const flat = flattenTree(root, {}, true);
+
+        // Europe (level 0) → 2 child groups → stays as group
+        // Asia (level 0) → 1 child group → stays as group (upper levels never collapse)
+        // Europe/Sales, Europe/Engineering, Asia/Sales → 1 leaf each → collapsed
+        expect(flat.length).toBe(5);
+        expect(flat.filter((r) => r.type === "group").length).toBe(2); // Europe, Asia
+        expect(flat.filter((r) => r.type === "leaf").length).toBe(3);
+    });
 });

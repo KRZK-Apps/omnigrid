@@ -16,6 +16,17 @@ function isBuildGroupNode<T>(node: TreeRowNode<T>): node is BuildGroupNode<T> {
     return (node as GroupRowNode<T>).type === "group";
 }
 
+/** Counts total leaf descendants in a group's subtree. */
+function countTotalLeaves<T>(node: BuildGroupNode<T>): number {
+    let count = node.leaves.length;
+    for (const child of node.children) {
+        if (child.type === "group") {
+            count += countTotalLeaves(child as BuildGroupNode<T>);
+        }
+    }
+    return count;
+}
+
 /**
  * Builds a group tree from flat data.
  *
@@ -116,21 +127,26 @@ function insertRow<T>(
  * `expandedGroups` on every call, so toggling a group only requires re-flatten
  * (no tree rebuild).
  *
+ * When `collapseSingleChildGroups` is `true`, groups that resolve to exactly
+ * one leaf row are rendered as a plain row instead of a collapsible group row.
+ *
  * @param root - Root group node from `buildGroupTree`.
  * @param expandedGroups - Current expanded state keyed by group id.
+ * @param collapseSingleChildGroups - Whether to collapse single-child groups.
  * @returns The flattened `TreeRowNode[]` in pre-order.
  * @api
  */
 export function flattenTree<T>(
     root: BuildGroupNode<T> | null,
     expandedGroups: Record<string, boolean>,
+    collapseSingleChildGroups: boolean = false,
 ): TreeRowNode<T>[] {
     const result: TreeRowNode<T>[] = [];
     if (!root) return result;
 
     for (const child of root.children) {
         if (child.type === "group") {
-            flattenGroup(child as BuildGroupNode<T>, result, expandedGroups);
+            flattenGroup(child as BuildGroupNode<T>, result, expandedGroups, collapseSingleChildGroups);
         } else {
             result.push(child);
         }
@@ -143,7 +159,18 @@ function flattenGroup<T>(
     node: BuildGroupNode<T>,
     result: TreeRowNode<T>[],
     expandedGroups: Record<string, boolean>,
+    collapseSingleChildGroups: boolean = false,
 ): void {
+    const totalLeaves: number = countTotalLeaves(node);
+    const hasChildGroups: boolean = node.children.some((c) => c.type === "group");
+
+    // Collapse only the lowest-level groups: exactly one leaf descendant and
+    // no child groups. Upper levels always render as group rows with chevrons.
+    if (collapseSingleChildGroups && totalLeaves === 1 && !hasChildGroups) {
+        for (const leaf of node.leaves) result.push(leaf);
+        return;
+    }
+
     const expanded: boolean = expandedGroups[node.id] !== false;
     const flat: GroupRowNode<T> = {
         type: "group",
@@ -162,7 +189,7 @@ function flattenGroup<T>(
 
     for (const child of node.children) {
         if (child.type === "group") {
-            flattenGroup(child as BuildGroupNode<T>, result, expandedGroups);
+            flattenGroup(child as BuildGroupNode<T>, result, expandedGroups, collapseSingleChildGroups);
         } else {
             result.push(child);
         }

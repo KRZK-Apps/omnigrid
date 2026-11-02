@@ -43,6 +43,29 @@ export function getGroupColumnRole<T>(
     return { isGroupColumn: false, level: null };
 }
 
+/**
+ * Returns the grouping value for a leaf row collapsed from a single-child group
+ * when the current column is the appropriate display column for the mode.
+ *
+ * @api
+ */
+export function getCollapsedGroupDisplay<T>(
+    row: unknown,
+    column: ColumnLeafDef<T>,
+    groupBy: string[],
+    mode: "single" | "perLevel",
+): { value: string; level: number } | undefined {
+    if (!row || typeof row !== "object" || !("collapsedGroup" in row)) return undefined;
+    const collapsedGroup = (row as { collapsedGroup?: { field: string; key: string; level: number } }).collapsedGroup;
+    if (!collapsedGroup) return undefined;
+
+    const displayValue: boolean =
+        mode === "single"
+            ? getGroupColumnRole(column, groupBy, mode).isGroupColumn
+            : column.id === collapsedGroup.field || column.field === collapsedGroup.field;
+    return displayValue ? { value: collapsedGroup.key, level: collapsedGroup.level } : undefined;
+}
+
 export interface CellRenderInfo<T> {
     rowId: RowId;
     rowIndex: number;
@@ -120,6 +143,8 @@ export function renderGroupCellContent<T>(
         return column.valueFormatter ? column.valueFormatter(value) : String(value ?? "");
     }
 
+    if (getCollapsedGroupDisplay(node, column, groupBy, mode) !== undefined) return undefined;
+
     if (groupBy.length > 0 && mode === "single") {
         const role = getGroupColumnRole(column, groupBy, mode);
         if (role.isGroupColumn) {
@@ -186,6 +211,8 @@ export function renderGroupCellPlaceholder<T>(
         const value: unknown = node.aggregations[column.id];
         return column.valueFormatter ? column.valueFormatter(value) : String(value ?? "");
     }
+
+    if (getCollapsedGroupDisplay(node, column, groupBy, mode) !== undefined) return undefined;
 
     if (groupBy.length > 0 && mode === "single") {
         const role = getGroupColumnRole(column, groupBy, mode);
