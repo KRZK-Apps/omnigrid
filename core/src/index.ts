@@ -80,6 +80,8 @@ export type {
     RowHost,
     RowHoverEvent,
     RowId,
+    RowHierarchy,
+    RowHierarchyScope,
     RowNode,
     RowRenderParams,
     RowSpanLayout,

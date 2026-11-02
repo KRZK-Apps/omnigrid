@@ -778,13 +778,13 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 grid.rowHover({ id: row.rowId, index: row.index, data: row.data, hovered });
             },
             onCellClick: (row, column, modifiers) => {
+                if (column.stopRowClick) return;
                 if (row.data && typeof row.data === "object" && "type" in row.data && (row.data as { type: string }).type === "group") {
                     if (typeof (grid as any).toggleGroup === "function") {
                         (grid as any).toggleGroup((row.data as unknown as { id: string }).id);
                     }
                     return;
                 }
-                if (column.stopRowClick) return;
                 grid.rowClick({
                     id: row.rowId,
                     index: row.index,

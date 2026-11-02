@@ -3,6 +3,9 @@ import type { CheckboxRenderParams, RowId } from "@omnigrid/core";
 /** Selection behavior supported by the plugin. */
 export type SelectionMode = "single" | "multiple";
 
+/** Controls whether group checkboxes select their descendants. @api */
+export type GroupSelectionMode = "none" | "descendants" | "filteredDescendants";
+
 /** Values provided to a custom checkbox renderer. */
 export interface SelectionRendererParams<T> extends CheckboxRenderParams {
     /** Row data for a row checkbox; absent for the header checkbox. */
@@ -13,6 +16,8 @@ export interface SelectionRendererParams<T> extends CheckboxRenderParams {
     index?: number;
     /** Whether the renderer is being called for the header checkbox. */
     header: boolean;
+    /** Whether the row checkbox represents a composite row. */
+    group?: boolean;
 }
 
 /** Renderer used to customize selection checkboxes. */
@@ -26,6 +31,8 @@ export interface SelectionPluginOptions<T> {
     checkboxOnly?: boolean;
     /** In multiple mode, clicking a row replaces the current selection. @default false */
     replaceSelectionOnClick?: boolean;
+    /** Enables group checkbox selection in multiple mode. @default "none" */
+    groupSelection?: GroupSelectionMode;
     /** Adds a checkbox to each row. @default false */
     showRowCheckboxes?: boolean;
     /** Adds a select-all checkbox to the selection column header. @default false */
@@ -67,4 +74,3 @@ declare module "@omnigrid/core" {
         clearSelection?: () => void;
     }
 }
-

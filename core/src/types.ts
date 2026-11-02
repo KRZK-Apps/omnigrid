@@ -13,6 +13,26 @@ export type SortDirection = "asc" | "desc";
 export type CellAlign = "left" | "center" | "right";
 export type DataProcessor<T> = (data: T[]) => T[];
 
+/** Scope used when resolving leaf descendants of a composite row. @api */
+export type RowHierarchyScope = "all" | "filtered";
+
+/**
+ * Generic hierarchy capability provided by a row-model plugin.
+ * Returns leaf row IDs for composite rows, or `undefined` when the ID is a leaf.
+ *
+ * @api
+ */
+export interface RowHierarchy<T> {
+    /**
+     * Resolves the leaf rows represented by a row ID.
+     * @param rowId - Row or composite-row identifier.
+     * @param scope - Whether filtered-out descendants are included.
+     * @returns Leaf row IDs, an empty array for an empty composite row, or `undefined` for a leaf.
+     * @api
+     */
+    getLeafRowIds(rowId: RowId, scope: RowHierarchyScope): readonly RowId[] | undefined;
+}
+
 /**
  * Nature of the values stored in a column.
  *
@@ -1159,6 +1179,21 @@ export interface CoreGridApi<T> {
      * @api
      */
     getRows(): unknown[];
+    /**
+     * Returns the rows after core filtering but before plugin processors.
+     * @api
+     */
+    getFilteredData(): T[];
+    /** Returns the registered generic row hierarchy capability, if any. @api */
+    getRowHierarchy(): RowHierarchy<T> | undefined;
+    /**
+     * Registers a generic row hierarchy capability.
+     * Only one active hierarchy provider is supported per grid instance.
+     * @param hierarchy - The active row hierarchy implementation.
+     * @returns Cleanup callback to unregister the provider.
+     * @api
+     */
+    registerRowHierarchy(hierarchy: RowHierarchy<T>): () => void;
     getRowId(row: T, index: number): RowId;
     /**
      * Resolves the normalized horizontal span of a single body cell.

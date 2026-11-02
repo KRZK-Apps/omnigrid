@@ -114,6 +114,7 @@ export function renderGroupCellContent<T>(
                 node.key,
             );
         }
+        if (column.cellRenderer) return undefined;
         // Non-group column within a group row: show pre-computed aggregate.
         const value: unknown = node.aggregations[column.id];
         return column.valueFormatter ? column.valueFormatter(value) : String(value ?? "");
@@ -181,6 +182,7 @@ export function renderGroupCellPlaceholder<T>(
             }
             return `${node.expanded ? "▼" : "▶"} ${node.key}`;
         }
+        if (column.cellRenderer) return undefined;
         const value: unknown = node.aggregations[column.id];
         return column.valueFormatter ? column.valueFormatter(value) : String(value ?? "");
     }

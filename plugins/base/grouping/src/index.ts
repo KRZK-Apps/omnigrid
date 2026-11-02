@@ -1,10 +1,17 @@
-import type { AggregationFunc, GridApi, GridPlugin, GroupRowNode, TreeRowNode } from "@omnigrid/core";
+import type { AggregationFunc, GridApi, GridPlugin, GridState, GroupRowNode, RowHierarchyScope, RowId, TreeRowNode } from "@omnigrid/core";
 import type { ResolvedAggregationFunc } from "@omnigrid/aggregation-plugin";
 import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
+import type { BuildGroupNode } from "./groupingPipeline";
 import type { GroupingPluginOptions, GroupingColumnConfig } from "./types";
 
 export type { GroupingPluginOptions, GroupingColumnConfig } from "./types";
 export { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
+
+interface HierarchyCache<T> {
+    data: T[];
+    groupByKey: string;
+    leafIds: Map<RowId, readonly RowId[]>;
+}
 
 /**
  * Headless row grouping plugin: collapses rows that share a value on grouped
@@ -23,6 +30,8 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
     private groupedRowsRevision: number = -1;
     private readonly aggregationFuncs: Map<string, AggregationFunc<T>> = new Map();
     private unregisterMethods?: () => void;
+    private unregisterRowHierarchy?: () => void;
+    private readonly hierarchyCache = new Map<RowHierarchyScope, HierarchyCache<T>>();
 
     public constructor(options: GroupingPluginOptions<T> = {}) {
         this.initialGroupBy = options.groupBy ?? [];
@@ -61,10 +70,13 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
             getGroupedRows: () => this.getGroupedRows(),
             registerAggregationFuncs: (funcs: Record<string, AggregationFunc<T>>) => this.registerAggregationFuncs(funcs),
         });
+        this.syncRowHierarchyRegistration();
 
         return () => {
             this.unregisterMethods?.();
             this.unregisterMethods = undefined;
+            this.unregisterRowHierarchy?.();
+            this.unregisterRowHierarchy = undefined;
             if (this.api && !this.api.isDestroyed()) {
                 this.api.setState((prev) => ({
                     ...prev,
@@ -75,6 +87,7 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
             this.groupedRowsCache = null;
             this.groupedRowsRevision = -1;
             this.aggregationFuncs.clear();
+            this.hierarchyCache.clear();
             this.api = undefined;
         };
     }
@@ -90,6 +103,7 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
             groupBy: next,
             expandedGroups: expandedGroups ?? {},
         }));
+        this.syncRowHierarchyRegistration();
         this.api.scrollTo({ scrollTop: 0 });
     }
 
@@ -219,7 +233,8 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
         }
 
         const processed: T[] = this.api.getProcessedData();
-        const root = buildGroupTree(processed, groupBy, state.expandedGroups ?? {}, (row: T, index: number) => this.api!.getRowId(row, index));
+        const getStableRowId: (row: T, index: number) => RowId = this.createStableRowIdResolver(state.data);
+        const root: BuildGroupNode<T> | null = buildGroupTree(processed, groupBy, state.expandedGroups ?? {}, getStableRowId);
         if (!root) return [];
 
         const aggregations = Object.fromEntries(this.aggregationFuncs);
@@ -229,5 +244,62 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
         this.groupedRowsCache = flat;
         this.groupedRowsRevision = revision;
         return flat;
+    }
+
+    private getLeafRowIds(rowId: RowId, scope: RowHierarchyScope): readonly RowId[] | undefined {
+        if (!this.api) return undefined;
+        const state: GridState<T> = this.api.getState();
+        const groupBy: string[] = state.groupBy ?? [];
+        if (groupBy.length === 0) return undefined;
+        const data: T[] = scope === "all" ? state.data : this.api.getFilteredData();
+        const groupByKey: string = JSON.stringify(groupBy);
+        let cached: HierarchyCache<T> | undefined = this.hierarchyCache.get(scope);
+        if (!cached || cached.data !== data || cached.groupByKey !== groupByKey) {
+            const root: BuildGroupNode<T> | null = buildGroupTree(data, groupBy, {}, this.createStableRowIdResolver(state.data));
+            if (!root) return undefined;
+            const leafIds: Map<RowId, readonly RowId[]> = new Map<RowId, readonly RowId[]>();
+            const visit = (group: BuildGroupNode<T>): RowId[] => {
+                const ids: RowId[] = group.leaves.map((leaf) => leaf.id);
+                for (const child of group.children) {
+                    if (child.type === "group") ids.push(...visit(child as BuildGroupNode<T>));
+                }
+                leafIds.set(group.id, ids);
+                return ids;
+            };
+            visit(root);
+            cached = { data, groupByKey, leafIds };
+            this.hierarchyCache.set(scope, cached);
+        }
+        return cached.leafIds.get(rowId);
+    }
+
+    private createStableRowIdResolver(sourceData: T[]): (row: T, index: number) => RowId {
+        const sourceIndexes: Map<T, number[]> = new Map<T, number[]>();
+        sourceData.forEach((row, index) => {
+            const indexes: number[] = sourceIndexes.get(row) ?? [];
+            indexes.push(index);
+            sourceIndexes.set(row, indexes);
+        });
+        const occurrences: Map<T, number> = new Map<T, number>();
+        return (row: T, index: number): RowId => {
+            const occurrence: number = occurrences.get(row) ?? 0;
+            occurrences.set(row, occurrence + 1);
+            const sourceIndex: number | undefined = sourceIndexes.get(row)?.[occurrence];
+            return this.api!.getRowId(row, sourceIndex ?? index);
+        };
+    }
+
+    private syncRowHierarchyRegistration(): void {
+        if (!this.api) return;
+        const groupingActive: boolean = (this.api.getState().groupBy ?? []).length > 0;
+        if (groupingActive && !this.unregisterRowHierarchy) {
+            this.unregisterRowHierarchy = this.api.registerRowHierarchy({
+                getLeafRowIds: (rowId, scope) => this.getLeafRowIds(rowId, scope),
+            });
+        } else if (!groupingActive && this.unregisterRowHierarchy) {
+            this.unregisterRowHierarchy();
+            this.unregisterRowHierarchy = undefined;
+            this.hierarchyCache.clear();
+        }
     }
 }

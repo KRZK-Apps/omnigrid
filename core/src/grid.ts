@@ -26,6 +26,7 @@ import type {
     RowClickEvent,
     RowHeightUpdateOptions,
     RowHoverEvent,
+    RowHierarchy,
     RowId,
     RowNode,
     RowSpanLayout,
@@ -48,6 +49,7 @@ export class Grid<T> implements GridApi<T> {
     private readonly cleanupPlugins = new Set<() => void>();
     private readonly pluginRegistrations = new Map<GridPlugin<T>, () => void>();
     private readonly dataProcessors = new Set<DataProcessor<T>>();
+    private rowHierarchy?: RowHierarchy<T>;
     private readonly resolveRowId: NonNullable<GridOptions<T>["getRowId"]>;
     public readonly slots: SlotManager<T>;
     public readonly icons = new IconRegistry<T>();
@@ -186,6 +188,28 @@ export class Grid<T> implements GridApi<T> {
 
     public getState(): GridState<T> {
         return this.store.getState();
+    }
+
+    /** Returns the row hierarchy capability registered by the active row-model plugin. @api */
+    public getRowHierarchy(): RowHierarchy<T> | undefined {
+        return this.rowHierarchy;
+    }
+
+    /**
+     * Registers the row hierarchy capability for composite row models.
+     * @param hierarchy - The active row hierarchy implementation.
+     * @returns Cleanup callback to unregister the provider.
+     * @api
+     */
+    public registerRowHierarchy(hierarchy: RowHierarchy<T>): () => void {
+        this.assertActive();
+        if (this.rowHierarchy && this.rowHierarchy !== hierarchy) {
+            throw new Error("A row hierarchy provider is already registered for this grid");
+        }
+        this.rowHierarchy = hierarchy;
+        return () => {
+            if (this.rowHierarchy === hierarchy) this.rowHierarchy = undefined;
+        };
     }
 
     /**
@@ -723,7 +747,7 @@ export class Grid<T> implements GridApi<T> {
 
 
 
-    private getFilteredData(): T[] {
+    public getFilteredData(): T[] {
         if (this.filteredDataCache !== null) return this.filteredDataCache;
         const state: GridState<T> = this.getState();
         let data: T[] = applyFilterModel(state.data, this.filterModel, state.columns);
@@ -1364,6 +1388,7 @@ export class Grid<T> implements GridApi<T> {
         this.cleanupPlugins.clear();
         this.dataProcessors.clear();
         this.pipeline.clear();
+        this.rowHierarchy = undefined;
         for (const key of Object.keys(this.methods)) {
             delete this.methods[key];
             delete (this as unknown as Record<string, unknown>)[key];

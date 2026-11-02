@@ -1,4 +1,4 @@
-import type { ColumnDef } from "@omnigrid/core";
+import type { CheckboxControl, ColumnDef, ColumnLeafDef, RowId } from "@omnigrid/core";
 import { Grid } from "@omnigrid/core";
 import { describe, expect, it, vi } from "vitest";
 
@@ -87,7 +87,7 @@ describe("SelectionPlugin row presentation", () => {
     });
 
     it("marks rows rejected by isRowSelectable with the unselectable-row class", () => {
-        const plugin = new SelectionPlugin<Row>({
+        const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({
             isRowSelectable: (row) => row.age >= 30,
         });
 
@@ -96,7 +96,7 @@ describe("SelectionPlugin row presentation", () => {
     });
 
     it("keeps the unselectable class when a row is also selected programmatically", () => {
-        const plugin = new SelectionPlugin<Row>({
+        const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({
             isRowSelectable: (row) => row.age >= 30,
         });
         plugin.setSelectedRowIds(["b"]);
@@ -107,7 +107,12 @@ describe("SelectionPlugin row presentation", () => {
     it("notifies listeners with the current selected rows whenever selection changes", () => {
         const onSelectionChange = vi.fn();
         const plugin = new SelectionPlugin<Row>({ mode: "multiple", onSelectionChange });
-        const grid = new Grid<Row>({ columns: [], data: ROWS, getRowId: (row) => row.id, plugins: [plugin] });
+        const grid: Grid<Row> = new Grid<Row>({
+            columns: [],
+            data: ROWS,
+            getRowId: (row) => row.id,
+            plugins: [plugin],
+        });
 
         plugin.toggleRow("b", 1);
 
@@ -120,7 +125,7 @@ describe("SelectionPlugin row presentation", () => {
 
     it("keeps selected row identity when processed data is reordered", () => {
         const plugin = new SelectionPlugin<Row>({ mode: "multiple" });
-        const grid = new Grid<Row>({ columns: [], data: ROWS, getRowId: (row) => row.id, plugins: [plugin] });
+        const grid: Grid<Row> = new Grid<Row>({ columns: [], data: ROWS, getRowId: (row) => row.id, plugins: [plugin] });
         let sortByAgeAscending: boolean = false;
 
         grid.registerDataProcessor((data) => {
@@ -152,5 +157,136 @@ describe("SelectionPlugin removal", () => {
         grid.setPlugins([]);
         expect(grid.getState().columns.map((c) => c.id)).toEqual(["name"]);
         expect(plugin.getSelectedRowIds()).toEqual([]);
+    });
+});
+
+describe("SelectionPlugin group selection", () => {
+    function renderCheckbox(
+        grid: Grid<Row>,
+        rowId: RowId,
+        index: number,
+        data: Row,
+    ): CheckboxControl & { group?: boolean } {
+        const column: ColumnLeafDef<Row> | undefined = grid.getViewportData().leafColumns.find(
+            (candidate) => candidate.id === "__omnigrid_selection__",
+        );
+        if (!column?.cellRenderer) throw new Error("Selection checkbox renderer was not registered");
+        const rendered: unknown = column.cellRenderer({ id: rowId, index, data, column });
+        if (typeof rendered !== "object" || rendered === null || !("type" in rendered)) {
+            throw new Error("Selection checkbox renderer did not return a checkbox control");
+        }
+        return rendered as CheckboxControl & { group?: boolean };
+    }
+
+    function registerGroupHierarchy(grid: Grid<Row>): void {
+        grid.registerRowHierarchy({
+            getLeafRowIds: (rowId, scope) => {
+                if (rowId !== "group") return undefined;
+                return scope === "all" ? ["a", "b"] : ["a"];
+            },
+        });
+    }
+
+    it("renders unchecked, indeterminate, and checked group states and toggles descendants", () => {
+        const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({ mode: "multiple", groupSelection: "descendants", showRowCheckboxes: true });
+        const grid: Grid<Row> = new Grid<Row>({
+            columns: [],
+            data: ROWS,
+            quickFilter: "Ada",
+            getRowId: (row) => row.id,
+            plugins: [plugin],
+        });
+        registerGroupHierarchy(grid);
+
+        expect(renderCheckbox(grid, "group", 0, ROWS[0])).toMatchObject({ checked: false, indeterminate: false, group: true });
+
+        plugin.setSelectedRowIds(["a"]);
+        expect(renderCheckbox(grid, "group", 0, ROWS[0])).toMatchObject({ checked: false, indeterminate: true, group: true });
+
+        renderCheckbox(grid, "group", 0, ROWS[0]).onChange({ shiftKey: false, ctrlKey: false });
+        expect(plugin.getSelectedRowIds()).toEqual(["a", "b"]);
+        expect(plugin.getSelectionState().selectedRows).toEqual(ROWS);
+        expect(renderCheckbox(grid, "group", 0, ROWS[0])).toMatchObject({ checked: true, indeterminate: false });
+
+        renderCheckbox(grid, "group", 0, ROWS[0]).onChange({ shiftKey: false, ctrlKey: false });
+        expect(plugin.getSelectedRowIds()).toEqual([]);
+        grid.destroy();
+    });
+
+    it("limits filteredDescendants to the filtered hierarchy scope", () => {
+        const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({
+            mode: "multiple",
+            groupSelection: "filteredDescendants",
+            showRowCheckboxes: true,
+        });
+        const grid: Grid<Row> = new Grid<Row>({
+            columns: [{ id: "name", field: "name", header: "Name" }],
+            data: ROWS,
+            quickFilter: "Ada",
+            getRowId: (row) => row.id,
+            plugins: [plugin],
+        });
+        registerGroupHierarchy(grid);
+
+        renderCheckbox(grid, "group", 0, ROWS[0]).onChange({ shiftKey: false, ctrlKey: false });
+        expect(plugin.getSelectedRowIds()).toEqual(["a"]);
+        expect(plugin.getSelectionState().selectedRows).toEqual([ROWS[0]]);
+        grid.destroy();
+    });
+
+    it("keeps header selection IDs stable against filtering when a hierarchy is active", () => {
+        const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({
+            mode: "multiple",
+            groupSelection: "descendants",
+            showHeaderCheckbox: true,
+        });
+        const grid: Grid<Row> = new Grid<Row>({
+            columns: [{ id: "name", field: "name", header: "Name" }],
+            data: ROWS,
+            quickFilter: "Ada",
+            plugins: [plugin],
+        });
+        grid.registerRowHierarchy({ getLeafRowIds: () => undefined });
+        const selectionColumn: ColumnLeafDef<Row> | undefined = grid
+            .getViewportData()
+            .leafColumns.find((candidate) => candidate.id === "__omnigrid_selection__");
+        const header: CheckboxControl | undefined = selectionColumn?.headerRenderer?.() as CheckboxControl | undefined;
+
+        header?.onChange({ shiftKey: false, ctrlKey: false });
+
+        expect(plugin.getSelectedRowIds()).toEqual([0]);
+        expect(plugin.getSelectionState().selectedRows).toEqual([ROWS[0]]);
+        grid.destroy();
+    });
+
+    it("applies isRowSelectable to group descendants", () => {
+        const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({
+            mode: "multiple",
+            groupSelection: "descendants",
+            showRowCheckboxes: true,
+            isRowSelectable: (row) => row.age >= 30,
+        });
+        const grid: Grid<Row> = new Grid<Row>({ columns: [], data: ROWS, getRowId: (row) => row.id, plugins: [plugin] });
+        registerGroupHierarchy(grid);
+        plugin.setSelectedRowIds(["b"]);
+
+        expect(renderCheckbox(grid, "group", 0, ROWS[0])).toMatchObject({ checked: false, disabled: false });
+        renderCheckbox(grid, "group", 0, ROWS[0]).onChange({ shiftKey: false, ctrlKey: false });
+
+        expect(plugin.getSelectedRowIds()).toEqual(["b", "a"]);
+        expect(renderCheckbox(grid, "group", 0, ROWS[0])).toMatchObject({ checked: true, disabled: false });
+        grid.destroy();
+    });
+
+    it("does not render a group checkbox by default", () => {
+        const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({ mode: "multiple", showRowCheckboxes: true });
+        const grid: Grid<Row> = new Grid<Row>({ columns: [], data: ROWS, getRowId: (row) => row.id, plugins: [plugin] });
+        registerGroupHierarchy(grid);
+        const column: ColumnLeafDef<Row> | undefined = grid.getViewportData().leafColumns.find(
+            (candidate) => candidate.id === "__omnigrid_selection__",
+        );
+
+        expect(column?.cellRenderer?.({ id: "group", index: 0, data: ROWS[0], column: column! })).toBe("");
+        grid.destroy();
     });
 });

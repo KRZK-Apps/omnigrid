@@ -1,5 +1,6 @@
 import { expect, describe, it } from "vitest";
 import { Grid } from "@omnigrid/core";
+import type { RowHierarchy } from "@omnigrid/core";
 
 import type { GroupingRow } from "./types";
 import { GroupingPlugin } from "./index";
@@ -24,6 +25,7 @@ describe("GroupingPlugin", () => {
 
         plugin.setGroupBy([]);
         expect(grid.getState().groupBy).toEqual([]);
+        expect(grid.getRowHierarchy()).toBeUndefined();
         expect(plugin.getGroupBy()).toEqual([]);
         expect(grid.getViewportData().rows.every((r) => r.type === "leaf")).toBe(true);
         expect(grid.getViewportData().rows.length).toBe(groupingData.length);
@@ -54,6 +56,24 @@ describe("GroupingPlugin", () => {
         expect(europe!.group!.expanded).toBe(false);
         // Europe collapsed: only itself; Asia expanded with its 2 leaves.
         expect(rows.length).toBe(4);
+    });
+
+    it("provides all and filtered descendant IDs through the generic row hierarchy capability", () => {
+        const plugin: GroupingPlugin<GroupingRow> = new GroupingPlugin<GroupingRow>({ groupBy: ["region"] });
+        const grid: Grid<GroupingRow> = new Grid<GroupingRow>({
+            columns: groupingColumns,
+            data: groupingData,
+            quickFilter: "Sales",
+            getRowId: (row) => row.id,
+            plugins: [plugin],
+        });
+        const hierarchy: RowHierarchy<GroupingRow> | undefined = grid.getRowHierarchy();
+
+        expect(hierarchy?.getLeafRowIds("__root__/region:Europe", "all")).toEqual([1, 2, 3]);
+        expect(hierarchy?.getLeafRowIds("__root__/region:Europe", "filtered")).toEqual([1, 2]);
+        expect(hierarchy?.getLeafRowIds(1, "all")).toBeUndefined();
+
+        grid.destroy();
     });
 
     it("constructor creates a GroupingPlugin", () => {

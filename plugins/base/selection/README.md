@@ -28,6 +28,7 @@ import { SelectionPlugin } from "@omnigrid/selection-plugin";
 
 const plugin = new SelectionPlugin({
   mode: "multiple",
+  groupSelection: "filteredDescendants",
   onSelectionChange: ({ selectedRowIds, selectedRows }) => {
     console.log("Selected count:", selectedRows.length);
     console.log("Selected IDs:", selectedRowIds);
@@ -42,6 +43,14 @@ const selection = plugin.getSelectionState();
 `onSelectionChange` runs when selection changes and receives the current row
 IDs and row records. `getSelectedRowIds()`, `getSelectedRows()`, and
 `getSelectionState()` provide synchronous access to the current selection.
+
+When used with a row-grouping plugin, `groupSelection` controls the group
+checkbox behavior. `"descendants"` selects every selectable leaf row in the
+group, including filtered-out rows; `"filteredDescendants"` limits selection
+to leaves that remain after filtering. Group checkboxes show an indeterminate
+state when only some selectable descendants are selected. The default,
+`"none"`, preserves the regular row-only selection behavior, and group
+selection is available only in `"multiple"` mode.
 
 ## Links
 
