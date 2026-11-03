@@ -5,10 +5,7 @@ import type { GridApi, SlotRenderContext, UIPopupDescriptor } from "@omnigrid/co
 
 import type { ContentBridge } from "./content";
 import { contentToReactNode } from "./content";
-
-export interface PopupHostProps<T> {
-    grid: GridApi<T>;
-}
+import type { PopupHostProps } from "./types";
 
 const VIEWPORT_MARGIN: number = 8;
 

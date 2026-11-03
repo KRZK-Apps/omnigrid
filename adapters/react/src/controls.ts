@@ -3,6 +3,9 @@ import { createElement, useCallback, useEffect, useMemo, useRef, useState } from
 import { createPortal } from "react-dom";
 
 import type { UIControlDescriptor, UIInputControl, UIMultiSelectControl, UISelectControl } from "@omnigrid/core";
+import type { DebouncedInputProps } from "./types";
+
+export type { DebouncedInputProps };
 
 const CONTROL_TYPES: ReadonlySet<string> = new Set(["text", "number", "date", "select", "checkbox", "button", "label", "multi-select", "group"]);
 
@@ -14,10 +17,6 @@ export function isUIControlDescriptor(value: unknown): value is UIControlDescrip
 }
 
 const DEFAULT_DEBOUNCE_MS: number = 250;
-
-export interface DebouncedInputProps {
-    descriptor: UIInputControl;
-}
 
 /**
  * Text/number input that keeps typing in local state and forwards the value to

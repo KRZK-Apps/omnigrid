@@ -403,6 +403,7 @@ describe("PooledRowPane — variable row height", () => {
 
 describe("PooledRowPane — wrapping columns", () => {
     const WRAP_COLUMN: ColumnLeafDef<Row> = { id: "bio", field: "name", width: 120, wrapText: true };
+    const FLUSH_WRAP_COLUMN: ColumnLeafDef<Row> = { id: "flush-bio", field: "name", width: 120, wrapText: true, cellLayout: "flush" };
 
     function wrapCol(index: number, offset: number): { column: ColumnLeafDef<Row>; index: number; offset: number; width: number } {
         return { column: WRAP_COLUMN, index, offset, width: 120 };
@@ -476,6 +477,29 @@ describe("PooledRowPane — wrapping columns", () => {
         expect(cell.style.minHeight).toBe("");
         expect(cell.style.whiteSpace).toBe("nowrap");
         expect(cell.style.alignItems).toBe("");
+        expect(cell.style.paddingBlock).toBe("");
+    });
+
+    it("removes padding for flush cells and restores normal layout when the cell is reused", () => {
+        const { pane, host } = makeHarness({ variableHeight: true });
+        const customRow: PooledRow<Row> = {
+            index: 0,
+            rowId: 0,
+            data: { name: "Alice", age: 30 },
+            offsetY: 0,
+            height: 40,
+            width: 300,
+        };
+
+        pane.bind(customRow, [{ column: FLUSH_WRAP_COLUMN, index: 0, offset: 0, width: 120 }], 0);
+
+        const cell: FakeElement = firstCell(host);
+        expect(cell.style.padding).toBe("0");
+        expect(cell.style.paddingBlock).toBe("0");
+
+        pane.bind({ ...customRow, index: 1 }, [col(0, 0)], 0);
+
+        expect(cell.style.padding).toBe("");
         expect(cell.style.paddingBlock).toBe("");
     });
 });

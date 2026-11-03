@@ -42,7 +42,8 @@ import { DomPool, isActiveCondition, type GridApi, type RowId } from "@omnigrid/
 import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
 import { computeGroupSegments } from "./groupHeader";
 import { getCollapsedGroupDisplay, getGroupColumnRole, poolGetRowId, renderGroupCellContent, renderGroupCellPlaceholder } from "./groupCell";
-import { type PooledColumn, type PooledRowCallbacks, PooledRowPane } from "./pooledRow";
+import { PooledRowPane } from "./pooledRow";
+import type { PooledColumn, PooledRowCallbacks } from "./types";
 import { createCellRoot } from "./reactRoot";
 import { renderDefaultOverlay } from "./overlays";
 import { PopupHost } from "./popup";
@@ -57,35 +58,12 @@ import {
     resolveHeaderStyle,
 } from "./styling";
 import { useGrid } from "./useGrid";
-
-/**
- * Registry of native adapter components for `SlotComponentContent`:
- *   slotComponents={{ ["my-widget"]: (payload, context) => <MyWidget .../> }}
- */
-export interface SlotRendererRegistry<T> {
-    [kind: string]: (payload: unknown, context: SlotRenderContext<T>) => ReactNode;
-}
-
-export type OverlayComponentProps<T> = CoreOverlayComponentProps<T>;
-
-type OverlayComponent<T> = ComponentType<CoreOverlayComponentProps<T>> | CoreOverlayComponent<T>;
-
-export interface GridProps<T> extends Omit<GridOptions<T>, "overlayComponents"> {
-    className?: string;
-    style?: CSSProperties;
-    /**
-     * Minimum grid height in rows when `style.height` is not set (auto-height
-     * mode). The viewport will be at least `headerHeight + minHeight *
-     * rowHeight` tall so the grid does not collapse when it has few or no
-     * rows. Set to `0` to disable.
-     *
-     * @api
-     * @default 3
-     */
-    minHeight?: number;
-    slotComponents?: SlotRendererRegistry<T>;
-    overlayComponents?: Record<string, OverlayComponent<T>>;
-}
+import type {
+    GridProps,
+    OverlayComponent,
+    OverlayComponentProps,
+    SlotRendererRegistry,
+} from "./types";
 
 function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
     if (column.valueGetter) return column.valueGetter(row);

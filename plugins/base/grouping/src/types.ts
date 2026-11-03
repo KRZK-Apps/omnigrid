@@ -58,6 +58,11 @@ export interface GroupingPluginOptions<T> {
     showGroupValues?: boolean;
 
     /**
+     * Whether group rows display the number of child rows. @default true
+     */
+    showChildCount?: boolean;
+
+    /**
      * When `true`, groups that resolve to exactly one leaf row are rendered as
      * a plain row instead of a collapsible group row. @default false
      */

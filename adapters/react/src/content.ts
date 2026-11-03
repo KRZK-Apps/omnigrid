@@ -4,17 +4,9 @@ import { cloneElement, createElement, Fragment, isValidElement } from "react";
 import type { CheckboxControl, SlotNodeContent, SlotRenderContext } from "@omnigrid/core";
 
 import { isUIControlDescriptor, renderControl } from "./controls";
+import type { ContentBridge } from "./types";
 
-/**
- * Bridge between the core's headless content and native adapter values.
- * `registry` — registry of React components for `SlotComponentContent`;
- * `context()` — factory for the current render context so providers see
- * up-to-date grid state at render time.
- */
-export interface ContentBridge<T> {
-    registry: Record<string, (payload: unknown, context: SlotRenderContext<T>) => ReactNode>;
-    context: () => SlotRenderContext<T>;
-}
+export type { ContentBridge };
 
 export function isCheckboxControl(value: unknown): value is CheckboxControl {
     return typeof value === "object" && value !== null && (value as { type?: unknown }).type === "@omnigrid/checkbox";

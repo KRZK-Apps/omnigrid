@@ -415,6 +415,15 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     align?: CellAlign;
     /** Enables automatic text wrapping instead of ellipsis truncation. @default false @api */
     wrapText?: boolean;
+    /**
+     * Controls whether the cell keeps the theme's internal padding or removes it
+     * so custom content can fill the cell.
+     * - `"normal"` (default): preserves the theme padding.
+     * - `"flush"`: removes the cell padding.
+     * @default "normal"
+     * @api
+     */
+    cellLayout?: "normal" | "flush";
     /** Initial sort direction used by SortingPlugin. */
     sortState?: SortDirection;
     /** 1-based sort priority, set only while multiple columns are sorted. */

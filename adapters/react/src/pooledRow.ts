@@ -1,57 +1,8 @@
-import type { CellAlign, ColumnLeafDef, PooledRow, RowId, RowSpanLayout, RowStyle, ViewportData } from "@omnigrid/core";
+import type { CellAlign, ColumnLeafDef, PooledRow, RowId, RowSpanLayout, RowStyle } from "@omnigrid/core";
 
 import { type ContentBridge, contentToReactNode, isSlotHtmlContent } from "./content";
 import type { CellRoot } from "./reactRoot";
-
-/** Column within the pool: definition + geometry from the virtual window. */
-export type PooledColumn<T> = ViewportData<T>["columns"][number];
-
-export interface PooledCellRenderInfo<T> {
-    data: T;
-    column: ColumnLeafDef<T>;
-    columnIndex: number;
-    rowId: RowId;
-    rowIndex: number;
-    /**
-     * Normalized horizontal span of this cell (`1` = plain cell).
-     * Span origins render the merged width; covered cells are skipped.
-     */
-    colSpan: number;
-}
-
-export interface PooledRowModifiers {
-    ctrlKey: boolean;
-    shiftKey: boolean;
-}
-
-/**
- * Injected back-channel: the row panel does NOT know about grid/adapter —
- * it only fires these callbacks. This allows the panel to be reused across
- * any adapter with a DOM environment.
- */
-export interface PooledRowCallbacks<T> {
-    rowHeight: number;
-    renderCellContent(info: PooledCellRenderInfo<T>): unknown;
-    resolveRowClasses(row: PooledRow<T>): string | undefined;
-    resolveRowStyle(row: PooledRow<T>): RowStyle | undefined;
-    resolveCellClasses(cellInfo: PooledCellRenderInfo<T>): string | undefined;
-    resolveCellStyle(cellInfo: PooledCellRenderInfo<T>): RowStyle | undefined;
-    onRowClick(row: PooledRow<T>, modifiers: PooledRowModifiers): void;
-    onRowHover(row: PooledRow<T>, hovered: boolean): void;
-    onCellClick(row: PooledRow<T>, column: ColumnLeafDef<T>, modifiers: PooledRowModifiers): void;
-    createRoot(container: HTMLDivElement): CellRoot;
-    onRowHeightChange?(rowIndex: number, height: number): void;
-    /**
-     * Returns a cheap scalar preview of the cell value, painted synchronously
-     * into a blank cell while its first React commit (complex content) is
-     * pending — keeps the grid from showing empty cells during fast scroll
-     * ("staging" placeholder; React's first commit replaces it entirely).
-     * Return `null` to skip staging for this cell.
-     *
-     * @api
-     */
-    renderCellPlaceholder?(info: PooledCellRenderInfo<T>): string | null;
-}
+import type { PooledCellRenderInfo, PooledColumn, PooledRowCallbacks, PooledRowModifiers } from "./types";
 
 const OFFSCREEN_X = -200000;
 const OFFSCREEN_Y = -200000;
@@ -425,6 +376,7 @@ export class PooledRowPane<T> {
 
         for (const key of cell.appliedStyleKeys) cell.element.style.removeProperty(cssPropertyName(key));
         cell.appliedStyleKeys.length = 0;
+        cell.element.style.padding = "";
 
         const style = this.callbacks.resolveCellStyle(cellInfo);
         if (style) {
@@ -434,6 +386,8 @@ export class PooledRowPane<T> {
                 cell.appliedStyleKeys.push(key);
             }
         }
+        const flushLayout: boolean = cellInfo.column.cellLayout === "flush";
+        if (flushLayout) cell.element.style.padding = "0";
         if (cell.column?.wrapText) {
             // Wrapping cell: the text breaks into several lines and the cell
             // grows with it. The theme owns the horizontal padding and the
@@ -443,7 +397,7 @@ export class PooledRowPane<T> {
             cell.element.style.wordBreak = "break-word";
             cell.element.style.overflow = "visible";
             cell.element.style.textOverflow = "clip";
-            cell.element.style.paddingBlock = "4px";
+            cell.element.style.paddingBlock = flushLayout ? "0" : "4px";
             cell.element.style.alignItems = "flex-start";
         } else {
             // Reset the wrapping styles: the cell may be pooled from a
@@ -451,7 +405,7 @@ export class PooledRowPane<T> {
             cell.element.style.whiteSpace = "nowrap";
             cell.element.style.overflow = "hidden";
             cell.element.style.textOverflow = "ellipsis";
-            cell.element.style.paddingBlock = "";
+            cell.element.style.paddingBlock = flushLayout ? "0" : "";
             cell.element.style.alignItems = "";
         }
     }

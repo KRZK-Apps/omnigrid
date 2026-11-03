@@ -9,19 +9,9 @@ import type {
     HeaderStyle,
     RowStyle,
 } from "@omnigrid/core";
+import type { ResolvedColumnPresentation } from "./types";
 
-/**
- * Pre-resolved presentation (classes and inline styles) for a column data body.
- * Evaluated once per column across the dataset, then applied to each rendered cell in O(1).
- *
- * @api
- */
-export interface ResolvedColumnPresentation {
-    /** Space-separated CSS class names for the column body. */
-    classes: string;
-    /** Combined inline styles for the column body. */
-    style: ColumnStyle;
-}
+export type { ResolvedColumnPresentation };
 
 /**
  * Resolves column-level presentation once for the entire column across the entire dataset.

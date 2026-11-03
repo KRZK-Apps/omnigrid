@@ -41,7 +41,7 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
             mode: options.groupColumnMode ?? "single",
             header: options.groupColumnHeader ?? "Group",
             showGroupValues: options.showGroupValues ?? false,
-            showChildCount: true,
+            showChildCount: options.showChildCount ?? true,
             groupRowRenderer: undefined,
         };
         this.collapseSingleChildGroups = options.collapseSingleChildGroups ?? false;

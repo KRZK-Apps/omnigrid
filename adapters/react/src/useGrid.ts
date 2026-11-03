@@ -1,13 +1,9 @@
-import type { ColumnDef, ColumnLeafDef, GridOptions, GridState, ViewportData } from '@omnigrid/core';
+import type { ColumnDef as CoreColumnDef, ColumnLeafDef, GridOptions, GridState, ViewportData } from '@omnigrid/core';
 import { isColumnGroup } from '@omnigrid/core';
 import { Grid } from '@omnigrid/core';
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
-
-export interface UseGridResult<T> {
-    grid: Grid<T>;
-    state: GridState<T>;
-    viewportData: ViewportData<T>;
-}
+import type { UseGridResult } from "./types";
+import type { ReactGridOptions } from "./reactColumnDef";
 
 /**
  * Binds the Grid instance from @omnigrid/core to the React lifecycle.
@@ -27,7 +23,7 @@ export interface UseGridResult<T> {
  * entirely, so useSyncExternalStore does NOT trigger a React re-render on
  * every scroll frame. The DOM Pool handles scroll imperatively.
  */
-export function useGrid<T>(options: GridOptions<T>): UseGridResult<T> {
+export function useGrid<T>(options: ReactGridOptions<T>): UseGridResult<T> {
     // Lazy initializer is intentionally avoided: React.StrictMode may call it
     // twice, which would register plugins twice.
     const gridRef = useRef<Grid<T> | null>(null);
@@ -111,16 +107,16 @@ export function useGrid<T>(options: GridOptions<T>): UseGridResult<T> {
             // prepended/appended and shift positions. User column properties are merged
             // on top; plugin-owned metadata that the user did not override is kept.
             // User columns with no match in `current` are appended at the end.
-            const currentById = new Map<string, ColumnDef<T>>();
+            const currentById = new Map<string, CoreColumnDef<T>>();
             current.forEach((column) => currentById.set(column.id, column));
-            const merged: ColumnDef<T>[] = [];
+            const merged: CoreColumnDef<T>[] = [];
             current.forEach((currentColumn) => {
                 const userColumn = next.find((c) => c.id === currentColumn.id);
                 if (!userColumn) {
                     merged.push(currentColumn);
                     return;
                 }
-                const enriched: ColumnDef<T> = { ...userColumn };
+                const enriched: CoreColumnDef<T> = { ...userColumn };
                 if (userColumn.headerRenderer === undefined && currentColumn.headerRenderer !== undefined) {
                     enriched.headerRenderer = currentColumn.headerRenderer;
                 }
