@@ -345,7 +345,6 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
             this.api.setColumns(columns);
             return;
         }
-        const hasPinnedLeft = columns.some((column) => column.pinned === "left");
         const selectionColumn: ColumnDef<T> = {
             id: this.selectionColumnId,
             header: "",
@@ -355,12 +354,8 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
             sortable: false,
             stopHeaderClick: true,
             stopRowClick: true,
-            // The checkbox column must stay in view while scrolling horizontally.
-            // When the table already has left-pinned columns, pin the checkbox
-            // column to the left (as the very first pinned column) so it never
-            // scrolls away together with its pinned peers. With no left-pinned
-            // columns the checkbox column stays as the first scrollable column.
-            pinned: hasPinnedLeft ? "left" : undefined,
+            // The checkbox column must always stay pinned to the left.
+            pinned: "left",
             headerRenderer: () =>
                 this.renderCheckbox({
                     checked: this.isAllSelectableRowsSelected(),

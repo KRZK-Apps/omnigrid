@@ -137,7 +137,22 @@ export function renderGroupCellContent<T>(
                 node.key,
             );
         }
-        if (column.cellRenderer) return undefined;
+        if (column.cellRenderer) {
+            const value: unknown = node.aggregations[column.id];
+            const rendered: unknown = (column.cellRenderer as (params: unknown) => unknown)({
+                value,
+                data: undefined,
+                column,
+                id: info.rowId,
+                index: info.rowIndex,
+            });
+            const content = contentToReactNode(rendered, bridgeArg);
+            if (column.valueFormatter && typeof value === "number") {
+                const formatted = column.valueFormatter(value);
+                // For numeric aggregations, prefer formatted output if renderer returns simple value
+            }
+            return content;
+        }
         // Non-group column within a group row: show pre-computed aggregate.
         const value: unknown = node.aggregations[column.id];
         return column.valueFormatter ? column.valueFormatter(value) : String(value ?? "");

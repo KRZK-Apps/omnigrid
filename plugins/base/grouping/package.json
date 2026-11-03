@@ -1,6 +1,6 @@
 {
     "name": "@omnigrid/grouping-plugin",
-    "version": "0.1.0",
+    "version": "1",
     "description": "Headless row grouping plugin for OmniGrid",
     "keywords": [
         "omnigrid",

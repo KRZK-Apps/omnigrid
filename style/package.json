@@ -1,39 +1,39 @@
 {
-  "name": "@omnigrid/style",
-  "version": "0.1.17",
-  "description": "Shared styles for OmniGrid",
-  "keywords": [
-    "omnigrid",
-    "grid",
-    "table",
-    "styles",
-    "css"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/KRZK-Apps/omnigrid.git",
-    "directory": "style"
-  },
-  "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/style#readme",
-  "bugs": {
-    "url": "https://github.com/KRZK-Apps/omnigrid/issues"
-  },
-  "license": "MIT",
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+    "name": "@omnigrid/style",
+    "version": "0.1.18",
+    "description": "Shared styles for OmniGrid",
+    "keywords": [
+        "omnigrid",
+        "grid",
+        "table",
+        "styles",
+        "css"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/KRZK-Apps/omnigrid.git",
+        "directory": "style"
     },
-    "./index.css": "./dist/index.css"
-  },
-  "scripts": {
-    "build": "node scripts/build.mjs",
-    "prepublishOnly": "npm run build"
-  }
+    "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/style#readme",
+    "bugs": {
+        "url": "https://github.com/KRZK-Apps/omnigrid/issues"
+    },
+    "license": "MIT",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        },
+        "./index.css": "./dist/index.css"
+    },
+    "scripts": {
+        "build": "node scripts/build.mjs",
+        "prepublishOnly": "npm run build"
+    }
 }

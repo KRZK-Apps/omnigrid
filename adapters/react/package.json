@@ -1,57 +1,57 @@
 {
-  "name": "@omnigrid/react",
-  "version": "0.1.25",
-  "description": "React adapter and renderer for OmniGrid",
-  "keywords": [
-    "omnigrid",
-    "grid",
-    "table",
-    "react",
-    "react-component"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/KRZK-Apps/omnigrid.git",
-    "directory": "react"
-  },
-  "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/adapters/react#readme",
-  "bugs": {
-    "url": "https://github.com/KRZK-Apps/omnigrid/issues"
-  },
-  "license": "MIT",
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+    "name": "@omnigrid/react",
+    "version": "0.1.26",
+    "description": "React adapter and renderer for OmniGrid",
+    "keywords": [
+        "omnigrid",
+        "grid",
+        "table",
+        "react",
+        "react-component"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/KRZK-Apps/omnigrid.git",
+        "directory": "react"
+    },
+    "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/adapters/react#readme",
+    "bugs": {
+        "url": "https://github.com/KRZK-Apps/omnigrid/issues"
+    },
+    "license": "MIT",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+        "lint": "npx tsc --noEmit -p tsconfig.json",
+        "test": "vitest run",
+        "prebuild": "npm --workspace @omnigrid/core run build && npm --workspace @omnigrid/style run build && npm --workspace @omnigrid/default-theme run build && npm run clean",
+        "build": "npx tsc -p tsconfig.json",
+        "prepublishOnly": "npm run build"
+    },
+    "dependencies": {
+        "@omnigrid/core": "^0.1.0",
+        "@omnigrid/style": "^0.1.0",
+        "@omnigrid/default-theme": "^0.1.0"
+    },
+    "devDependencies": {
+        "@omnigrid/column-filter-plugin": "*",
+        "@omnigrid/quick-filter-plugin": "*",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0"
+    },
+    "peerDependencies": {
+        "react": ">=18",
+        "react-dom": ">=18"
     }
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
-    "lint": "npx tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "prebuild": "npm --workspace @omnigrid/core run build && npm --workspace @omnigrid/style run build && npm --workspace @omnigrid/default-theme run build && npm run clean",
-    "build": "npx tsc -p tsconfig.json",
-    "prepublishOnly": "npm run build"
-  },
-  "dependencies": {
-    "@omnigrid/core": "^0.1.0",
-    "@omnigrid/style": "^0.1.0",
-    "@omnigrid/default-theme": "^0.1.0"
-  },
-  "devDependencies": {
-    "@omnigrid/column-filter-plugin": "*",
-    "@omnigrid/quick-filter-plugin": "*",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
-  },
-  "peerDependencies": {
-    "react": ">=18",
-    "react-dom": ">=18"
-  }
 }
