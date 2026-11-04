@@ -1,4 +1,16 @@
-import type { AggregationFunc, DataRowNode, GridApi, GridPlugin, GridState, GroupRowNode, RowHierarchyScope, RowId, TreeRowNode } from "@omnigrid/core";
+import type {
+    AggregationFunc,
+    DataRowNode,
+    GridApi,
+    GridPlugin,
+    GridState,
+    GroupRowNode,
+    RowGroupContext,
+    RowGroupContextChild,
+    RowHierarchyScope,
+    RowId,
+    TreeRowNode,
+} from "@omnigrid/core";
 import type { ResolvedAggregationFunc } from "@omnigrid/aggregation-plugin";
 import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
 import type { BuildGroupNode } from "./groupingPipeline";
@@ -11,6 +23,51 @@ interface HierarchyCache<T> {
     data: T[];
     groupByKey: string;
     leafIds: Map<RowId, readonly RowId[]>;
+}
+
+function createLeafContext<T>(row: DataRowNode<T>): RowGroupContextChild<T> {
+    const leaf: Omit<DataRowNode<T>, "parent" | "parentGroup"> = {
+        type: "leaf",
+        id: row.id,
+        data: row.data,
+        level: row.level,
+    };
+    if (row.collapsedGroup) leaf.collapsedGroup = { ...row.collapsedGroup };
+    return leaf;
+}
+
+function createRowGroupContexts<T>(root: BuildGroupNode<T>): WeakMap<GroupRowNode<T>, RowGroupContext<T>> {
+    const contexts: WeakMap<GroupRowNode<T>, RowGroupContext<T>> = new WeakMap();
+    const buildContext = (group: BuildGroupNode<T>): RowGroupContext<T> => {
+        const children: RowGroupContextChild<T>[] = [];
+        const context: RowGroupContext<T> = {
+            type: "group",
+            id: group.id,
+            field: group.field,
+            key: group.key,
+            level: group.level,
+            expanded: group.expanded,
+            childrenCount: group.childrenCount,
+            aggregations: { ...group.aggregations },
+            children,
+        };
+        contexts.set(group, context);
+
+        for (const child of group.children) {
+            if (child.type === "group") {
+                children.push(buildContext(child as BuildGroupNode<T>));
+            } else {
+                children.push(createLeafContext(child));
+            }
+        }
+        for (const leaf of group.leaves) {
+            children.push(createLeafContext(leaf));
+        }
+        return context;
+    };
+
+    buildContext(root);
+    return contexts;
 }
 
 /**
@@ -263,6 +320,11 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
                     };
                 }
             }
+        }
+
+        const groupContexts: WeakMap<GroupRowNode<T>, RowGroupContext<T>> = createRowGroupContexts(root);
+        for (const row of flat) {
+            if (row.type === "leaf") row.parentGroup = groupContexts.get(row.parent);
         }
 
         this.groupedRowsCache = flat;

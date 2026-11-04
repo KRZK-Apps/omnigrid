@@ -82,6 +82,8 @@ export type {
     RowId,
     RowHierarchy,
     RowHierarchyScope,
+    RowGroupContext,
+    RowGroupContextChild,
     RowNode,
     RowRenderParams,
     RowSpanLayout,

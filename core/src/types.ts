@@ -61,7 +61,7 @@ export type ColumnFilterType = "text" | "number" | "date" | "boolean" | "set" | 
  *
  * `RowNode` is a lightweight view over a single processed row: the stable
  * `id` (from `getRowId`), the zero-based `index` in the processed dataset,
- * and the raw `data` object itself.
+ * the raw `data` object, and optional grouping context.
  *
  * @api
  */
@@ -72,6 +72,10 @@ export interface RowNode<T> {
     index: number;
     /** Raw row data object. */
     data: T;
+    /** Whether this row represents a collapsed single-child group. */
+    isCollapsedGroup?: boolean;
+    /** Immediate parent group and its acyclic child context, when grouped. */
+    parentGroup?: RowGroupContext<T>;
 }
 
 /** Aggregation function applied to column values within a group. */
@@ -154,6 +158,8 @@ export interface DataRowNode<T> {
     level: number;
     /** The group this row belongs to. */
     parent: GroupRowNode<T>;
+    /** A cycle-free snapshot of the immediate parent group and its children. */
+    parentGroup?: RowGroupContext<T>;
     /**
      * Set when this leaf row is displayed as a collapsed single-child group
      * (`collapseSingleChildGroups: true`). Contains the grouping field, value,
@@ -164,6 +170,27 @@ export interface DataRowNode<T> {
 
 /** A row in the flattened grouped output — either a group or a data row. */
 export type TreeRowNode<T> = GroupRowNode<T> | DataRowNode<T>;
+
+/**
+ * A direct child in a cycle-free row group context.
+ *
+ * Leaf snapshots omit their parent references; nested groups retain their
+ * own child contexts.
+ *
+ * @api
+ */
+export type RowGroupContextChild<T> = RowGroupContext<T> | Omit<DataRowNode<T>, "parent" | "parentGroup">;
+
+/**
+ * A snapshot of a group and its immediate children, including nested groups
+ * and leaf snapshots without parent back-references.
+ *
+ * @api
+ */
+export type RowGroupContext<T> = Omit<GroupRowNode<T>, "children"> & {
+    /** Immediate subgroup contexts and parent-free leaf snapshots. */
+    children: RowGroupContextChild<T>[];
+};
 
 /**
  * Context passed to the `colSpan` resolver of a column.
@@ -234,13 +261,15 @@ export interface RowSpanLayout {
  * `rowClassRules`, `checkboxDisabled`, ...).
  *
  * `rowType` distinguishes ordinary data rows from synthetic group rows.
+ * Leaf rows also report whether they represent a collapsed single-child group
+ * and include their immediate parent group context when grouping is active.
  * Group rows do not have raw row data.
  *
  * @api
  */
 export type RowRenderParams<T> =
     | (RowNode<T> & { rowType: "leaf" })
-    | { id: RowId; index: number; rowType: "group"; data?: never };
+    | { id: RowId; index: number; rowType: "group"; data?: never; isCollapsedGroup?: false; parentGroup?: never };
 
 
 export interface RowStyle {

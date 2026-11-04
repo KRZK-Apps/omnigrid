@@ -14,9 +14,9 @@ html:root {
     --omnigrid-cell-unselectable-background: #e6f1ec;
     --omnigrid-cell-unselectable-color: #71877d;
     --omnigrid-checkbox-accent: #059669;
-    --omnigrid-header-background: #d7eee5;
+    --omnigrid-header-background: #05ad98;
     --omnigrid-header-border: #b8d9ce;
-    --omnigrid-header-color: #174b40;
+    --omnigrid-header-color: #f5f5f5;
     --omnigrid-column-resize-color: #059669;
     --omnigrid-slot-background: #effaf6;
     --omnigrid-button-background: #f7fffb;
@@ -43,7 +43,7 @@ html .dark {
     --omnigrid-cell-unselectable-background: #1b3029;
     --omnigrid-cell-unselectable-color: #8ba99d;
     --omnigrid-checkbox-accent: #5eead4;
-    --omnigrid-header-background: #203c33;
+    --omnigrid-header-background: #243f34;
     --omnigrid-header-border: #35584d;
     --omnigrid-header-color: #d9f2e9;
     --omnigrid-column-resize-color: #5eead4;

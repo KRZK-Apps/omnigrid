@@ -25,7 +25,7 @@
 }
 
 .omnigrid-row:hover [role="cell"],
-.omnigrid-row-hover [role="cell"] {
+.omnigrid-row.omnigrid-row-hover [role="cell"] {
     background: var(--omnigrid-cell-hover-background) !important;
 }
 
@@ -42,11 +42,11 @@
    The adapter resets the animation imperatively on re-flash so it
    restarts every time the cell is updated. */
 [role="cell"] {
-    transition: background-color var(--omnigrid-flash-duration, 1000ms) ease-out;
+    transition: background-color var(--omnigrid-flash-duration, 500ms) ease-out;
 }
 
 .omnigrid-cell-flashed {
-    animation: omnigrid-cell-flash var(--omnigrid-flash-duration, 1000ms) ease-out forwards;
+    animation: omnigrid-cell-flash var(--omnigrid-flash-duration, 500ms) ease-out forwards;
 }
 
 @keyframes omnigrid-cell-flash {

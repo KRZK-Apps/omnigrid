@@ -1,6 +1,6 @@
 {
     "name": "@omnigrid/react",
-    "version": "0.1.28",
+    "version": "0.1.29",
     "description": "React adapter and renderer for OmniGrid",
     "keywords": [
         "omnigrid",

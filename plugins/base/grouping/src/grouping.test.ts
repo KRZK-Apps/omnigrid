@@ -92,6 +92,17 @@ describe("GroupingPlugin", () => {
         );
 
         expect(collapsedRow?.collapsedGroup).toEqual({ field: "department", key: "Engineering", level: 1 });
+        expect(collapsedRow?.parentGroup).toMatchObject({
+            type: "group",
+            id: collapsedRow?.parent.id,
+            field: "department",
+            key: "Engineering",
+            level: 1,
+            childrenCount: 1,
+            children: [{ type: "leaf", id: collapsedRow?.id, data: collapsedRow?.data, level: 2 }],
+        });
+        expect(collapsedRow?.parentGroup?.children[0]).not.toHaveProperty("parent");
+        expect(collapsedRow?.parentGroup?.children[0]).not.toHaveProperty("parentGroup");
         grid.destroy();
     });
 

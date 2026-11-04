@@ -42,7 +42,8 @@ import { DomPool, isActiveCondition, type GridApi, type RowId } from "@omnigrid/
 
 import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
 import { computeGroupSegments } from "./groupHeader";
-import { getCollapsedGroupDisplay, getGroupColumnRole, poolGetRowId, renderGroupCellContent, renderGroupCellPlaceholder } from "./groupCell";
+import { getCollapsedGroupDisplay, getGroupColumnRole, isGroupRowNode, poolGetRowId, renderGroupCellContent, renderGroupCellPlaceholder } from "./groupCell";
+import { getRowRenderParams } from "./rowRenderParams";
 import { PooledRowPane } from "./pooledRow";
 import type { PooledColumn, PooledRowCallbacks } from "./types";
 import { createCellRoot } from "./reactRoot";
@@ -65,13 +66,6 @@ import type {
     OverlayComponentProps,
     SlotRendererRegistry,
 } from "./types";
-
-function getRowRenderParams<T>(row: PooledRow<T>): RowRenderParams<T> {
-    if (row.type === "group") {
-        return { id: row.rowId, index: row.index, rowType: "group" };
-    }
-    return { id: row.rowId, index: row.index, rowType: "leaf", data: row.data };
-}
 
 function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
     if (column.valueGetter) return column.valueGetter(row);
@@ -775,16 +769,13 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     return;
                 }
                 grid.rowClick({
-                    id: row.rowId,
-                    index: row.index,
-                    rowType: "leaf",
-                    data: row.data,
+                    ...getRowRenderParams(row),
                     ctrlKey: modifiers.ctrlKey,
                     shiftKey: modifiers.shiftKey,
                 });
             },
             onRowHover: (row, hovered) => {
-                const rowElements = viewportRef.current?.querySelectorAll<HTMLElement>(`[data-row-index="${row.index}"]`);
+                const rowElements = document.querySelectorAll<HTMLElement>(`[data-row-index="${row.index}"]`);
                 rowElements?.forEach((element) => element.classList.toggle("omnigrid-row-hover", hovered));
                 grid.rowHover({ ...getRowRenderParams(row), hovered });
             },
@@ -797,10 +788,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     return;
                 }
                 grid.rowClick({
-                    id: row.rowId,
-                    index: row.index,
-                    rowType: "leaf",
-                    data: row.data,
+                    ...getRowRenderParams(row),
                     ctrlKey: modifiers.ctrlKey,
                     shiftKey: modifiers.shiftKey,
                 });
@@ -845,6 +833,9 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     const viewport = layer.viewport;
                     if (!viewport) return;
                     const spans = getCachedRowSpans(viewport, row.data, row.index);
+                    const paneRow: PooledRow<T> = isGroupRowNode<T>(row.data)
+                        ? { ...row, type: "group", group: row.data }
+                        : { ...row, type: "leaf" };
                     const isLeft: boolean = layer === layers.left;
                     const isRight: boolean = layer === layers.right;
                     const layout = isLeft ? spans.left : isRight ? spans.right : spans.central;
@@ -852,7 +843,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     // this layer renders: `columnRange` addresses `leafColumns`
                     // (scrollable) while pinned layers render their full group.
                     const sliced = sliceSpanLayoutForLayer(viewport, layer.columns, !isLeft && !isRight, layout);
-                    pane.bind(row, layer.columns, layer.originX, sliced);
+                    pane.bind(paneRow, layer.columns, layer.originX, sliced);
                 },
                 resizeRow: (host, height) => {
                     const pane = paneMap.get(host);
