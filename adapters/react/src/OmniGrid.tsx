@@ -28,6 +28,7 @@ import type {
     OverlayComponentProps as CoreOverlayComponentProps,
     OverlayScope,
     OverlayState,
+    PooledRow,
     RowRenderParams,
     RowSpanLayout,
     RowStyle,
@@ -64,6 +65,13 @@ import type {
     OverlayComponentProps,
     SlotRendererRegistry,
 } from "./types";
+
+function getRowRenderParams<T>(row: PooledRow<T>): RowRenderParams<T> {
+    if (row.type === "group") {
+        return { id: row.rowId, index: row.index, rowType: "group" };
+    }
+    return { id: row.rowId, index: row.index, rowType: "leaf", data: row.data };
+}
 
 function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
     if (column.valueGetter) return column.valueGetter(row);
@@ -699,9 +707,9 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 return null;
             },
             resolveRowClasses: (row) => {
-                const isGroup = Boolean(row.data && typeof row.data === "object" && "type" in row.data && (row.data as { type: string }).type === "group");
+                const isGroup = row.type === "group";
                 const base = isGroup ? "omnigrid-row omnigrid-row-group" : "omnigrid-row";
-                const rowParams: RowRenderParams<T> = { id: row.rowId, index: row.index, data: row.data };
+                const rowParams: RowRenderParams<T> = getRowRenderParams(row);
                 const currentOptions = current();
                 const rowClass = typeof currentOptions.rowClass === "function" ? currentOptions.rowClass(rowParams) : currentOptions.rowClass;
                 const dynamicRowClass = currentOptions.getRowClass?.(rowParams);
@@ -714,7 +722,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 return [base, rowClass, ...ruleClasses, dynamicRowClass, ...pluginClasses].filter(Boolean).join(" ");
             },
             resolveRowStyle: (row) => {
-                const rowParams: RowRenderParams<T> = { id: row.rowId, index: row.index, data: row.data };
+                const rowParams: RowRenderParams<T> = getRowRenderParams(row);
                 const currentOptions = current();
                 const baseRowStyle: RowStyle = {
                     ...(currentOptions.rowStyle ?? {}),
@@ -760,15 +768,16 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 return resolveCellStyle(info.column, cellParams, columnPresentation.style);
             },
             onRowClick: (row, modifiers) => {
-                if (row.data && typeof row.data === "object" && "type" in row.data && (row.data as { type: string }).type === "group") {
-                    if (typeof (grid as any).toggleGroup === "function") {
-                        (grid as any).toggleGroup((row.data as unknown as { id: string }).id);
+                if (row.type === "group") {
+                    if (row.group && typeof (grid as any).toggleGroup === "function") {
+                        (grid as any).toggleGroup(row.group.id);
                     }
                     return;
                 }
                 grid.rowClick({
                     id: row.rowId,
                     index: row.index,
+                    rowType: "leaf",
                     data: row.data,
                     ctrlKey: modifiers.ctrlKey,
                     shiftKey: modifiers.shiftKey,
@@ -777,19 +786,20 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             onRowHover: (row, hovered) => {
                 const rowElements = viewportRef.current?.querySelectorAll<HTMLElement>(`[data-row-index="${row.index}"]`);
                 rowElements?.forEach((element) => element.classList.toggle("omnigrid-row-hover", hovered));
-                grid.rowHover({ id: row.rowId, index: row.index, data: row.data, hovered });
+                grid.rowHover({ ...getRowRenderParams(row), hovered });
             },
             onCellClick: (row, column, modifiers) => {
                 if (column.stopRowClick) return;
-                if (row.data && typeof row.data === "object" && "type" in row.data && (row.data as { type: string }).type === "group") {
-                    if (typeof (grid as any).toggleGroup === "function") {
-                        (grid as any).toggleGroup((row.data as unknown as { id: string }).id);
+                if (row.type === "group") {
+                    if (row.group && typeof (grid as any).toggleGroup === "function") {
+                        (grid as any).toggleGroup(row.group.id);
                     }
                     return;
                 }
                 grid.rowClick({
                     id: row.rowId,
                     index: row.index,
+                    rowType: "leaf",
                     data: row.data,
                     ctrlKey: modifiers.ctrlKey,
                     shiftKey: modifiers.shiftKey,

@@ -1,6 +1,6 @@
 {
     "name": "@omnigrid/selection-plugin",
-    "version": "0.1.7",
+    "version": "0.1.8",
     "description": "Headless row selection plugin for OmniGrid",
     "keywords": [
         "omnigrid",

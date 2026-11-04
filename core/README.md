@@ -45,6 +45,8 @@ interface GridOptions<T> {
 }
 ```
 
+Row callbacks receive `params.rowType` (`"leaf"` or `"group"`). Group rows are synthetic and have no `data`; checking `rowType` narrows the callback parameters.
+
 ### `ColumnDef<T>`
 
 `ColumnDef<T> = ColumnLeafDef<T> | ColumnGroupDef<T>`. Groups nest via `children`; width/visibility/pinning can be combined freely.

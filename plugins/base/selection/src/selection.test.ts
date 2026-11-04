@@ -74,11 +74,11 @@ describe("SelectionPlugin row presentation", () => {
         const grid = new Grid<Row>({ columns, data: ROWS, plugins: [plugin] });
 
         plugin.setSelectedRowIds(["a"]);
-        expect(plugin.getRowClass({ id: "a", index: 0, data: ROWS[0] })).toBe("omnigrid-row-selected");
-        expect(plugin.getRowClass({ id: "b", index: 1, data: ROWS[1] })).toBeUndefined();
+        expect(plugin.getRowClass({ id: "a", index: 0, rowType: "leaf", data: ROWS[0] })).toBe("omnigrid-row-selected");
+        expect(plugin.getRowClass({ id: "b", index: 1, rowType: "leaf", data: ROWS[1] })).toBeUndefined();
 
         plugin.toggleRow("a", 0, {});
-        expect(plugin.getRowClass({ id: "a", index: 0, data: ROWS[0] })).toBeUndefined();
+        expect(plugin.getRowClass({ id: "a", index: 0, rowType: "leaf", data: ROWS[0] })).toBeUndefined();
     });
 
     it("does not set inline colors — the theme owns the selected-row color", () => {
@@ -91,8 +91,8 @@ describe("SelectionPlugin row presentation", () => {
             isRowSelectable: (row) => row.age >= 30,
         });
 
-        expect(plugin.getRowClass({ id: "a", index: 0, data: ROWS[0] })).toBeUndefined();
-        expect(plugin.getRowClass({ id: "b", index: 1, data: ROWS[1] })).toBe("omnigrid-row-unselectable");
+        expect(plugin.getRowClass({ id: "a", index: 0, rowType: "leaf", data: ROWS[0] })).toBeUndefined();
+        expect(plugin.getRowClass({ id: "b", index: 1, rowType: "leaf", data: ROWS[1] })).toBe("omnigrid-row-unselectable");
     });
 
     it("keeps the unselectable class when a row is also selected programmatically", () => {
@@ -101,7 +101,9 @@ describe("SelectionPlugin row presentation", () => {
         });
         plugin.setSelectedRowIds(["b"]);
 
-        expect(plugin.getRowClass({ id: "b", index: 1, data: ROWS[1] })).toBe("omnigrid-row-selected omnigrid-row-unselectable");
+        expect(plugin.getRowClass({ id: "b", index: 1, rowType: "leaf", data: ROWS[1] })).toBe(
+            "omnigrid-row-selected omnigrid-row-unselectable",
+        );
     });
 
     it("notifies listeners with the current selected rows whenever selection changes", () => {

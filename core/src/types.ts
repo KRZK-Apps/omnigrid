@@ -233,12 +233,14 @@ export interface RowSpanLayout {
  * Context passed to every row-level callback (`getRowStyle`, `getRowClass`,
  * `rowClassRules`, `checkboxDisabled`, ...).
  *
- * Alias of `RowNode`: the stable row id, the zero-based index in the
- * processed dataset, and the raw row data object.
+ * `rowType` distinguishes ordinary data rows from synthetic group rows.
+ * Group rows do not have raw row data.
  *
  * @api
  */
-export type RowRenderParams<T> = RowNode<T>;
+export type RowRenderParams<T> =
+    | (RowNode<T> & { rowType: "leaf" })
+    | { id: RowId; index: number; rowType: "group"; data?: never };
 
 
 export interface RowStyle {
@@ -873,6 +875,10 @@ export interface PooledRow<T> {
     index: number;
     rowId: RowId;
     data: T;
+    /** Row kind; omitted only by legacy custom DOM-pool bindings. */
+    type?: "group" | "leaf";
+    /** Group metadata for synthetic group rows. */
+    group?: GroupRowNode<T>;
     offsetY: number;
     height: number;
     /** Pixel width of the row (sum of all column widths) — used to size the row node. */
@@ -975,14 +981,14 @@ export interface DomPoolUpdate<T> {
     recycled: RowHost<T>[];
 }
 
-export interface RowClickEvent<T> extends RowRenderParams<T> {
+export type RowClickEvent<T> = RowRenderParams<T> & {
     ctrlKey: boolean;
     shiftKey: boolean;
-}
+};
 
-export interface RowHoverEvent<T> extends RowRenderParams<T> {
+export type RowHoverEvent<T> = RowRenderParams<T> & {
     hovered: boolean;
-}
+};
 
 export interface GridPlugin<T> {
     name: string;

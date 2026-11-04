@@ -187,7 +187,9 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
     }
 
     /** Returns selection-related CSS classes for a row. */
-    public getRowClass({ id, index, data }: RowRenderParams<T>): string | undefined {
+    public getRowClass(params: RowRenderParams<T>): string | undefined {
+        const { id, index } = params;
+        const data: T | undefined = params.rowType === "leaf" ? params.data : undefined;
         const checkboxState: CheckboxState<T> = this.getCheckboxState(id, index, data);
         const classes: string[] = [];
         if (checkboxState.group) {
@@ -196,7 +198,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
             if (checkboxState.disabled) classes.push(UNSELECTABLE_ROW_CLASS);
         } else {
             if (this.selectedRowIds.has(id)) classes.push(SELECTED_ROW_CLASS);
-            if (!this.isRowSelectable(data, index)) classes.push(UNSELECTABLE_ROW_CLASS);
+            if (data !== undefined && !this.isRowSelectable(data, index)) classes.push(UNSELECTABLE_ROW_CLASS);
         }
         return classes.length > 0 ? classes.join(" ") : undefined;
     }
@@ -246,12 +248,13 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         return this.api.getRowId(row, sourceIndex >= 0 ? sourceIndex : index);
     }
 
-    private getCheckboxState(rowId: RowId, index: number, data: T): CheckboxState<T> {
+    private getCheckboxState(rowId: RowId, index: number, data: T | undefined): CheckboxState<T> {
         const hierarchy: RowHierarchy<T> | undefined = this.api?.getRowHierarchy();
         const allDescendants: readonly RowId[] | undefined = hierarchy?.getLeafRowIds(rowId, "all");
         const isGroup: boolean = allDescendants !== undefined;
         if (!isGroup) {
-            const row: { data: T; index: number } | undefined = hierarchy ? this.getRowByStableId(rowId) : { data, index };
+            const row: { data: T; index: number } | undefined =
+                hierarchy ? this.getRowByStableId(rowId) : data !== undefined ? { data, index } : undefined;
             const selectable: boolean = row !== undefined && this.isRowSelectable(row.data, row.index);
             return {
                 checked: this.selectedRowIds.has(rowId),
