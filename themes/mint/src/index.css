@@ -43,9 +43,9 @@ html .dark {
     --omnigrid-cell-unselectable-background: #1b3029;
     --omnigrid-cell-unselectable-color: #8ba99d;
     --omnigrid-checkbox-accent: #5eead4;
-    --omnigrid-header-background: #243f34;
+    --omnigrid-header-background: #0ce8c8;
     --omnigrid-header-border: #35584d;
-    --omnigrid-header-color: #d9f2e9;
+    --omnigrid-header-color: #1a1d1e;
     --omnigrid-column-resize-color: #5eead4;
     --omnigrid-slot-background: #10231f;
     --omnigrid-button-background: #203c33;
