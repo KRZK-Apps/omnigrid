@@ -329,6 +329,7 @@ export class PooledRowPane<T> {
 
         element.addEventListener("click", (event: MouseEvent) => {
             event.stopPropagation();
+            if (event.target instanceof Element && event.target.closest("[data-omnigrid-group-toggle]")) return;
             const row = this.row;
             const column = cell.column;
             if (!row || !column) return;

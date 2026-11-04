@@ -1,8 +1,16 @@
+import { type ReactNode, isValidElement } from "react";
+
+import {
+    type ColumnLeafDef,
+    type GridApi,
+    type GroupRowNode,
+    IconRegistry,
+    type SlotRenderContext,
+} from "@omnigrid/core";
 import { describe, expect, it } from "vitest";
 
-import type { ColumnLeafDef } from "@omnigrid/core";
-
-import { getCollapsedGroupDisplay } from "./groupCell";
+import { getCollapsedGroupDisplay, renderGroupCellContent } from "./groupCell";
+import type { ContentBridge, PooledCellRenderInfo } from "./types";
 
 interface Row {
     sector: string;
@@ -20,7 +28,10 @@ describe("getCollapsedGroupDisplay", () => {
         const groupColumn: ColumnLeafDef<Row> = { id: "sector", field: "sector" };
         const nestedColumn: ColumnLeafDef<Row> = { id: "licenseStatus", field: "licenseStatus" };
 
-        expect(getCollapsedGroupDisplay(collapsedRow, groupColumn, groupBy, "single")).toEqual({ value: "Licensed", level: 2 });
+        expect(getCollapsedGroupDisplay(collapsedRow, groupColumn, groupBy, "single")).toEqual({
+            value: "Licensed",
+            level: 2,
+        });
         expect(getCollapsedGroupDisplay(collapsedRow, nestedColumn, groupBy, "single")).toBeUndefined();
     });
 
@@ -28,7 +39,10 @@ describe("getCollapsedGroupDisplay", () => {
         const groupColumn: ColumnLeafDef<Row> = { id: "licenseStatus", field: "licenseStatus" };
         const otherGroupColumn: ColumnLeafDef<Row> = { id: "sector", field: "sector" };
 
-        expect(getCollapsedGroupDisplay(collapsedRow, groupColumn, groupBy, "perLevel")).toEqual({ value: "Licensed", level: 2 });
+        expect(getCollapsedGroupDisplay(collapsedRow, groupColumn, groupBy, "perLevel")).toEqual({
+            value: "Licensed",
+            level: 2,
+        });
         expect(getCollapsedGroupDisplay(collapsedRow, otherGroupColumn, groupBy, "perLevel")).toBeUndefined();
     });
 
@@ -36,5 +50,54 @@ describe("getCollapsedGroupDisplay", () => {
         const groupColumn: ColumnLeafDef<Row> = { id: "sector", field: "sector" };
 
         expect(getCollapsedGroupDisplay({ sector: "Europe" }, groupColumn, groupBy, "single")).toBeUndefined();
+    });
+
+    it("toggles a group from its accessible chevron button", () => {
+        const toggleGroup: (groupId: string) => void = vi.fn();
+        const icons: IconRegistry<Row> = new IconRegistry<Row>();
+        const grid: GridApi<Row> = {
+            getState: () => ({ groupBy: ["sector"], groupColumnMode: "single", showChildCount: false }),
+            methods: { toggleGroup },
+            icons,
+        } as unknown as GridApi<Row>;
+        const bridge: ContentBridge<Row> = {
+            registry: {},
+            context: () => ({ api: { icons } }) as unknown as SlotRenderContext<Row>,
+        };
+        const group: GroupRowNode<Row> = {
+            type: "group",
+            id: "__root__/sector:Europe",
+            field: "sector",
+            key: "Europe",
+            level: 0,
+            expanded: true,
+            childrenCount: 1,
+            aggregations: {},
+            children: [],
+        };
+        const info: PooledCellRenderInfo<Row> = {
+            data: group as unknown as Row,
+            column: { id: "sector", field: "sector" },
+            columnIndex: 0,
+            rowId: group.id,
+            rowIndex: 0,
+            colSpan: 1,
+        };
+        const content: ReactNode | undefined = renderGroupCellContent(info, bridge, grid);
+
+        expect(isValidElement(content)).toBe(true);
+        if (!isValidElement(content)) return;
+        const children: ReactNode[] = (content.props as { children: ReactNode[] }).children;
+        const toggleButton: ReactNode = children[0];
+
+        expect(isValidElement(toggleButton)).toBe(true);
+        if (!isValidElement(toggleButton)) return;
+        const onClick = (toggleButton.props as { onClick: (event: { stopPropagation: () => void }) => void }).onClick;
+        const stopPropagation = vi.fn();
+
+        onClick({ stopPropagation });
+
+        expect(stopPropagation).toHaveBeenCalledOnce();
+        expect(toggleGroup).toHaveBeenCalledWith(group.id);
     });
 });

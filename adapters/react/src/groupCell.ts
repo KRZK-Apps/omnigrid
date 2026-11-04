@@ -1,6 +1,15 @@
-import { createElement, type ReactNode } from "react";
+import { type ReactNode, createElement } from "react";
+
 import type { ColumnLeafDef, GridApi, GroupRowNode, RowId, TreeRowNode } from "@omnigrid/core";
+
 import { type ContentBridge, contentToReactNode } from "./content";
+
+type ToggleGroupMethod = (groupId: string) => void;
+type GridWithToggleGroup<T> = GridApi<T> & { toggleGroup?: ToggleGroupMethod };
+
+function isToggleGroupMethod(method: unknown): method is ToggleGroupMethod {
+    return typeof method === "function";
+}
 
 /**
  * Checks whether an arbitrary row node represents a grouping tree node.
@@ -100,6 +109,26 @@ export function renderGroupCellContent<T>(
             if (mode !== "single" && role.level !== node.level) return null;
             const chevronName: string = node.expanded ? "chevron-down" : "chevron-right";
             const icon: ReactNode = contentToReactNode(bridgeArg.context().api.icons.get(chevronName), bridgeArg);
+            const toggleButton: ReactNode = createElement(
+                "button",
+                {
+                    type: "button",
+                    className: "omnigrid-icon-button",
+                    "data-omnigrid-group-toggle": "",
+                    "aria-label": `${node.expanded ? "Collapse" : "Expand"} ${String(node.key)} group`,
+                    "aria-expanded": node.expanded,
+                    onClick: (event: { stopPropagation: () => void }) => {
+                        event.stopPropagation();
+                        const gridWithToggleGroup: GridWithToggleGroup<T> = grid as GridWithToggleGroup<T>;
+                        const toggleGroup: unknown = grid.methods.toggleGroup ?? gridWithToggleGroup.toggleGroup;
+                        if (!isToggleGroupMethod(toggleGroup)) {
+                            throw new Error("Cannot toggle group: the grid does not expose a group toggle method.");
+                        }
+                        toggleGroup.call(grid, node.id);
+                    },
+                },
+                icon,
+            );
             if (groupRowRenderer) {
                 const rendered: unknown = (groupRowRenderer as (params: unknown) => unknown)({
                     node: node as GroupRowNode<T>,
@@ -112,13 +141,13 @@ export function renderGroupCellContent<T>(
                 return contentToReactNode(rendered, bridgeArg);
             }
             if (showChildCount) {
-                return createElement(
+                return                 createElement(
                     "span",
                     {
                         style: { paddingLeft: mode === "single" ? level * 20 : 0, display: "flex", alignItems: "center", gap: 6 },
                         title: String(node.key),
                     },
-                    icon,
+                    toggleButton,
                     " ",
                     node.key,
                     " (",
@@ -132,7 +161,7 @@ export function renderGroupCellContent<T>(
                     style: { paddingLeft: mode === "single" ? level * 20 : 0, display: "flex", alignItems: "center", gap: 6 },
                     title: String(node.key),
                 },
-                icon,
+                toggleButton,
                 " ",
                 node.key,
             );
