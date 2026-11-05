@@ -45,7 +45,7 @@ export interface SelectionPluginOptions<T> {
     onSelectionChange?: (state: SelectionState<T>) => void;
     /** ID for the automatically inserted checkbox column. @default "__omnigrid_selection__" */
     selectionColumnId?: string;
-    /** Width in pixels of the automatically inserted checkbox column. @default 44 */
+    /** Width in pixels of the automatically inserted checkbox column. @default 36 */
     selectionColumnWidth?: number;
 }
 

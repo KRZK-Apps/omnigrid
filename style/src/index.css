@@ -79,6 +79,7 @@
 }
 
 .omnigrid-checkbox {
+    cursor: pointer;
     accent-color: var(--omnigrid-checkbox-accent);
 }
 
@@ -108,8 +109,10 @@
     cursor: col-resize;
     opacity: 0;
     pointer-events: auto;
-    transition: opacity 120ms ease, background-color 120ms ease;
-    background: color-mix(in srgb, var(--omnigrid-column-resize-color, #2563eb) 14%, transparent);
+    transition:
+        opacity 120ms ease,
+        background-color 120ms ease;
+    background: color-mix(in srgb, var(--omnigrid-column-resize-color, #030303) 33%, transparent);
 }
 
 .omnigrid-column-resize-handle-left {
@@ -470,7 +473,10 @@
 
 .omnigrid-overlay {
     align-items: center;
-    background: var(--omnigrid-overlay-background, color-mix(in srgb, var(--omnigrid-grid-background) 72%, transparent));
+    background: var(
+        --omnigrid-overlay-background,
+        color-mix(in srgb, var(--omnigrid-grid-background) 72%, transparent)
+    );
     display: flex;
     justify-content: center;
     pointer-events: none;

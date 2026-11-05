@@ -74,7 +74,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         this.checkboxRenderer = options.checkboxRenderer ?? defaultCheckboxRenderer;
         this.onSelectionChange = options.onSelectionChange;
         this.selectionColumnId = options.selectionColumnId ?? CHECKBOX_COLUMN_DEFAULT_ID;
-        this.selectionColumnWidth = options.selectionColumnWidth ?? 44;
+        this.selectionColumnWidth = options.selectionColumnWidth ?? 36;
     }
 
     public register(api: GridApi<T>): () => void {
@@ -354,6 +354,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
             width: this.selectionColumnWidth,
             minWidth: this.selectionColumnWidth,
             maxWidth: this.selectionColumnWidth,
+            align: "center",
             sortable: false,
             stopHeaderClick: true,
             stopRowClick: true,
