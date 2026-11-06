@@ -535,6 +535,13 @@ export interface ColumnGroupDef<T> extends BaseColumnDef<T> {
 export type ColumnDef<T> = ColumnLeafDef<T> | ColumnGroupDef<T>;
 
 /**
+ * Properties inherited by leaf columns unless overridden by the column.
+ *
+ * @api
+ */
+export type DefaultColumnDef<T> = Partial<Omit<ColumnLeafDef<T>, "id" | "header">>;
+
+/**
  * Props supplied to a framework-specific overlay renderer.
  *
  * @api
@@ -590,6 +597,8 @@ export interface GridOptions<T> {
     /** Row data; omitted or null means an initial load is pending. */
     data?: T[] | null;
     columns: ColumnDef<T>[];
+    /** Properties applied to every leaf column unless overridden. @api */
+    defaultColumnDef?: DefaultColumnDef<T>;
     /** Returns a stable row ID; defaults to the row's current index. Use a stable ID to preserve row identity when rows are reordered. */
     getRowId?: (row: T, index: number) => RowId;
     rowHeight?: number;
@@ -1343,7 +1352,13 @@ export interface CoreGridApi<T> {
     emit<EventName extends keyof GridEvents<T>>(event: EventName, payload: GridEvents<T>[EventName]): void;
     registerPlugin(plugin: GridPlugin<T>): () => void;
     registerDataProcessor(processor: DataProcessor<T>): () => void;
-    setColumns(columns: ColumnDef<T>[]): void;
+    /**
+     * Replaces the column definitions. Pass a second argument to update the shared leaf-column defaults.
+     * @param columns - New column definitions.
+     * @param defaultColumnDef - Updated defaults; pass `undefined` to clear existing defaults.
+     * @api
+     */
+    setColumns(columns: ColumnDef<T>[], defaultColumnDef?: DefaultColumnDef<T>): void;
     headerClick(columnId: string, multiSort?: boolean): void;
     rowClick(row: RowClickEvent<T>): void;
     rowHover(row: RowHoverEvent<T>): void;

@@ -1,4 +1,4 @@
-import { applyWrapText, flattenColumns, getColumnGroups, getCellValue, getRowSpans, resolveColSpan } from "./columns";
+import { applyDefaultColumnDef, applyWrapText, flattenColumns, getColumnGroups, getCellValue, getRowSpans, resolveColSpan } from "./columns";
 import { EventBus } from "./events";
 import { applyFilterModel, applyQuickFilter, isActiveCondition } from "./filtering";
 import type { ColumnFilterModel, FilterCondition, FilterModel } from "./filtering";
@@ -14,6 +14,7 @@ import type {
     AggregationFunc,
     ColumnLeafDef,
     DataProcessor,
+    DefaultColumnDef,
     DataRowNode,
     GridApi,
     GridEvents,
@@ -77,6 +78,7 @@ export class Grid<T> implements GridApi<T> {
      *   disables auto-evaluation until hideOverlay re-enables it.
      */
     private readonly licenseKey: string | undefined;
+    private defaultColumnDef: DefaultColumnDef<T> | undefined;
     private loading = false;
     private hasData = true;
     private loadError: unknown;
@@ -103,7 +105,7 @@ export class Grid<T> implements GridApi<T> {
     public constructor(options: GridOptions<T>) {
         const state: GridState<T> = {
             data: options.data ?? [],
-            columns: applyWrapText(options.columns, options.wrapText),
+            columns: applyWrapText(applyDefaultColumnDef(options.columns, options.defaultColumnDef), options.wrapText),
             viewport: { width: 0, height: 0, scrollTop: 0, scrollLeft: 0 },
             rowHeight: options.rowHeight ?? 32,
             groupBy: [],
@@ -120,6 +122,7 @@ export class Grid<T> implements GridApi<T> {
         };
         this.store = new Store(state);
         this.licenseKey = options.licenseKey;
+        this.defaultColumnDef = options.defaultColumnDef;
         this.resolveRowId = options.getRowId ?? ((_row, index) => index);
         this.loading = options.loading ?? false;
         this.hasData = options.data !== undefined && options.data !== null;
@@ -1200,14 +1203,22 @@ export class Grid<T> implements GridApi<T> {
         this.store.setState({});
     }
 
-    public setColumns(columns: GridState<T>["columns"]): void {
+    /**
+     * Replaces the column definitions and optionally updates shared leaf-column defaults.
+     *
+     * @param columns - New column definitions.
+     * @param defaultColumnDef - Updated defaults; pass `undefined` to clear existing defaults.
+     * @api
+     */
+    public setColumns(columns: GridState<T>["columns"], defaultColumnDef?: DefaultColumnDef<T>): void {
         this.assertActive();
+        if (arguments.length > 1) this.defaultColumnDef = defaultColumnDef;
         this.filteredDataCache = null;
         this.processedDataCache = null;
         this.groupedRowsCache = null;
         this.groupedRowsRevision = -1;
         this.revision += 1;
-        this.store.setState({ columns: applyWrapText(columns, this.wrapTextAll) });
+        this.store.setState({ columns: applyWrapText(applyDefaultColumnDef(columns, this.defaultColumnDef), this.wrapTextAll) });
         this.recomputeOverlay();
     }
 

@@ -1,4 +1,4 @@
-import type { CellSpan, CellSpanningParams, ColumnDef, ColumnGroupDef, ColumnGroupViewport, ColumnLeafDef, RowId, RowNode, RowSpanLayout } from "./types";
+import type { CellSpan, CellSpanningParams, ColumnDef, ColumnGroupDef, ColumnGroupViewport, ColumnLeafDef, DefaultColumnDef, RowId, RowNode, RowSpanLayout } from "./types";
 
 /**
  * Runtime narrowing: does the column definition describe a GROUP
@@ -11,6 +11,27 @@ export function isColumnGroup<T>(column: ColumnDef<T>): column is ColumnGroupDef
 /** Inverse of `isColumnGroup` — handy for filters over the flat working set. */
 export function isColumnLeaf<T>(column: ColumnDef<T>): column is ColumnLeafDef<T> {
     return !isColumnGroup(column);
+}
+
+/**
+ * Applies shared defaults to leaf columns while preserving column-level overrides.
+ *
+ * @param columns - Column definitions to process.
+ * @param defaultColumnDef - Properties inherited by leaf columns, when supplied.
+ * @returns Column definitions with defaults applied recursively.
+ * @api
+ */
+export function applyDefaultColumnDef<T>(
+    columns: ColumnDef<T>[],
+    defaultColumnDef: DefaultColumnDef<T> | undefined,
+): ColumnDef<T>[] {
+    if (!defaultColumnDef) return columns;
+
+    return columns.map((column) =>
+        isColumnGroup(column)
+            ? { ...column, children: applyDefaultColumnDef(column.children, defaultColumnDef) }
+            : { ...defaultColumnDef, ...column },
+    );
 }
 
 /**

@@ -82,17 +82,22 @@ export function useGrid<T>(options: ReactGridOptions<T>): UseGridResult<T> {
     // plugin state when nothing actually changed.
     const columnsSyncedRef = useRef(false);
     const lastSyncedColumnsRef = useRef<GridOptions<T>["columns"]>(undefined);
+    const lastSyncedDefaultColumnDefRef = useRef<GridOptions<T>["defaultColumnDef"]>(undefined);
     useEffect(() => {
         if (grid.isDestroyed()) return;
         if (!columnsSyncedRef.current) {
             columnsSyncedRef.current = true;
             lastSyncedColumnsRef.current = options.columns;
+            lastSyncedDefaultColumnDefRef.current = options.defaultColumnDef;
             return;
         }
         const prev = lastSyncedColumnsRef.current ?? [];
         const next = options.columns ?? [];
-        if (prev.length !== next.length || prev.some((column, index) => column !== next[index])) {
+        const columnsChanged: boolean = prev.length !== next.length || prev.some((column, index) => column !== next[index]);
+        const defaultColumnDefChanged: boolean = lastSyncedDefaultColumnDefRef.current !== options.defaultColumnDef;
+        if (columnsChanged || defaultColumnDefChanged) {
             lastSyncedColumnsRef.current = options.columns;
+            lastSyncedDefaultColumnDefRef.current = options.defaultColumnDef;
             // Merge the user's column definitions into the current (plugin-enriched)
             // columns instead of replacing them wholesale. Plugins such as the resize
             // plugin inject properties (e.g. `headerRenderer`) into columns that are
@@ -133,9 +138,9 @@ export function useGrid<T>(options: ReactGridOptions<T>): UseGridResult<T> {
             next.forEach((userColumn) => {
                 if (!currentById.has(userColumn.id)) merged.push(userColumn);
             });
-            grid.setColumns(merged);
+            grid.setColumns(merged, options.defaultColumnDef);
         }
-    }, [grid, options.columns]);
+    }, [grid, options.columns, options.defaultColumnDef]);
 
     // Controlled filter model: applied when the host passes a new reference.
     // Skipped on the first run — the Grid constructor already applied it.

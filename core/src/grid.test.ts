@@ -676,6 +676,24 @@ describe("Grid — Variable Row Height", () => {
         // An explicit column-level flag always wins.
         expect((columns[1] as { wrapText?: boolean }).wrapText).toBe(false);
     });
+
+    it("applies and updates default column definitions", () => {
+        const grid: Grid<Row> = new Grid<Row>({
+            columns: [{ id: "a", header: "A", sortable: false }, { id: "b", header: "B" }],
+            defaultColumnDef: { sortable: true, resizable: true },
+        });
+
+        expect(grid.getState().columns).toEqual([
+            { id: "a", header: "A", sortable: false, resizable: true },
+            { id: "b", header: "B", sortable: true, resizable: true },
+        ]);
+
+        grid.setColumns([{ id: "a", header: "A" }, { id: "b", header: "B" }], { sortable: false });
+        expect(grid.getState().columns).toEqual([
+            { id: "a", header: "A", sortable: false },
+            { id: "b", header: "B", sortable: false },
+        ]);
+    });
 });
 
 describe("Grid.applyTransaction — targeted row mutations", () => {
@@ -1020,4 +1038,3 @@ describe("Grid grouping", () => {
         expect(visibleIds).toContain("sales");
     });
 });
-

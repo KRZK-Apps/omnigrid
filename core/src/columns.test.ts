@@ -1,4 +1,4 @@
-import { flattenColumns, getCellSpanningParams, getColumnGroups, getRowSpans, isColumnGroup, isColumnLeaf, resolveColSpan } from "./columns";
+import { applyDefaultColumnDef, flattenColumns, getCellSpanningParams, getColumnGroups, getRowSpans, isColumnGroup, isColumnLeaf, resolveColSpan } from "./columns";
 import type { CellSpanningParams, ColumnDef, ColumnLeafDef } from "./types";
 
 interface Row {
@@ -43,6 +43,20 @@ describe("flattenColumns", () => {
             { id: "a", header: "A", hidden: true },
         ];
         expect(flattenColumns(columns).map((c) => c.id)).toEqual(["a"]);
+    });
+});
+
+describe("applyDefaultColumnDef", () => {
+    it("applies defaults recursively to leaf columns without overriding explicit values", () => {
+        const columns: ColumnDef<Row>[] = [
+            { id: "a", header: "A", sortable: false },
+            { id: "group", header: "Group", resizable: false, children: [{ id: "b", header: "B" }] },
+        ];
+
+        expect(applyDefaultColumnDef(columns, { sortable: true, resizable: true })).toEqual([
+            { id: "a", header: "A", sortable: false, resizable: true },
+            { id: "group", header: "Group", resizable: false, children: [{ id: "b", header: "B", sortable: true, resizable: true }] },
+        ]);
     });
 });
 

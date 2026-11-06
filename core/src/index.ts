@@ -41,6 +41,7 @@ export type {
     ColSpanDef,
     ColumnClassRules,
     ColumnDataType,
+    DefaultColumnDef,
     ColumnFilterType,
     ColumnDef,
     ColumnGroupDef,
@@ -109,5 +110,5 @@ export type {
     ViewportState,
     VirtualItem,
 } from "./types";
-export { getColumnGroups, flattenColumns, isColumnGroup, isColumnLeaf, getCellValue, getCellSpanningParams, resolveColSpan, getRowSpans } from "./columns";
+export { applyDefaultColumnDef, getColumnGroups, flattenColumns, isColumnGroup, isColumnLeaf, getCellValue, getCellSpanningParams, resolveColSpan, getRowSpans } from "./columns";
 export { Virtualizer, RowHeightRegistry } from "./virtualizer";
