@@ -41,6 +41,7 @@ import type {
 import { DomPool, isActiveCondition, type GridApi, type RowId } from "@omnigrid/core";
 
 import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
+import { CellTooltipLayer } from "./cellTooltip";
 import { computeGroupSegments } from "./groupHeader";
 import { getCollapsedGroupDisplay, getGroupColumnRole, isGroupRowNode, poolGetRowId, renderGroupCellContent, renderGroupCellPlaceholder } from "./groupCell";
 import { getRowRenderParams } from "./rowRenderParams";
@@ -163,7 +164,7 @@ function createRowLayerState<T>(): RowLayerState<T> {
  * core's headless content; React components in slots are connected via
  * `slotComponents`.
  */
-export function OmniGrid<T>({ className, style, slotComponents, ...options }: GridProps<T>) {
+export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRenderer, cellTooltipClassName, ...options }: GridProps<T>) {
     const { grid, state, viewportData } = useGrid(options);
 
     const viewportRef = useRef<HTMLDivElement>(null);
@@ -673,7 +674,16 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                 if (collapsedGroupDisplay && grid.getState().groupColumnMode === "single") {
                     return createElement(
                         "span",
-                        { style: { paddingLeft: collapsedGroupDisplay.level * 20 } },
+                        {
+                            className: "omnigrid-cell-truncated",
+                            style: {
+                                display: "block",
+                                overflow: "hidden",
+                                paddingLeft: collapsedGroupDisplay.level * 20,
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                            },
+                        },
                         contentToReactNode(content, bridgeArg),
                     );
                 }
@@ -1498,7 +1508,6 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
                     role="columnheader"
                     className={className}
                     aria-colspan={segment.columnCount}
-                    title={segment.group.header ?? segment.group.id}
                     style={groupCellLayout}
                 >
                     {segment.group.headerRenderer ? (
@@ -1696,6 +1705,7 @@ export function OmniGrid<T>({ className, style, slotComponents, ...options }: Gr
             </div>
             {renderSlot("bottom")}
             <PopupHost grid={grid} />
+            <CellTooltipLayer viewportRef={viewportRef} renderer={cellTooltipRenderer} className={cellTooltipClassName} />
             {overlayState.type && isFullOverlay && (
                 <div className="omnigrid-overlay omnigrid-overlay-full" role="status">
                     {renderOverlayContent(overlayState)}

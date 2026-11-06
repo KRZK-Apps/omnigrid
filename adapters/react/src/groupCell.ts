@@ -141,29 +141,25 @@ export function renderGroupCellContent<T>(
                 return contentToReactNode(rendered, bridgeArg);
             }
             if (showChildCount) {
-                return                 createElement(
+                return createElement(
                     "span",
                     {
-                        style: { paddingLeft: mode === "single" ? level * 20 : 0, display: "flex", alignItems: "center", gap: 6 },
-                        title: String(node.key),
+                        className: "omnigrid-group-cell-content",
+                        style: { paddingLeft: mode === "single" ? level * 20 : 0 },
                     },
                     toggleButton,
-                    " ",
-                    node.key,
-                    " (",
-                    node.childrenCount,
-                    ")",
+                    createElement("span", { className: "omnigrid-group-cell-label omnigrid-cell-truncated" }, node.key),
+                    createElement("span", { className: "omnigrid-group-cell-count" }, `(${node.childrenCount})`),
                 );
             }
             return createElement(
                 "span",
                 {
-                    style: { paddingLeft: mode === "single" ? level * 20 : 0, display: "flex", alignItems: "center", gap: 6 },
-                    title: String(node.key),
+                    className: "omnigrid-group-cell-content",
+                    style: { paddingLeft: mode === "single" ? level * 20 : 0 },
                 },
                 toggleButton,
-                " ",
-                node.key,
+                createElement("span", { className: "omnigrid-group-cell-label omnigrid-cell-truncated" }, node.key),
             );
         }
         if (column.cellRenderer) {

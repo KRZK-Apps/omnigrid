@@ -25,6 +25,7 @@ function cssPropertyName(property: string): string {
 
 interface CellPane<T> {
     element: HTMLDivElement;
+    contentElement: HTMLDivElement;
     column: ColumnLeafDef<T> | null;
     columnIndex: number;
     span: number;
@@ -307,16 +308,20 @@ export class PooledRowPane<T> {
     }
     private createCell(): CellPane<T> {
         const element = document.createElement("div");
+        const contentElement = document.createElement("div");
         element.setAttribute("role", "cell");
         element.style.position = "absolute";
         element.style.top = "0";
         element.style.left = "0";
         element.style.overflow = "hidden";
         element.style.height = "100%";
+        contentElement.className = "omnigrid-cell-content";
+        element.appendChild(contentElement);
         this.host.appendChild(element);
 
         const cell: CellPane<T> = {
             element,
+            contentElement,
             column: null,
             columnIndex: -1,
             span: 1,
@@ -389,6 +394,13 @@ export class PooledRowPane<T> {
         }
         const flushLayout: boolean = cellInfo.column.cellLayout === "flush";
         if (flushLayout) cell.element.style.padding = "0";
+        const contentElement = cell.contentElement;
+        contentElement.className = "omnigrid-cell-content";
+        contentElement.style.minWidth = "0";
+        contentElement.style.maxWidth = "100%";
+        contentElement.style.width = flushLayout ? "100%" : "";
+        contentElement.style.textAlign = flushLayout ? cellInfo.column.align ?? "left" : "";
+        contentElement.style.overflow = "hidden";
         if (cell.column?.wrapText) {
             // Wrapping cell: the text breaks into several lines and the cell
             // grows with it. The theme owns the horizontal padding and the
@@ -400,6 +412,19 @@ export class PooledRowPane<T> {
             cell.element.style.textOverflow = "clip";
             cell.element.style.paddingBlock = flushLayout ? "0" : "4px";
             cell.element.style.alignItems = "flex-start";
+            contentElement.style.whiteSpace = "normal";
+            contentElement.style.wordBreak = "break-word";
+            contentElement.style.textOverflow = "clip";
+            const maxLines: number | undefined = cell.column.maxLines;
+            if (maxLines !== undefined && Number.isFinite(maxLines) && Math.floor(maxLines) >= 1) {
+                contentElement.style.display = "-webkit-box";
+                contentElement.style.setProperty("-webkit-box-orient", "vertical");
+                contentElement.style.setProperty("-webkit-line-clamp", String(Math.floor(maxLines)));
+            } else {
+                contentElement.style.display = "";
+                contentElement.style.removeProperty("-webkit-box-orient");
+                contentElement.style.removeProperty("-webkit-line-clamp");
+            }
         } else {
             // Reset the wrapping styles: the cell may be pooled from a
             // wrapping column.
@@ -408,6 +433,12 @@ export class PooledRowPane<T> {
             cell.element.style.textOverflow = "ellipsis";
             cell.element.style.paddingBlock = flushLayout ? "0" : "";
             cell.element.style.alignItems = "";
+            contentElement.style.whiteSpace = "nowrap";
+            contentElement.style.wordBreak = "";
+            contentElement.style.textOverflow = "ellipsis";
+            contentElement.style.display = "";
+            contentElement.style.removeProperty("-webkit-box-orient");
+            contentElement.style.removeProperty("-webkit-line-clamp");
         }
     }
 
@@ -423,7 +454,7 @@ export class PooledRowPane<T> {
             if (cell.root) {
                 cell.root.render(String(content));
             } else {
-                cell.element.textContent = String(content);
+                cell.contentElement.textContent = String(content);
             }
             return;
         }
@@ -433,7 +464,7 @@ export class PooledRowPane<T> {
             if (cell.root) {
                 cell.root.render(contentToReactNode(content, this.bridge));
             } else {
-                cell.element.innerHTML = content.html;
+                cell.contentElement.innerHTML = content.html;
             }
             return;
         }
@@ -450,8 +481,8 @@ export class PooledRowPane<T> {
         // instead — never empty, so no placeholder is needed there.
         if (!cell.root) {
             const placeholder = this.callbacks.renderCellPlaceholder?.(cellInfo);
-            if (placeholder) cell.element.textContent = placeholder;
-            cell.root = this.callbacks.createRoot(cell.element);
+            if (placeholder) cell.contentElement.textContent = placeholder;
+            cell.root = this.callbacks.createRoot(cell.contentElement);
         }
         cell.root.render(contentToReactNode(content, this.bridge));
     }
@@ -481,8 +512,8 @@ export class PooledRowPane<T> {
             // Keep the root mounted while the pooled cell is reused. Calling
             // root.unmount() during another React commit causes a race warning.
             cell.root.render(null);
-        } else if (cell.element.textContent !== "" || cell.element.childElementCount > 0) {
-            cell.element.replaceChildren();
+        } else if (cell.contentElement.textContent !== "" || cell.contentElement.childElementCount > 0) {
+            cell.contentElement.replaceChildren();
         }
     }
 

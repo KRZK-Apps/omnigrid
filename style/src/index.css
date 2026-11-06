@@ -24,6 +24,52 @@
     background: var(--omnigrid-cell-hover-background);
 }
 
+.omnigrid-cell-content {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.omnigrid-cell-tooltip {
+    background: var(--omnigrid-tooltip-background, var(--omnigrid-grid-background));
+    border: 1px solid var(--omnigrid-grid-border);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px var(--omnigrid-grid-border);
+    color: var(--omnigrid-cell-color);
+    max-height: 60vh;
+    max-width: min(40rem, calc(100vw - 16px));
+    overflow: auto;
+    padding: 6px 10px;
+    pointer-events: none;
+    position: fixed;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    z-index: 10000;
+}
+
+.omnigrid-group-cell-content {
+    align-items: center;
+    display: flex;
+    gap: 6px;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.omnigrid-group-cell-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.omnigrid-group-cell-count,
+.omnigrid-group-cell-content .omnigrid-icon-button {
+    flex: 0 0 auto;
+}
+
 .omnigrid-row:hover [role="cell"],
 .omnigrid-row.omnigrid-row-hover [role="cell"] {
     background: var(--omnigrid-cell-hover-background) !important;

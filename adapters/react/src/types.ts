@@ -93,6 +93,13 @@ export type OverlayComponentProps<T> = import("@omnigrid/core").OverlayComponent
 export type OverlayComponent<T> =
     import("react").ComponentType<import("@omnigrid/core").OverlayComponentProps<T>> | import("@omnigrid/core").OverlayComponent<T>;
 
+/**
+ * Renders the full text of a truncated cell or header in its hover tooltip.
+ *
+ * @api
+ */
+export type CellTooltipRenderer = (text: string) => ReactNode;
+
 export interface GridProps<T> extends Omit<ReactGridOptions<T>, "overlayComponents"> {
     className?: string;
     style?: import("react").CSSProperties;
@@ -106,6 +113,18 @@ export interface GridProps<T> extends Omit<ReactGridOptions<T>, "overlayComponen
      * @default 3
      */
     minHeight?: number;
+    /**
+     * Custom renderer for the full text shown when a cell or header is truncated.
+     *
+     * @api
+     */
+    cellTooltipRenderer?: CellTooltipRenderer;
+    /**
+     * Additional class applied to truncated cell and header tooltips.
+     *
+     * @api
+     */
+    cellTooltipClassName?: string;
     slotComponents?: SlotRendererRegistry<T>;
     overlayComponents?: Record<string, import("@omnigrid/core").OverlayComponent<T>>;
 }

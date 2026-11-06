@@ -447,6 +447,14 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     /** Enables automatic text wrapping instead of ellipsis truncation. @default false @api */
     wrapText?: boolean;
     /**
+     * Maximum number of visible lines for wrapped cell content. Cells exceeding
+     * this limit are truncated and can reveal their full text in the React adapter tooltip.
+     * Requires `wrapText: true`.
+     *
+     * @api
+     */
+    maxLines?: number;
+    /**
      * Controls whether the cell keeps the theme's internal padding or removes it
      * so custom content can fill the cell.
      * - `"normal"` (default): preserves the theme padding.

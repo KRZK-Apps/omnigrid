@@ -89,9 +89,13 @@ describe("getCollapsedGroupDisplay", () => {
         if (!isValidElement(content)) return;
         const children: ReactNode[] = (content.props as { children: ReactNode[] }).children;
         const toggleButton: ReactNode = children[0];
+        const groupLabel: ReactNode = children[1];
 
         expect(isValidElement(toggleButton)).toBe(true);
         if (!isValidElement(toggleButton)) return;
+        expect(isValidElement(groupLabel)).toBe(true);
+        if (!isValidElement(groupLabel)) return;
+        expect((groupLabel.props as { className: string }).className).toContain("omnigrid-cell-truncated");
         const onClick = (toggleButton.props as { onClick: (event: { stopPropagation: () => void }) => void }).onClick;
         const stopPropagation = vi.fn();
 

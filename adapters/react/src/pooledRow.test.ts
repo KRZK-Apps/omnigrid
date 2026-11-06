@@ -182,6 +182,10 @@ function firstCell(host: FakeElement): FakeElement {
     return host.children[0];
 }
 
+function firstCellContent(host: FakeElement): FakeElement {
+    return firstCell(host).children[0];
+}
+
 describe("PooledRowPane — staging placeholder for root-rendered cells", () => {
     it("paints the placeholder synchronously into a blank cell before the async root commit", () => {
         const { pane, host, createRootCalls, renderCalls, placeholders } = makeHarness({
@@ -192,7 +196,7 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
         pane.bind(row(0, { name: "Alice", age: 30 }), [col(0, 0)], 0);
 
         // Staging: the scalar preview is visible IMMEDIATELY (no React commit yet)…
-        expect(firstCell(host).textContent).toBe("Alice");
+        expect(firstCellContent(host).textContent).toBe("Alice");
         // …while the real content is scheduled through an isolated root.
         expect(createRootCalls).toHaveLength(1);
         expect(renderCalls).toHaveLength(1);
@@ -210,7 +214,7 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
         expect(createRootCalls).toHaveLength(1);
 
         // Simulate the async commit having landed (React content in the cell).
-        firstCell(host).textContent = "committed-badge";
+        firstCellContent(host).textContent = "committed-badge";
         placeholders.length = 0;
 
         pane.bind(row(1, { name: "Bob", age: 40 }), [col(0, 0)], 0);
@@ -220,7 +224,7 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
         expect(renderCalls).toHaveLength(2);
         expect(placeholders).toHaveLength(0);
         // The cell keeps its previous content until the new commit lands — never empty.
-        expect(firstCell(host).textContent).toBe("committed-badge");
+        expect(firstCellContent(host).textContent).toBe("committed-badge");
     });
 
     it("skips staging when renderCellPlaceholder returns null but still renders the root content", () => {
@@ -231,7 +235,7 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
 
         pane.bind(row(0, { name: "Alice", age: 30 }), [col(0, 0)], 0);
 
-        expect(firstCell(host).textContent).toBe("");
+        expect(firstCellContent(host).textContent).toBe("");
         expect(createRootCalls).toHaveLength(1);
         expect(renderCalls).toHaveLength(1);
     });
@@ -241,7 +245,7 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
 
         pane.bind(row(0, { name: "Alice", age: 30 }), [col(0, 0)], 0);
 
-        expect(firstCell(host).textContent).toBe("");
+        expect(firstCellContent(host).textContent).toBe("");
         expect(createRootCalls).toHaveLength(1);
     });
 
@@ -253,10 +257,24 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
 
         pane.bind(row(0, { name: "Alice", age: 30 }), [col(0, 0)], 0);
 
-        expect(firstCell(host).textContent).toBe("Alice");
+        expect(firstCellContent(host).textContent).toBe("Alice");
         expect(createRootCalls).toHaveLength(0);
         expect(renderCalls).toHaveLength(0);
         expect(placeholders).toHaveLength(0);
+    });
+
+    it("clamps wrapped content to the configured maximum and clears it when a cell is recycled", () => {
+        const { pane, host } = makeHarness();
+        const wrappedColumn: ColumnLeafDef<Row> = { ...COLUMN, wrapText: true, maxLines: 2 };
+        pane.bind(row(0, { name: "Long text", age: 30 }), [{ column: wrappedColumn, index: 0, offset: 0, width: 120 }]);
+
+        const content: FakeElement = firstCellContent(host);
+        expect(content.style.display).toBe("-webkit-box");
+        expect(content.style["-webkit-line-clamp"]).toBe("2");
+
+        pane.bind(row(1, { name: "Short text", age: 40 }), [col(0, 0)]);
+        expect(content.style.display).toBe("");
+        expect(content.style["-webkit-line-clamp"]).toBeUndefined();
     });
 });
 
@@ -403,7 +421,14 @@ describe("PooledRowPane — variable row height", () => {
 
 describe("PooledRowPane — wrapping columns", () => {
     const WRAP_COLUMN: ColumnLeafDef<Row> = { id: "bio", field: "name", width: 120, wrapText: true };
-    const FLUSH_WRAP_COLUMN: ColumnLeafDef<Row> = { id: "flush-bio", field: "name", width: 120, wrapText: true, cellLayout: "flush" };
+    const FLUSH_WRAP_COLUMN: ColumnLeafDef<Row> = {
+        id: "flush-bio",
+        field: "name",
+        width: 120,
+        wrapText: true,
+        align: "right",
+        cellLayout: "flush",
+    };
 
     function wrapCol(index: number, offset: number): { column: ColumnLeafDef<Row>; index: number; offset: number; width: number } {
         return { column: WRAP_COLUMN, index, offset, width: 120 };
@@ -496,10 +521,14 @@ describe("PooledRowPane — wrapping columns", () => {
         const cell: FakeElement = firstCell(host);
         expect(cell.style.padding).toBe("0");
         expect(cell.style.paddingBlock).toBe("0");
+        expect(firstCellContent(host).style.width).toBe("100%");
+        expect(firstCellContent(host).style.textAlign).toBe("right");
 
         pane.bind({ ...customRow, index: 1 }, [col(0, 0)], 0);
 
         expect(cell.style.padding).toBe("");
         expect(cell.style.paddingBlock).toBe("");
+        expect(firstCellContent(host).style.width).toBe("");
+        expect(firstCellContent(host).style.textAlign).toBe("");
     });
 });
