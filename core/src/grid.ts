@@ -1,21 +1,30 @@
-import { applyDefaultColumnDef, applyWrapText, flattenColumns, getColumnGroups, getCellValue, getRowSpans, resolveColSpan } from "./columns";
+import {
+    applyDefaultColumnDef,
+    applyWrapText,
+    flattenColumns,
+    getCellValue,
+    getColumnGroups,
+    getRowSpans,
+    resolveColSpan,
+} from "./columns";
 import { EventBus } from "./events";
 import { applyFilterModel, applyQuickFilter, isActiveCondition } from "./filtering";
 import type { ColumnFilterModel, FilterCondition, FilterModel } from "./filtering";
-import { PopupManager } from "./ui";
-import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
-import { evaluateAutoOverlay } from "./overlays";
-import { IconRegistry } from "./icons";
-import { SlotManager } from "./slots";
-import { Store, type StateUpdater } from "./store";
-import { DataPipeline } from "./pipeline";
 import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
+import { IconRegistry } from "./icons";
+import { evaluateAutoOverlay } from "./overlays";
+import type { OverlayOptions, OverlayState, OverlayType } from "./overlays";
+import { DataPipeline } from "./pipeline";
+import { SlotManager } from "./slots";
+import { type StateUpdater, Store } from "./store";
 import type {
     AggregationFunc,
+    ColumnHeaderExtension,
+    ColumnHeaderExtensionPosition,
     ColumnLeafDef,
     DataProcessor,
-    DefaultColumnDef,
     DataRowNode,
+    DefaultColumnDef,
     GridApi,
     GridEvents,
     GridOptions,
@@ -26,21 +35,22 @@ import type {
     Range,
     RowClickEvent,
     RowHeightUpdateOptions,
-    RowHoverEvent,
     RowHierarchy,
+    RowHoverEvent,
     RowId,
     RowNode,
     RowSpanLayout,
+    RowTransaction,
     ScrollPosition,
     SlotMount,
     SlotName,
     TransactionResult,
     TreeRowNode,
-    RowTransaction,
     ViewportData,
     ViewportState,
 } from "./types";
-import type { OverlayOptions, OverlayState, OverlayType } from "./overlays";
+import { PopupManager } from "./ui";
+import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
 import { Virtualizer } from "./virtualizer";
 
 export class Grid<T> implements GridApi<T> {
@@ -49,6 +59,7 @@ export class Grid<T> implements GridApi<T> {
     private readonly virtualizer: Virtualizer<T>;
     private readonly cleanupPlugins = new Set<() => void>();
     private readonly pluginRegistrations = new Map<GridPlugin<T>, () => void>();
+    private readonly headerExtensions = new Map<string, ColumnHeaderExtension<T>>();
     private readonly dataProcessors = new Set<DataProcessor<T>>();
     private rowHierarchy?: RowHierarchy<T>;
     private readonly resolveRowId: NonNullable<GridOptions<T>["getRowId"]>;
@@ -110,8 +121,8 @@ export class Grid<T> implements GridApi<T> {
             rowHeight: options.rowHeight ?? 32,
             groupBy: [],
             expandedGroups: {},
-            groupColumnMode: 'single',
-            groupColumnHeader: 'Group',
+            groupColumnMode: "single",
+            groupColumnHeader: "Group",
             showChildCount: true,
             groupRowRenderer: undefined,
             rowOverscan: options.rowOverscan ?? 5,
@@ -132,8 +143,8 @@ export class Grid<T> implements GridApi<T> {
             raw === true
                 ? { enabled: true, durationMs: 1000 }
                 : typeof raw === "number" && raw > 0
-                    ? { enabled: true, durationMs: raw }
-                    : false;
+                  ? { enabled: true, durationMs: raw }
+                  : false;
         if (options.filterModel) this.filterModel = Grid.cloneFilterModel(options.filterModel);
         this.virtualizer = new Virtualizer({
             rowHeight: state.rowHeight,
@@ -268,7 +279,11 @@ export class Grid<T> implements GridApi<T> {
     public scrollTo(position: Partial<ScrollPosition>): void {
         this.assertActive();
         const nextPosition: ScrollPosition = { ...this.scrollPosition, ...position };
-        if (nextPosition.scrollTop === this.scrollPosition.scrollTop && nextPosition.scrollLeft === this.scrollPosition.scrollLeft) return;
+        if (
+            nextPosition.scrollTop === this.scrollPosition.scrollTop &&
+            nextPosition.scrollLeft === this.scrollPosition.scrollLeft
+        )
+            return;
         this.scrollPosition = nextPosition;
         this.events.emit("scrollTo", nextPosition);
     }
@@ -285,9 +300,7 @@ export class Grid<T> implements GridApi<T> {
         return flattenColumns(state.columns).filter((column) => {
             if (column.hidden) return false;
             if (state.groupBy.length > 0 && state.groupColumnMode === "single") {
-                const isGrouped = state.groupBy.some(
-                    (field) => column.id === field || column.field === field,
-                );
+                const isGrouped = state.groupBy.some((field) => column.id === field || column.field === field);
                 if (isGrouped) {
                     const primary = state.groupBy[0];
                     return column.id === primary || column.field === primary;
@@ -365,7 +378,12 @@ export class Grid<T> implements GridApi<T> {
         const hasVariable: boolean = this.virtualizer.hasVariableHeights;
         const grouped: TreeRowNode<T>[] = this.getGroupedRows();
         const rowCount: number = grouped.length > 0 ? grouped.length : processedData.length;
-        const rowRange: Range = this.virtualizer.getRowRange(rowCount, this.scrollPosition.scrollTop, state.viewport.height, hasVariable);
+        const rowRange: Range = this.virtualizer.getRowRange(
+            rowCount,
+            this.scrollPosition.scrollTop,
+            state.viewport.height,
+            hasVariable,
+        );
         // The rows that actually intersect the viewport (no overscan): the
         // adapter binds them eagerly so a recycled node never shows the data
         // of a different row.
@@ -375,14 +393,18 @@ export class Grid<T> implements GridApi<T> {
             state.viewport.height,
         );
 
-        const rowOffsets: number[] | undefined = hasVariable && grouped.length === 0
-            ? Array.from({ length: rowRange.end - rowRange.start }, (_: unknown, i: number): number =>
-                  this.virtualizer.getRowTop(rowRange.start + i, processedData.length),
-              )
-            : undefined;
-        const rowHeights: number[] | undefined = hasVariable && grouped.length === 0
-            ? Array.from({ length: rowRange.end - rowRange.start }, (_: unknown, i: number): number => this.virtualizer.getRowHeight(rowRange.start + i))
-            : undefined;
+        const rowOffsets: number[] | undefined =
+            hasVariable && grouped.length === 0
+                ? Array.from({ length: rowRange.end - rowRange.start }, (_: unknown, i: number): number =>
+                      this.virtualizer.getRowTop(rowRange.start + i, processedData.length),
+                  )
+                : undefined;
+        const rowHeights: number[] | undefined =
+            hasVariable && grouped.length === 0
+                ? Array.from({ length: rowRange.end - rowRange.start }, (_: unknown, i: number): number =>
+                      this.virtualizer.getRowHeight(rowRange.start + i),
+                  )
+                : undefined;
 
         // Offset composition:
         //   pinned-left: absolute from 0
@@ -415,45 +437,47 @@ export class Grid<T> implements GridApi<T> {
         });
 
         return {
-            rows: (grouped.length > 0 ? grouped : processedData as unknown as TreeRowNode<T>[]).slice(rowRange.start, rowRange.end).map((row, index) => {
-                const rowIndex: number = rowRange.start + index;
-                if (grouped.length > 0) {
-                    const node = row as TreeRowNode<T>;
-                    if (node.type === 'group') {
+            rows: (grouped.length > 0 ? grouped : (processedData as unknown as TreeRowNode<T>[]))
+                .slice(rowRange.start, rowRange.end)
+                .map((row, index) => {
+                    const rowIndex: number = rowRange.start + index;
+                    if (grouped.length > 0) {
+                        const node = row as TreeRowNode<T>;
+                        if (node.type === "group") {
+                            return {
+                                id: node.id,
+                                data: undefined,
+                                index: rowIndex,
+                                level: node.level,
+                                type: "group",
+                                group: node,
+                                offset: rowIndex * state.rowHeight,
+                                height: state.rowHeight,
+                            };
+                        }
                         return {
                             id: node.id,
-                            data: undefined,
+                            data: node.data,
                             index: rowIndex,
                             level: node.level,
-                            type: 'group',
-                            group: node,
+                            type: "leaf",
+                            group: node.parent,
                             offset: rowIndex * state.rowHeight,
                             height: state.rowHeight,
                         };
                     }
+                    const data = row as T;
                     return {
-                        id: node.id,
-                        data: node.data,
+                        id: this.getRowId(data, rowIndex),
+                        data,
                         index: rowIndex,
-                        level: node.level,
-                        type: 'leaf',
-                        group: node.parent,
-                        offset: rowIndex * state.rowHeight,
-                        height: state.rowHeight,
+                        level: 0,
+                        type: "leaf",
+                        group: undefined,
+                        offset: rowOffsets ? (rowOffsets[index] as number) : rowIndex * state.rowHeight,
+                        height: rowHeights ? (rowHeights[index] as number) : state.rowHeight,
                     };
-                }
-                const data = row as T;
-                return {
-                    id: this.getRowId(data, rowIndex),
-                    data,
-                    index: rowIndex,
-                    level: 0,
-                    type: 'leaf',
-                    group: undefined,
-                    offset: rowOffsets ? (rowOffsets[index] as number) : rowIndex * state.rowHeight,
-                    height: rowHeights ? (rowHeights[index] as number) : state.rowHeight,
-                };
-            }),
+                }),
             columns,
             pinnedLeftColumns,
             pinnedRightColumns,
@@ -491,7 +515,10 @@ export class Grid<T> implements GridApi<T> {
      * @param range - Base virtual window from the virtualizer.
      * @returns Expanded `[start, end)` window, clamped to the group.
      */
-    private static expandColumnRangeForSpans<T>(scrollable: ColumnLeafDef<T>[], range: { start: number; end: number }): { start: number; end: number } {
+    private static expandColumnRangeForSpans<T>(
+        scrollable: ColumnLeafDef<T>[],
+        range: { start: number; end: number },
+    ): { start: number; end: number } {
         if (scrollable.length === 0) return { start: 0, end: 0 };
         let hasSpan: boolean = false;
         let maxStaticSpan: number = 1;
@@ -528,7 +555,12 @@ export class Grid<T> implements GridApi<T> {
      * @returns Per-row span layout for the group.
      * @api
      */
-    public getRowSpans(data: T, index: number, columns: ColumnLeafDef<T>[], offsets: { offset: number; size: number }[]): RowSpanLayout {
+    public getRowSpans(
+        data: T,
+        index: number,
+        columns: ColumnLeafDef<T>[],
+        offsets: { offset: number; size: number }[],
+    ): RowSpanLayout {
         return getRowSpans(data, index, (row: T, rowIndex: number) => this.getRowId(row, rowIndex), columns, offsets);
     }
 
@@ -547,8 +579,21 @@ export class Grid<T> implements GridApi<T> {
      * @returns Normalized span width in columns (`1` = no merge).
      * @api
      */
-    public resolveColSpan(data: T, index: number, column: ColumnLeafDef<T>, columnIndex: number, columnCount: number): number {
-        return resolveColSpan(data, index, (row: T, rowIndex: number) => this.getRowId(row, rowIndex), column, columnIndex, columnCount);
+    public resolveColSpan(
+        data: T,
+        index: number,
+        column: ColumnLeafDef<T>,
+        columnIndex: number,
+        columnCount: number,
+    ): number {
+        return resolveColSpan(
+            data,
+            index,
+            (row: T, rowIndex: number) => this.getRowId(row, rowIndex),
+            column,
+            columnIndex,
+            columnCount,
+        );
     }
 
     public getProcessedData(): T[] {
@@ -572,7 +617,8 @@ export class Grid<T> implements GridApi<T> {
      * @api
      */
     public getRows(): unknown[] {
-        const customRows = typeof (this as any).getGroupedRows === "function" ? (this as any).getGroupedRows() : undefined;
+        const customRows =
+            typeof (this as any).getGroupedRows === "function" ? (this as any).getGroupedRows() : undefined;
         return customRows && customRows.length > 0 ? customRows : this.getProcessedData();
     }
 
@@ -657,7 +703,7 @@ export class Grid<T> implements GridApi<T> {
         const state = this.getState();
         const next: Record<string, boolean> = { ...state.expandedGroups };
         this.getGroupedRows()
-            .filter((row): row is GroupRowNode<T> => row.type === 'group')
+            .filter((row): row is GroupRowNode<T> => row.type === "group")
             .forEach((group) => {
                 next[group.id] = true;
             });
@@ -672,7 +718,7 @@ export class Grid<T> implements GridApi<T> {
         const state = this.getState();
         const next: Record<string, boolean> = { ...state.expandedGroups };
         this.getGroupedRows()
-            .filter((row): row is GroupRowNode<T> => row.type === 'group')
+            .filter((row): row is GroupRowNode<T> => row.type === "group")
             .forEach((group) => {
                 next[group.id] = false;
             });
@@ -721,13 +767,19 @@ export class Grid<T> implements GridApi<T> {
     }
 
     /** Configures the group column UI mode and header. @api */
-    public setGroupColumnConfig(config: { mode: 'single' | 'perLevel'; header?: string; showChildCount?: boolean; groupRowRenderer?: any }): void {
+    public setGroupColumnConfig(config: {
+        mode: "single" | "perLevel";
+        header?: string;
+        showChildCount?: boolean;
+        groupRowRenderer?: any;
+    }): void {
         this.assertActive();
         const state = this.getState();
         const nextMode = config.mode ?? state.groupColumnMode;
         const nextHeader = config.header ?? state.groupColumnHeader;
         const nextShowChildCount = config.showChildCount ?? state.showChildCount;
-        const nextGroupRowRenderer = config.groupRowRenderer === null ? undefined : (config.groupRowRenderer ?? state.groupRowRenderer);
+        const nextGroupRowRenderer =
+            config.groupRowRenderer === null ? undefined : (config.groupRowRenderer ?? state.groupRowRenderer);
         if (
             state.groupColumnMode === nextMode &&
             state.groupColumnHeader === nextHeader &&
@@ -747,8 +799,6 @@ export class Grid<T> implements GridApi<T> {
     public setGroupRowRenderer(): void {
         // Group row rendering is handled by plugins/adapters.
     }
-
-
 
     public getFilteredData(): T[] {
         if (this.filteredDataCache !== null) return this.filteredDataCache;
@@ -1075,7 +1125,8 @@ export class Grid<T> implements GridApi<T> {
         if (this.cellFlash !== false && updated.length > 0) {
             const state = this.store.getState();
             const leafColumns = flattenColumns(state.columns).filter(
-                (column): column is ColumnLeafDef<T> & { field: string | keyof T } => column.field !== undefined
+                (column): column is ColumnLeafDef<T> & { field: string | keyof T } =>
+                    column.field !== undefined && column.cellFlash !== false,
             );
             // Lazy cleanup: drop entries older than the flash duration so the map
             // doesn't grow unboundedly and cells can re-flash later.
@@ -1218,7 +1269,9 @@ export class Grid<T> implements GridApi<T> {
         this.groupedRowsCache = null;
         this.groupedRowsRevision = -1;
         this.revision += 1;
-        this.store.setState({ columns: applyWrapText(applyDefaultColumnDef(columns, this.defaultColumnDef), this.wrapTextAll) });
+        this.store.setState({
+            columns: applyWrapText(applyDefaultColumnDef(columns, this.defaultColumnDef), this.wrapTextAll),
+        });
         this.recomputeOverlay();
     }
 
@@ -1257,7 +1310,10 @@ export class Grid<T> implements GridApi<T> {
         return this.store.subscribe(listener);
     }
 
-    public on<EventName extends keyof GridEvents<T>>(event: EventName, listener: (payload: GridEvents<T>[EventName]) => void): () => void {
+    public on<EventName extends keyof GridEvents<T>>(
+        event: EventName,
+        listener: (payload: GridEvents<T>[EventName]) => void,
+    ): () => void {
         this.assertActive();
         return this.events.on(event, listener);
     }
@@ -1278,6 +1334,43 @@ export class Grid<T> implements GridApi<T> {
         this.cleanupPlugins.add(unregister);
         this.pluginRegistrations.set(plugin, unregister);
         return unregister;
+    }
+
+    /**
+     * Registers an element for the adapter to render in leaf column headers.
+     * @param extension - Headless header contribution.
+     * @returns Cleanup callback that unregisters this contribution.
+     * @api
+     */
+    public registerHeaderExtension(extension: ColumnHeaderExtension<T>): () => void {
+        this.assertActive();
+        const registered: ColumnHeaderExtension<T> = { ...extension };
+        this.headerExtensions.set(extension.id, registered);
+        this.store.setState({});
+
+        return () => {
+            if (this.headerExtensions.get(extension.id) !== registered) return;
+            this.headerExtensions.delete(extension.id);
+            if (!this.destroyed) this.store.setState({});
+        };
+    }
+
+    /**
+     * Returns registered header contributions in priority and registration order.
+     * @param position - Optional header region to filter by.
+     * @returns The registered contributions for the requested region.
+     * @api
+     */
+    public getHeaderExtensions(position?: ColumnHeaderExtensionPosition): ColumnHeaderExtension<T>[] {
+        return Array.from(this.headerExtensions.values())
+            .filter(
+                (extension: ColumnHeaderExtension<T>) =>
+                    position === undefined || (extension.position ?? "end") === position,
+            )
+            .sort(
+                (left: ColumnHeaderExtension<T>, right: ColumnHeaderExtension<T>) =>
+                    (left.priority ?? 0) - (right.priority ?? 0),
+            );
     }
 
     /**
@@ -1398,6 +1491,7 @@ export class Grid<T> implements GridApi<T> {
         this.cleanupPlugins.forEach((cleanup) => cleanup());
         this.cleanupPlugins.clear();
         this.dataProcessors.clear();
+        this.headerExtensions.clear();
         this.pipeline.clear();
         this.rowHierarchy = undefined;
         for (const key of Object.keys(this.methods)) {

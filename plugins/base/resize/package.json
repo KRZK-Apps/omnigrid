@@ -1,6 +1,6 @@
 {
     "name": "@omnigrid/resize-plugin",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "description": "Headless column resize plugin for OmniGrid",
     "keywords": [
         "omnigrid",

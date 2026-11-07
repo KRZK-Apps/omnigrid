@@ -1,10 +1,10 @@
-import type { OverlayOptions, OverlayState, OverlayType } from "./overlays";
-import type { SlotManager } from "./slots";
-import type { IconRegistry } from "./icons";
 import type { FilterCondition, FilterModel, FilterOperator } from "./filtering";
-import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
-import type { StateUpdater } from "./store";
+import type { IconRegistry } from "./icons";
+import type { OverlayOptions, OverlayState, OverlayType } from "./overlays";
 import type { DataPipeline, PipelineProcessor, PipelineStage } from "./pipeline";
+import type { SlotManager } from "./slots";
+import type { StateUpdater } from "./store";
+import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
 
 export type { PipelineProcessor, PipelineStage } from "./pipeline";
 
@@ -93,7 +93,7 @@ export type AggregationFunc<T = unknown> = (values: unknown[]) => unknown;
  * @api
  */
 export interface GroupRowNode<T> {
-    type: 'group';
+    type: "group";
     /** Stable path identifying the group, e.g. "Region:Europe/Country:France". */
     id: string;
     /** Column field this group levels on. */
@@ -149,7 +149,7 @@ export type GroupRowRenderer<T> = (params: GroupRowRenderParams<T>) => unknown;
  * @api
  */
 export interface DataRowNode<T> {
-    type: 'leaf';
+    type: "leaf";
     /** Stable row identifier (from `getRowId`). */
     id: RowId;
     /** Raw row data object. */
@@ -271,7 +271,6 @@ export type RowRenderParams<T> =
     | (RowNode<T> & { rowType: "leaf" })
     | { id: RowId; index: number; rowType: "group"; data?: never; isCollapsedGroup?: false; parentGroup?: never };
 
-
 export interface RowStyle {
     [property: string]: string | number | undefined;
 }
@@ -356,6 +355,29 @@ export interface HeaderRenderParams<T> {
     index?: number;
 }
 
+/** Position of a plugin-contributed element in a leaf column header. @api */
+export type ColumnHeaderExtensionPosition = "start" | "end" | "overlay";
+
+/**
+ * A headless element contributed to every leaf column header by a plugin.
+ *
+ * The active adapter renders the returned content alongside the built-in
+ * header label and controls. Extensions are ordered by ascending priority;
+ * equal priorities retain registration order.
+ *
+ * @api
+ */
+export interface ColumnHeaderExtension<T> {
+    /** Unique identifier within the grid instance. */
+    id: string;
+    /** Header region for the contributed content. Defaults to `"end"`. */
+    position?: ColumnHeaderExtensionPosition;
+    /** Lower values render first. Defaults to `0`. */
+    priority?: number;
+    /** Returns headless content accepted by the active adapter. */
+    render: (params: HeaderRenderParams<T>) => unknown;
+}
+
 /**
  * Inline styles applied to a column or group header.
  *
@@ -416,7 +438,11 @@ interface BaseColumnDef<T> {
     pinned?: "left" | "right";
     /** Whether this column may be resized by the resize plugin. */
     resizable?: boolean;
-    /** Custom renderer for this column's header. */
+    /**
+     * Custom renderer for the primary content of this column's header.
+     * Adapter controls and plugin extensions are rendered alongside it.
+     * @api
+     */
     headerRenderer?: (column: ColumnDef<T>) => unknown;
     /**
      * Whether this column participates in the global quick filter. Defaults to true.
@@ -425,6 +451,8 @@ interface BaseColumnDef<T> {
      * @api
      */
     searchable?: boolean;
+    /** Horizontal alignment of header content. Uses the same values as `align`. @api */
+    headerAlign?: CellAlign;
 }
 
 export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
@@ -492,6 +520,8 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
     valueFormatter?: (value: unknown) => string;
     /** Replaces the default cell content with custom content. */
     cellRenderer?: (params: CellRenderParams<T>) => unknown;
+    /** Set to `false` to prevent this column from flashing when grid-level `cellFlash` is enabled. @default true */
+    cellFlash?: boolean;
     /** Static inline styles applied to cells in this column. */
     cellStyle?: RowStyle;
     /** Computes inline styles for each rendered cell. */
@@ -571,8 +601,7 @@ export interface OverlayComponentProps<T> {
  * @api
  */
 export type OverlayComponent<T> =
-    | ((props: OverlayComponentProps<T>) => unknown)
-    | ((payload: unknown, state: GridState<T>) => unknown);
+    ((props: OverlayComponentProps<T>) => unknown) | ((payload: unknown, state: GridState<T>) => unknown);
 
 /**
  * Options for a single row-height update.
@@ -641,9 +670,10 @@ export interface GridOptions<T> {
     /**
      * Enables automatic cell flashing when data is mutated via
      * `grid.applyTransaction()`. Cells whose values changed are highlighted
-     * with a CSS transition that fades out automatically. Pass `true` for the
-     * default duration (1000ms), or a number for a custom duration in
-     * milliseconds. `false` / `0` / `undefined` disables the feature.
+     * with a CSS transition that fades out automatically, except in columns
+     * whose `cellFlash` option is `false`. Pass `true` for the default duration
+     * (1000ms), or a number for a custom duration in milliseconds.
+     * `false` / `0` / `undefined` disables the feature.
      * @default false
      * @api
      */
@@ -735,7 +765,7 @@ export interface ViewportData<T> {
         /** Nesting depth (0 = outermost group, equal to groupBy length for leaves). */
         level: number;
         /** `'group'` for a group row, `'leaf'` for a data row. */
-        type: 'group' | 'leaf';
+        type: "group" | "leaf";
         /** The group node when `type === 'group'`, otherwise `undefined`. */
         group: GroupRowNode<T> | undefined;
         /** Absolute vertical offset (px) of the row top. */
@@ -1111,7 +1141,8 @@ export interface BlockConfig<Name extends string = string> {
     priority?: number;
 }
 
-export type SlotNodeEventName = "click" | "change" | "keydown" | "pointerdown" | "pointermove" | "pointerup" | "dblclick";
+export type SlotNodeEventName =
+    "click" | "change" | "keydown" | "pointerdown" | "pointermove" | "pointerup" | "dblclick";
 
 export interface SlotNodeEvent {
     value?: string;
@@ -1285,7 +1316,12 @@ export interface CoreGridApi<T> {
      * @returns Per-row span layout for the group.
      * @api
      */
-    getRowSpans(data: T, index: number, columns: ColumnLeafDef<T>[], offsets: { offset: number; size: number }[]): RowSpanLayout;
+    getRowSpans(
+        data: T,
+        index: number,
+        columns: ColumnLeafDef<T>[],
+        offsets: { offset: number; size: number }[],
+    ): RowSpanLayout;
     setData(data: T[] | null | undefined): void;
     /**
      * Chunk-append API for incremental data loading (infinite scroll, live
@@ -1355,10 +1391,26 @@ export interface CoreGridApi<T> {
     setViewport(viewport: Partial<ViewportState>): void;
     refresh(): void;
     subscribe(listener: () => void): () => void;
-    on<EventName extends keyof GridEvents<T>>(event: EventName, listener: (payload: GridEvents<T>[EventName]) => void): () => void;
+    on<EventName extends keyof GridEvents<T>>(
+        event: EventName,
+        listener: (payload: GridEvents<T>[EventName]) => void,
+    ): () => void;
     /** Emits a typed grid event for plugin-to-plugin and adapter notifications. */
     emit<EventName extends keyof GridEvents<T>>(event: EventName, payload: GridEvents<T>[EventName]): void;
     registerPlugin(plugin: GridPlugin<T>): () => void;
+    /**
+     * Registers an element that an adapter renders in each leaf column header.
+     * @param extension - Headless header contribution.
+     * @returns Cleanup callback that unregisters this contribution.
+     * @api
+     */
+    registerHeaderExtension(extension: ColumnHeaderExtension<T>): () => void;
+    /**
+     * Returns registered header contributions in render order.
+     * @param position - Optional header region to filter by.
+     * @api
+     */
+    getHeaderExtensions(position?: ColumnHeaderExtensionPosition): ColumnHeaderExtension<T>[];
     registerDataProcessor(processor: DataProcessor<T>): () => void;
     /**
      * Replaces the column definitions. Pass a second argument to update the shared leaf-column defaults.

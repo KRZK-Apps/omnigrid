@@ -3,7 +3,15 @@ import type { ReactNode } from "react";
 import type { SlotRenderContext, UIInputControl } from "@omnigrid/core";
 
 import type { CellRoot } from "./reactRoot";
-import type { ReactGridOptions } from "./reactColumnDef";
+import type { CellTooltipRenderer, ReactGridOptions } from "./reactColumnDef";
+
+/** Tooltip overrides resolved for a particular data column. */
+export interface CellTooltipOptions {
+    /** Custom renderer for the truncated cell's full text. */
+    renderer?: CellTooltipRenderer;
+    /** Additional class applied to the tooltip element. */
+    className?: string;
+}
 
 /**
  * Bridge between the core's headless content and native adapter values.
@@ -92,13 +100,6 @@ export type OverlayComponentProps<T> = import("@omnigrid/core").OverlayComponent
 
 export type OverlayComponent<T> =
     import("react").ComponentType<import("@omnigrid/core").OverlayComponentProps<T>> | import("@omnigrid/core").OverlayComponent<T>;
-
-/**
- * Renders the full text of a truncated cell or header in its hover tooltip.
- *
- * @api
- */
-export type CellTooltipRenderer = (text: string) => ReactNode;
 
 export interface GridProps<T> extends Omit<ReactGridOptions<T>, "overlayComponents"> {
     className?: string;

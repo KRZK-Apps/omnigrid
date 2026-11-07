@@ -1,4 +1,14 @@
-import type { CheckboxRenderParams, ColumnDef, GridApi, GridPlugin, RowClickEvent, RowHierarchy, RowId, RowRenderParams } from "@omnigrid/core";
+import type {
+    CheckboxRenderParams,
+    ColumnDef,
+    GridApi,
+    GridPlugin,
+    RowClickEvent,
+    RowHierarchy,
+    RowId,
+    RowRenderParams,
+} from "@omnigrid/core";
+
 import type {
     GroupSelectionMode,
     SelectionMode,
@@ -74,7 +84,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         this.checkboxRenderer = options.checkboxRenderer ?? defaultCheckboxRenderer;
         this.onSelectionChange = options.onSelectionChange;
         this.selectionColumnId = options.selectionColumnId ?? CHECKBOX_COLUMN_DEFAULT_ID;
-        this.selectionColumnWidth = options.selectionColumnWidth ?? 36;
+        this.selectionColumnWidth = options.selectionColumnWidth ?? 40;
     }
 
     public register(api: GridApi<T>): () => void {
@@ -102,7 +112,9 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
             this.unregisterMethods = undefined;
             const targetApi: GridApi<T> | undefined = this.api;
             if (targetApi && !targetApi.isDestroyed()) {
-                targetApi.setColumns(targetApi.getState().columns.filter((column) => column.id !== this.selectionColumnId));
+                targetApi.setColumns(
+                    targetApi.getState().columns.filter((column) => column.id !== this.selectionColumnId),
+                );
                 targetApi.setState((prev) => {
                     const next = { ...prev };
                     delete next.selection;
@@ -130,9 +142,13 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
     public getSelectedRows(): T[] {
         if (!this.api) return [];
         if (this.groupSelection !== "none" && this.api.getRowHierarchy()) {
-            return this.api.getState().data.filter((row, index) => this.selectedRowIds.has(this.api!.getRowId(row, index)));
+            return this.api
+                .getState()
+                .data.filter((row, index) => this.selectedRowIds.has(this.api!.getRowId(row, index)));
         }
-        return this.api.getProcessedData().filter((row, index) => this.selectedRowIds.has(this.api!.getRowId(row, index)));
+        return this.api
+            .getProcessedData()
+            .filter((row, index) => this.selectedRowIds.has(this.api!.getRowId(row, index)));
     }
 
     /**
@@ -177,7 +193,12 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         if (!this.api) return;
         const row = this.api.getProcessedData()[index];
         if (!row || !this.isRowSelectable(row, index)) return;
-        if (this.mode === "single" && !this.replaceSelectionOnClick && this.selectedRowIds.has(rowId) && !modifiers.shiftKey) {
+        if (
+            this.mode === "single" &&
+            !this.replaceSelectionOnClick &&
+            this.selectedRowIds.has(rowId) &&
+            !modifiers.shiftKey
+        ) {
             this.selectedRowIds.delete(rowId);
             this.anchorIndex = index;
             this.refresh();
@@ -253,8 +274,11 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         const allDescendants: readonly RowId[] | undefined = hierarchy?.getLeafRowIds(rowId, "all");
         const isGroup: boolean = allDescendants !== undefined;
         if (!isGroup) {
-            const row: { data: T; index: number } | undefined =
-                hierarchy ? this.getRowByStableId(rowId) : data !== undefined ? { data, index } : undefined;
+            const row: { data: T; index: number } | undefined = hierarchy
+                ? this.getRowByStableId(rowId)
+                : data !== undefined
+                  ? { data, index }
+                  : undefined;
             const selectable: boolean = row !== undefined && this.isRowSelectable(row.data, row.index);
             return {
                 checked: this.selectedRowIds.has(rowId),
@@ -273,13 +297,15 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         const scope: "all" | "filtered" = this.groupSelection === "descendants" ? "all" : "filtered";
         const descendants: readonly RowId[] =
             scope === "all" ? (allDescendants ?? []) : (hierarchy.getLeafRowIds(rowId, "filtered") ?? []);
-        const sourceRows: T[] = scope === "all" ? (this.api?.getState().data ?? []) : (this.api?.getFilteredData() ?? []);
+        const sourceRows: T[] =
+            scope === "all" ? (this.api?.getState().data ?? []) : (this.api?.getFilteredData() ?? []);
         const selectableIds: RowId[] = [];
         sourceRows.forEach((row, rowIndex) => {
             const rawIndex: number = this.api?.getState().data.indexOf(row) ?? -1;
             const sourceIndex: number = rawIndex >= 0 ? rawIndex : rowIndex;
             const leafId: RowId | undefined = this.api?.getRowId(row, sourceIndex);
-            if (leafId !== undefined && descendants.includes(leafId) && this.isRowSelectable(row, rowIndex)) selectableIds.push(leafId);
+            if (leafId !== undefined && descendants.includes(leafId) && this.isRowSelectable(row, rowIndex))
+                selectableIds.push(leafId);
         });
         const selectedCount: number = selectableIds.filter((leafId) => this.selectedRowIds.has(leafId)).length;
         const checked: boolean = selectableIds.length > 0 && selectedCount === selectableIds.length;
@@ -308,7 +334,12 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         const row = processedData[index];
         if (!row || !this.isRowSelectable(row, index)) return;
 
-        if (this.mode === "single" && !this.replaceSelectionOnClick && this.selectedRowIds.has(rowId) && !modifiers.shiftKey) {
+        if (
+            this.mode === "single" &&
+            !this.replaceSelectionOnClick &&
+            this.selectedRowIds.has(rowId) &&
+            !modifiers.shiftKey
+        ) {
             this.selectedRowIds.delete(rowId);
             this.anchorIndex = index;
             this.refresh();
@@ -348,7 +379,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
             this.api.setColumns(columns);
             return;
         }
-        const selectionColumn: ColumnDef<T> = {
+        const selectionColumn: ColumnDef<T> & { filterable: false } = {
             id: this.selectionColumnId,
             header: "",
             width: this.selectionColumnWidth,
@@ -356,6 +387,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
             maxWidth: this.selectionColumnWidth,
             align: "center",
             sortable: false,
+            filterable: false,
             stopHeaderClick: true,
             stopRowClick: true,
             // The checkbox column must always stay pinned to the left.
@@ -424,7 +456,8 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         return (
             selectableRows.length > 0 &&
             processedData.every(
-                (row, index) => !this.isRowSelectable(row, index) || this.selectedRowIds.has(this.getSelectionRowId(row, index)),
+                (row, index) =>
+                    !this.isRowSelectable(row, index) || this.selectedRowIds.has(this.getSelectionRowId(row, index)),
             )
         );
     }
@@ -433,7 +466,10 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         if (!this.api) return false;
         return this.api
             .getProcessedData()
-            .some((row, index) => this.isRowSelectable(row, index) && this.selectedRowIds.has(this.getSelectionRowId(row, index)));
+            .some(
+                (row, index) =>
+                    this.isRowSelectable(row, index) && this.selectedRowIds.has(this.getSelectionRowId(row, index)),
+            );
     }
 
     private toggleAll(modifiers: { shiftKey: boolean; ctrlKey: boolean }): void {
@@ -484,10 +520,12 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
     public updateOptions(newOptions: Partial<SelectionPluginOptions<T>>): void {
         if (newOptions.mode !== undefined) (this as any).mode = newOptions.mode;
         if (newOptions.checkboxOnly !== undefined) (this as any).checkboxOnly = newOptions.checkboxOnly;
-        if (newOptions.replaceSelectionOnClick !== undefined) (this as any).replaceSelectionOnClick = newOptions.replaceSelectionOnClick;
+        if (newOptions.replaceSelectionOnClick !== undefined)
+            (this as any).replaceSelectionOnClick = newOptions.replaceSelectionOnClick;
         if (newOptions.groupSelection !== undefined) this.groupSelection = newOptions.groupSelection;
         if (newOptions.showRowCheckboxes !== undefined) (this as any).showRowCheckboxes = newOptions.showRowCheckboxes;
-        if (newOptions.showHeaderCheckbox !== undefined) (this as any).showHeaderCheckbox = newOptions.showHeaderCheckbox;
+        if (newOptions.showHeaderCheckbox !== undefined)
+            (this as any).showHeaderCheckbox = newOptions.showHeaderCheckbox;
         if (newOptions.isRowSelectable !== undefined) (this as any).isRowSelectable = newOptions.isRowSelectable;
         if (newOptions.checkboxRenderer !== undefined) (this as any).checkboxRenderer = newOptions.checkboxRenderer;
         if (newOptions.onSelectionChange !== undefined) this.onSelectionChange = newOptions.onSelectionChange;

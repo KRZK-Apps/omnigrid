@@ -392,6 +392,8 @@ export class PooledRowPane<T> {
                 cell.appliedStyleKeys.push(key);
             }
         }
+
+        cell.element.dataset.columnId = cellInfo.column.id;
         const flushLayout: boolean = cellInfo.column.cellLayout === "flush";
         if (flushLayout) cell.element.style.padding = "0";
         const contentElement = cell.contentElement;

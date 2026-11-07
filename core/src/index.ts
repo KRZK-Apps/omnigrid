@@ -10,7 +10,13 @@ export { Store } from "./store";
 export type { StateUpdater } from "./store";
 export { DataPipeline, PIPELINE_STAGE_ORDER } from "./pipeline";
 export type { PipelineProcessor, PipelineStage } from "./pipeline";
-export { applyFilterModel, applyQuickFilter, isActiveCondition, isFilterModelActive, matchesColumnFilter } from "./filtering";
+export {
+    applyFilterModel,
+    applyQuickFilter,
+    isActiveCondition,
+    isFilterModelActive,
+    matchesColumnFilter,
+} from "./filtering";
 export type { ColumnFilterModel, FilterCondition, FilterModel, FilterOperator } from "./filtering";
 export type {
     UIButtonControl,
@@ -32,6 +38,8 @@ export type {
     BlockConfig,
     CellAlign,
     AggregationFunc,
+    ColumnHeaderExtension,
+    ColumnHeaderExtensionPosition,
     CellRenderParams,
     CellClassRules,
     CellSpan,
@@ -110,5 +118,15 @@ export type {
     ViewportState,
     VirtualItem,
 } from "./types";
-export { applyDefaultColumnDef, getColumnGroups, flattenColumns, isColumnGroup, isColumnLeaf, getCellValue, getCellSpanningParams, resolveColSpan, getRowSpans } from "./columns";
+export {
+    applyDefaultColumnDef,
+    getColumnGroups,
+    flattenColumns,
+    isColumnGroup,
+    isColumnLeaf,
+    getCellValue,
+    getCellSpanningParams,
+    resolveColSpan,
+    getRowSpans,
+} from "./columns";
 export { Virtualizer, RowHeightRegistry } from "./virtualizer";

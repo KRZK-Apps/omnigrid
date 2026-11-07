@@ -1,9 +1,9 @@
 import {
-    createElement,
-    type ComponentType,
     type CSSProperties,
+    type ComponentType,
     type ReactNode,
     type UIEvent,
+    createElement,
     useCallback,
     useEffect,
     useLayoutEffect,
@@ -14,18 +14,20 @@ import {
 import { flushSync } from "react-dom";
 
 import type {
+    CellAlign,
     CellRenderParams,
     CellSpan,
+    ColumnHeaderExtensionPosition,
     ColumnLeafDef,
     ColumnStyleParams,
+    OverlayComponent as CoreOverlayComponent,
+    OverlayComponentProps as CoreOverlayComponentProps,
     FilterModel,
     GridOptions,
     GridState,
     HeaderGroupRenderParams,
     HeaderRenderParams,
     HeaderStyle,
-    OverlayComponent as CoreOverlayComponent,
-    OverlayComponentProps as CoreOverlayComponentProps,
     OverlayScope,
     OverlayState,
     PooledRow,
@@ -38,18 +40,25 @@ import type {
     SlotRenderContext,
     ViewportData,
 } from "@omnigrid/core";
-import { DomPool, isActiveCondition, type GridApi, type RowId } from "@omnigrid/core";
+import { DomPool, type GridApi, type RowId, flattenColumns, isActiveCondition } from "@omnigrid/core";
 
-import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
 import { CellTooltipLayer } from "./cellTooltip";
+import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
+import {
+    getCollapsedGroupDisplay,
+    getGroupColumnRole,
+    isGroupRowNode,
+    poolGetRowId,
+    renderGroupCellContent,
+    renderGroupCellPlaceholder,
+} from "./groupCell";
 import { computeGroupSegments } from "./groupHeader";
-import { getCollapsedGroupDisplay, getGroupColumnRole, isGroupRowNode, poolGetRowId, renderGroupCellContent, renderGroupCellPlaceholder } from "./groupCell";
-import { getRowRenderParams } from "./rowRenderParams";
-import { PooledRowPane } from "./pooledRow";
-import type { PooledColumn, PooledRowCallbacks } from "./types";
-import { createCellRoot } from "./reactRoot";
 import { renderDefaultOverlay } from "./overlays";
+import { PooledRowPane } from "./pooledRow";
 import { PopupHost } from "./popup";
+import type { ReactColumnLeafDef } from "./reactColumnDef";
+import { createCellRoot } from "./reactRoot";
+import { getRowRenderParams } from "./rowRenderParams";
 import {
     type ResolvedColumnPresentation,
     resolveCellClasses,
@@ -60,13 +69,15 @@ import {
     resolveHeaderClasses,
     resolveHeaderStyle,
 } from "./styling";
-import { useGrid } from "./useGrid";
+import type { PooledColumn, PooledRowCallbacks } from "./types";
 import type {
+    CellTooltipOptions,
     GridProps,
     OverlayComponent,
     OverlayComponentProps,
     SlotRendererRegistry,
 } from "./types";
+import { useGrid } from "./useGrid";
 
 function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
     if (column.valueGetter) return column.valueGetter(row);
@@ -164,8 +175,31 @@ function createRowLayerState<T>(): RowLayerState<T> {
  * core's headless content; React components in slots are connected via
  * `slotComponents`.
  */
-export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRenderer, cellTooltipClassName, ...options }: GridProps<T>) {
+export function OmniGrid<T>({
+    className,
+    style,
+    slotComponents,
+    cellTooltipRenderer,
+    cellTooltipClassName,
+    ...options
+}: GridProps<T>) {
     const { grid, state, viewportData } = useGrid(options);
+    const columnTooltipOptions = useMemo(() => {
+        const result: Map<string, CellTooltipOptions> = new Map();
+        for (const column of flattenColumns(state.columns)) {
+            const columnWithTooltip: ReactColumnLeafDef<T> = column as ReactColumnLeafDef<T>;
+            if (
+                columnWithTooltip.cellTooltipRenderer !== undefined ||
+                columnWithTooltip.cellTooltipClassName !== undefined
+            ) {
+                result.set(column.id, {
+                    renderer: columnWithTooltip.cellTooltipRenderer,
+                    className: columnWithTooltip.cellTooltipClassName,
+                });
+            }
+        }
+        return result;
+    }, [state.columns]);
 
     const viewportRef = useRef<HTMLDivElement>(null);
     const layoutRef = useRef<HTMLDivElement>(null);
@@ -217,7 +251,9 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
     const scrollbarWidthRef = useRef(0);
     const slotComponentsRef = useRef<SlotRendererRegistry<T>>({});
 
-    const layersRef = useRef<{ central: RowLayerState<T>; left: RowLayerState<T>; right: RowLayerState<T> } | null>(null);
+    const layersRef = useRef<{ central: RowLayerState<T>; left: RowLayerState<T>; right: RowLayerState<T> } | null>(
+        null,
+    );
     if (!layersRef.current) {
         layersRef.current = {
             central: createRowLayerState<T>(),
@@ -322,17 +358,21 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
     const verticalScrollbarGutter = "auto";
     const suppressRowHoverHighlight = options.suppressRowHoverHighlight ?? false;
     const cellFlashRaw = options.cellFlash;
-    const cellFlashDurationMs: number | false = cellFlashRaw === true ? 1000 : typeof cellFlashRaw === "number" && cellFlashRaw > 0 ? cellFlashRaw : false;
+    const cellFlashDurationMs: number | false =
+        cellFlashRaw === true ? 1000 : typeof cellFlashRaw === "number" && cellFlashRaw > 0 ? cellFlashRaw : false;
     const viewportStyle = {
         ...style,
         height: autoHeight ? measuredHeight : style?.height,
         ...(cellFlashDurationMs !== false ? { "--omnigrid-flash-duration": `${cellFlashDurationMs}ms` } : {}),
     };
-    const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null].filter(Boolean).join(" ");
+    const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null]
+        .filter(Boolean)
+        .join(" ");
     const overlayState: OverlayState | undefined = state.overlay;
     const filterModelSnapshot: FilterModel = grid.getFilterModel();
     const isColumnFiltered = (column: ColumnLeafDef<T>): boolean => {
-        const entry = filterModelSnapshot[column.id] ?? (column.field ? filterModelSnapshot[column.field as string] : undefined);
+        const entry =
+            filterModelSnapshot[column.id] ?? (column.field ? filterModelSnapshot[column.field as string] : undefined);
         return entry !== undefined && entry.conditions.some(isActiveCondition);
     };
     const overlayScope: OverlayScope | undefined = overlayState.type
@@ -352,7 +392,9 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
         };
     }
 
-    const columnPresentationCacheRef = useRef<Map<string, { revision: number; data: unknown[] | null; presentation: ResolvedColumnPresentation }>>(new Map());
+    const columnPresentationCacheRef = useRef<
+        Map<string, { revision: number; data: unknown[] | null; presentation: ResolvedColumnPresentation }>
+    >(new Map());
 
     /**
      * Memoized per-row span layouts, keyed by row index within one viewport
@@ -369,7 +411,10 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
         pinnedLeftOffsets: unknown;
         pinnedRightColumns: unknown;
         pinnedRightOffsets: unknown;
-        layouts: Map<number, { central: RowSpanLayout | null; left: RowSpanLayout | null; right: RowSpanLayout | null }>;
+        layouts: Map<
+            number,
+            { central: RowSpanLayout | null; left: RowSpanLayout | null; right: RowSpanLayout | null }
+        >;
     }>({
         revision: -1,
         columns: null,
@@ -408,7 +453,10 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
         }
         const cached = cache.layouts.get(rowIndex);
         if (cached) return cached;
-        const resolve = (columns: ColumnLeafDef<T>[], offsets: { offset: number; size: number }[]): RowSpanLayout | null => {
+        const resolve = (
+            columns: ColumnLeafDef<T>[],
+            offsets: { offset: number; size: number }[],
+        ): RowSpanLayout | null => {
             if (columns.length === 0) return null;
             let hasSpan: boolean = false;
             for (let i: number = 0; i < columns.length; i += 1) {
@@ -653,9 +701,11 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                     return groupContent;
                 }
 
-                const rawData = (info.data && typeof info.data === "object" && "data" in info.data
-                    ? (info.data as { data: T }).data
-                    : info.data) as T;
+                const rawData = (
+                    info.data && typeof info.data === "object" && "data" in info.data
+                        ? (info.data as { data: T }).data
+                        : info.data
+                ) as T;
                 // When a leaf row is displayed as a collapsed single-child group,
                 // show the grouping field's value in the group column instead of
                 // the row's own field value.
@@ -665,9 +715,18 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                     grid.getState().groupBy ?? [],
                     grid.getState().groupColumnMode ?? "single",
                 );
-                const value: unknown = collapsedGroupDisplay !== undefined ? collapsedGroupDisplay.value : getCellValue(rawData, info.column);
+                const value: unknown =
+                    collapsedGroupDisplay !== undefined
+                        ? collapsedGroupDisplay.value
+                        : getCellValue(rawData, info.column);
                 const content: unknown = info.column.cellRenderer
-                    ? info.column.cellRenderer({ value, data: rawData, column: info.column, id: info.rowId, index: info.rowIndex })
+                    ? info.column.cellRenderer({
+                          value,
+                          data: rawData,
+                          column: info.column,
+                          id: info.rowId,
+                          index: info.rowIndex,
+                      })
                     : info.column.valueFormatter
                       ? info.column.valueFormatter(value)
                       : String(value ?? "");
@@ -695,16 +754,21 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                     return groupPlaceholder;
                 }
 
-                const rawData = (info.data && typeof info.data === "object" && "data" in info.data
-                    ? (info.data as { data: T }).data
-                    : info.data) as T;
+                const rawData = (
+                    info.data && typeof info.data === "object" && "data" in info.data
+                        ? (info.data as { data: T }).data
+                        : info.data
+                ) as T;
                 const collapsedGroupDisplay = getCollapsedGroupDisplay(
                     info.data,
                     info.column,
                     grid.getState().groupBy ?? [],
                     grid.getState().groupColumnMode ?? "single",
                 );
-                const value: unknown = collapsedGroupDisplay !== undefined ? collapsedGroupDisplay.value : getCellValue(rawData, info.column);
+                const value: unknown =
+                    collapsedGroupDisplay !== undefined
+                        ? collapsedGroupDisplay.value
+                        : getCellValue(rawData, info.column);
                 if (info.column.valueFormatter) return info.column.valueFormatter(value);
                 const valueType = typeof value;
                 if (valueType === "string" || valueType === "number" || valueType === "boolean") return String(value);
@@ -715,7 +779,10 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                 const base = isGroup ? "omnigrid-row omnigrid-row-group" : "omnigrid-row";
                 const rowParams: RowRenderParams<T> = getRowRenderParams(row);
                 const currentOptions = current();
-                const rowClass = typeof currentOptions.rowClass === "function" ? currentOptions.rowClass(rowParams) : currentOptions.rowClass;
+                const rowClass =
+                    typeof currentOptions.rowClass === "function"
+                        ? currentOptions.rowClass(rowParams)
+                        : currentOptions.rowClass;
                 const dynamicRowClass = currentOptions.getRowClass?.(rowParams);
                 const ruleClasses = Object.entries(currentOptions.rowClassRules ?? {})
                     .filter(([, predicate]) => predicate(rowParams))
@@ -739,8 +806,12 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
             },
             resolveCellClasses: (info) => {
                 const flashedCells = grid.getState().flashedCells;
-                const flashTimestamp = flashedCells.get(`${info.rowId}:${info.column.id}`);
-                const isFlashed = cellFlashDurationMs !== false && flashTimestamp !== undefined && Date.now() - flashTimestamp <= cellFlashDurationMs;
+                const flashTimestamp =
+                    info.column.cellFlash === false ? undefined : flashedCells.get(`${info.rowId}:${info.column.id}`);
+                const isFlashed =
+                    cellFlashDurationMs !== false &&
+                    flashTimestamp !== undefined &&
+                    Date.now() - flashTimestamp <= cellFlashDurationMs;
                 const cellParams: CellRenderParams<T> = {
                     id: info.rowId,
                     index: info.rowIndex,
@@ -758,8 +829,12 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
             },
             resolveCellStyle: (info) => {
                 const flashedCells = grid.getState().flashedCells;
-                const flashTimestamp = flashedCells.get(`${info.rowId}:${info.column.id}`);
-                const isFlashed = cellFlashDurationMs !== false && flashTimestamp !== undefined && Date.now() - flashTimestamp <= cellFlashDurationMs;
+                const flashTimestamp =
+                    info.column.cellFlash === false ? undefined : flashedCells.get(`${info.rowId}:${info.column.id}`);
+                const isFlashed =
+                    cellFlashDurationMs !== false &&
+                    flashTimestamp !== undefined &&
+                    Date.now() - flashTimestamp <= cellFlashDurationMs;
                 const cellParams: CellRenderParams<T> = {
                     id: info.rowId,
                     index: info.rowIndex,
@@ -818,7 +893,11 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
      * (post-mount). Bindings translate the layer's column group into local
      * coordinates using the layer's `originX`.
      */
-    const ensureLayerPool = (layer: RowLayerState<T>, rowsLayer: HTMLDivElement | null, bridge: ContentBridge<T>): void => {
+    const ensureLayerPool = (
+        layer: RowLayerState<T>,
+        rowsLayer: HTMLDivElement | null,
+        bridge: ContentBridge<T>,
+    ): void => {
         if (layer.pool || !rowsLayer) return;
         const { paneMap, panes } = layer;
         layer.pool = new DomPool<T>({
@@ -897,7 +976,10 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
         const state = grid.getState();
         const processed = getPoolData(grid);
 
-        const changed = layer.revision !== grid.getRevision() || layer.totalWidth !== viewportData.totalWidth || layer.processed !== processed;
+        const changed =
+            layer.revision !== grid.getRevision() ||
+            layer.totalWidth !== viewportData.totalWidth ||
+            layer.processed !== processed;
         if (changed) {
             layer.revision = grid.getRevision();
             layer.totalWidth = viewportData.totalWidth;
@@ -1062,7 +1144,9 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
     const syncScrollbarInsets = useCallback((element: HTMLDivElement): void => {
         const right: number = Math.max(0, element.offsetWidth - element.clientWidth - element.clientLeft * 2);
         const bottom: number = Math.max(0, element.offsetHeight - element.clientHeight - element.clientTop * 2);
-        setScrollbarInsets((previous) => (previous.right === right && previous.bottom === bottom ? previous : { right, bottom }));
+        setScrollbarInsets((previous) =>
+            previous.right === right && previous.bottom === bottom ? previous : { right, bottom },
+        );
     }, []);
 
     const measureViewport = useCallback(() => {
@@ -1258,9 +1342,15 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                 .filter((item) => hasRenderableContent(item.value));
             if (content.length === 0) return null;
             return (
-                <div key={position} className={`omnigrid-slot-item-group omnigrid-slot-pos-${position}`}>
+                <div
+                    key={position}
+                    className={`omnigrid-slot-item-group omnigrid-slot-pos-${position}`}
+                >
                     {content.map(({ mount, value }) => (
-                        <div key={mount.id} className="omnigrid-slot-item">
+                        <div
+                            key={mount.id}
+                            className="omnigrid-slot-item"
+                        >
                             {value}
                         </div>
                     ))}
@@ -1276,7 +1366,10 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
         const groups: ReactNode[] = renderSlotGroups(mounts, context);
         if (groups.every((group) => group === null)) return null;
 
-        const slotClass: string = slot === "down" ? "omnigrid-slot omnigrid-slot-bottom omnigrid-slot-down" : `omnigrid-slot omnigrid-slot-${slot}`;
+        const slotClass: string =
+            slot === "down"
+                ? "omnigrid-slot omnigrid-slot-bottom omnigrid-slot-down"
+                : `omnigrid-slot omnigrid-slot-${slot}`;
         return <div className={slotClass}>{groups}</div>;
     };
 
@@ -1318,7 +1411,8 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                 ? optionsRef.current.overlayComponents?.[overlay.component]
                 : optionsRef.current.overlayComponents?.[overlay.type];
         const component: unknown =
-            typeof overlay.component === "function" || (typeof overlay.component === "object" && overlay.component !== null)
+            typeof overlay.component === "function" ||
+            (typeof overlay.component === "object" && overlay.component !== null)
                 ? overlay.component
                 : registeredRenderer;
         const isLegacyRenderer: boolean = typeof component === "function" && component.length >= 2;
@@ -1333,10 +1427,16 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
 
         const customRenderer: unknown = component ?? registeredRenderer;
         if (isLegacyRenderer && typeof customRenderer === "function") {
-            return contentToReactNode((customRenderer as (payload: unknown, state: GridState<T>) => unknown)(overlay.payload, grid.getState()), {
-                registry: slotComponentsRef.current,
-                context: buildRenderContext,
-            });
+            return contentToReactNode(
+                (customRenderer as (payload: unknown, state: GridState<T>) => unknown)(
+                    overlay.payload,
+                    grid.getState(),
+                ),
+                {
+                    registry: slotComponentsRef.current,
+                    context: buildRenderContext,
+                },
+            );
         }
 
         if (overlay.component !== undefined) {
@@ -1368,6 +1468,22 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
     // affected by the clip.
     const needsHorizontalScroll = viewportData.totalWidth > grid.getState().viewport.width;
 
+    const renderHeaderExtensions = (item: PooledColumn<T>, position: ColumnHeaderExtensionPosition): ReactNode[] => {
+        const params: HeaderRenderParams<T> = { column: item.column, index: item.index };
+        return grid.getHeaderExtensions(position).map((extension) => {
+            const content: ReactNode = contentToReactNode(extension.render(params), {
+                registry: slotComponentsRef.current,
+                context: buildRenderContext,
+            });
+            if (!hasRenderableContent(content)) return null;
+
+            const wrapper: "div" | "span" = position === "overlay" ? "div" : "span";
+            const className: string =
+                position === "overlay" ? "omnigrid-header-overlay-item" : "omnigrid-header-extension";
+            return createElement(wrapper, { key: extension.id, className }, content);
+        });
+    };
+
     const renderHeaderCells = (columns: PooledColumn<T>[], originX: number): ReactNode =>
         columns.map((item) => {
             const deepestDepth: number = hasGroups ? (viewportData.columnGroupDepth.get(item.index) ?? -1) : -1;
@@ -1378,6 +1494,30 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
             const className: string = resolveHeaderClasses(item.column, headerParams, fullHeight);
             const customHeaderStyle: HeaderStyle = resolveHeaderStyle(item.column, headerParams);
 
+            const headerAlign: CellAlign | undefined = item.column.headerAlign;
+            const headerJustify: string | undefined =
+                headerAlign === "center"
+                    ? "center"
+                    : headerAlign === "right"
+                      ? "flex-end"
+                      : headerAlign === "left"
+                        ? "flex-start"
+                        : undefined;
+            const headerStartExtensions: ReactNode[] = renderHeaderExtensions(item, "start");
+            const headerEndExtensions: ReactNode[] = renderHeaderExtensions(item, "end");
+            const headerOverlayExtensions: ReactNode[] = renderHeaderExtensions(item, "overlay");
+            const hasFilterTrigger: boolean = grid.hasFilterMenu() && (item.column as any).filterable !== false;
+            const hasHeaderTools: boolean =
+                Boolean(item.column.sortState) || hasFilterTrigger || headerEndExtensions.length > 0;
+            const headerContent: ReactNode = item.column.headerRenderer
+                ? contentToReactNode(item.column.headerRenderer(item.column), {
+                      registry: slotComponentsRef.current,
+                      context: buildRenderContext,
+                  })
+                : getGroupColumnRole(item.column, grid.getState().groupBy, grid.getState().groupColumnMode)
+                        .isGroupColumn && grid.getState().groupColumnMode === "single"
+                  ? grid.getState().groupColumnHeader
+                  : (item.column.header ?? item.column.id);
             const headerCellLayout: CSSProperties = {
                 alignItems: "center",
                 display: "flex",
@@ -1394,6 +1534,14 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                 visibility: isViewportMeasured ? undefined : "hidden",
                 width: item.width,
             };
+            const headerContentLayout: CSSProperties = {
+                alignItems: "center",
+                display: "flex",
+                flex: "1 1 auto",
+                justifyContent: headerJustify,
+                minWidth: 0,
+                overflow: "hidden",
+            };
 
             return (
                 <div
@@ -1403,7 +1551,13 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                     data-sort={item.column.sortState}
                     data-sort-index={item.column.sortIndex}
                     data-sortable={item.column.sortable === true ? "true" : undefined}
-                    aria-sort={item.column.sortState === "asc" ? "ascending" : item.column.sortState === "desc" ? "descending" : "none"}
+                    aria-sort={
+                        item.column.sortState === "asc"
+                            ? "ascending"
+                            : item.column.sortState === "desc"
+                              ? "descending"
+                              : "none"
+                    }
                     onClick={(event) =>
                         item.column.stopHeaderClick
                             ? event.stopPropagation()
@@ -1415,59 +1569,89 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                     tabIndex={0}
                     style={headerCellLayout}
                 >
-                    {item.column.headerRenderer ? (
-                        contentToReactNode(item.column.headerRenderer(item.column), {
-                            registry: slotComponentsRef.current,
-                            context: buildRenderContext,
-                        })
-                    ) : (
-                        <>
-                            <span className="omnigrid-header-label">
-                                {getGroupColumnRole(item.column, grid.getState().groupBy, grid.getState().groupColumnMode).isGroupColumn &&
-                                grid.getState().groupColumnMode === "single"
-                                    ? grid.getState().groupColumnHeader
-                                    : (item.column.header ?? item.column.id)}
+                    {headerStartExtensions.length > 0 && (
+                        <span className="omnigrid-header-start">{headerStartExtensions}</span>
+                    )}
+                    <div
+                        className="omnigrid-header-main"
+                        style={headerContentLayout}
+                    >
+                        {item.column.headerRenderer ? (
+                            headerContent
+                        ) : (
+                            <span
+                                className="omnigrid-header-label"
+                                style={{
+                                    flex: "1 1 auto",
+                                    minWidth: 0,
+                                    textAlign: headerAlign ?? "left",
+                                }}
+                            >
+                                {headerContent}
                             </span>
-                            <span className="omnigrid-header-tools">
-                                {item.column.sortState && (
-                                    <span className="omnigrid-sort-indicator" aria-hidden="true">
-                                        {contentToReactNode(item.column.sortState === "asc" ? grid.icons.get("arrow-up") : grid.icons.get("arrow-down"), {
+                        )}
+                    </div>
+                    {hasHeaderTools && (
+                        <span className="omnigrid-header-tools">
+                            {item.column.sortState && (
+                                <span
+                                    className="omnigrid-sort-indicator"
+                                    aria-hidden="true"
+                                >
+                                    {contentToReactNode(
+                                        item.column.sortState === "asc"
+                                            ? grid.icons.get("arrow-up")
+                                            : grid.icons.get("arrow-down"),
+                                        {
                                             registry: slotComponentsRef.current,
                                             context: buildRenderContext,
-                                        })}
-                                        {item.column.sortIndex !== undefined && <span className="omnigrid-sort-priority">{item.column.sortIndex}</span>}
-                                    </span>
-                                )}
-                                {grid.hasFilterMenu() && (item.column as any).filterable !== false && (
-                                    <button
-                                        type="button"
-                                        className="omnigrid-filter-trigger"
-                                        data-omnigrid-filter-trigger=""
-                                        data-active={isColumnFiltered(item.column) ? "true" : undefined}
-                                        aria-label={`Filter ${item.column.header ?? item.column.id}`}
-                                        aria-haspopup="dialog"
-                                        tabIndex={-1}
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            const rect: DOMRect = event.currentTarget.getBoundingClientRect();
-                                            const layoutRect: DOMRect =
-                                                layoutRef.current?.getBoundingClientRect() ?? ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect);
-                                            grid.requestFilterMenu(item.column.id, {
-                                                x: rect.left - layoutRect.left,
-                                                y: rect.top - layoutRect.top,
-                                                width: rect.width,
-                                                height: rect.height,
-                                            });
-                                        }}
-                                        onKeyDown={(event) => event.stopPropagation()}
+                                        },
+                                    )}
+                                    {item.column.sortIndex !== undefined && (
+                                        <span className="omnigrid-sort-priority">{item.column.sortIndex}</span>
+                                    )}
+                                </span>
+                            )}
+                            {hasFilterTrigger && (
+                                <button
+                                    type="button"
+                                    className="omnigrid-filter-trigger"
+                                    data-omnigrid-filter-trigger=""
+                                    data-active={isColumnFiltered(item.column) ? "true" : undefined}
+                                    aria-label={`Filter ${item.column.header ?? item.column.id}`}
+                                    aria-haspopup="dialog"
+                                    tabIndex={-1}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        const rect: DOMRect = event.currentTarget.getBoundingClientRect();
+                                        const layoutRect: DOMRect =
+                                            layoutRef.current?.getBoundingClientRect() ??
+                                            ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect);
+                                        grid.requestFilterMenu(item.column.id, {
+                                            x: rect.left - layoutRect.left,
+                                            y: rect.top - layoutRect.top,
+                                            width: rect.width,
+                                            height: rect.height,
+                                        });
+                                    }}
+                                    onKeyDown={(event) => event.stopPropagation()}
+                                >
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        width="12"
+                                        height="12"
+                                        fill="currentColor"
+                                        aria-hidden="true"
                                     >
-                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
-                                            <path d="M3 4h18l-7 8.5V20l-4-2v-5.5z" />
-                                        </svg>
-                                    </button>
-                                )}
-                            </span>
-                        </>
+                                        <path d="M3 4h18l-7 8.5V20l-4-2v-5.5z" />
+                                    </svg>
+                                </button>
+                            )}
+                            {headerEndExtensions}
+                        </span>
+                    )}
+                    {headerOverlayExtensions.length > 0 && (
+                        <div className="omnigrid-header-overlay">{headerOverlayExtensions}</div>
                     )}
                 </div>
             );
@@ -1485,11 +1669,14 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
             const className: string = resolveGroupHeaderClasses(segment.group, groupParams);
             const customGroupStyle: HeaderStyle = resolveGroupHeaderStyle(segment.group, groupParams);
 
+            const groupHeaderAlign: CellAlign | undefined = segment.group.headerAlign;
+            const groupJustify: string =
+                groupHeaderAlign === "left" ? "flex-start" : groupHeaderAlign === "right" ? "flex-end" : "center";
             const groupCellLayout: CSSProperties = {
                 alignItems: "center",
                 display: "flex",
                 fontWeight: 600,
-                justifyContent: "center",
+                justifyContent: groupJustify,
                 overflow: "hidden",
                 padding: "0 12px",
                 whiteSpace: "nowrap",
@@ -1516,7 +1703,12 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                             context: buildRenderContext,
                         })
                     ) : (
-                        <span className="omnigrid-header-label">{segment.group.header ?? segment.group.id}</span>
+                        <span
+                            className="omnigrid-header-label"
+                            style={{ textAlign: groupHeaderAlign ?? "center" }}
+                        >
+                            {segment.group.header ?? segment.group.id}
+                        </span>
                     )}
                 </div>
             );
@@ -1527,7 +1719,12 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
      * leaf header row. Each pane renders its own stack with the same geometry;
      * without groups this is exactly the previous single header row.
      */
-    const renderHeader = (columns: PooledColumn<T>[], originX: number, width: number | string, isPinned = false): ReactNode => (
+    const renderHeader = (
+        columns: PooledColumn<T>[],
+        originX: number,
+        width: number | string,
+        isPinned = false,
+    ): ReactNode => (
         <div
             className="omnigrid-header"
             style={{
@@ -1593,7 +1790,11 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
     );
 
     return (
-        <div className="omnigrid-layout" ref={layoutRef} style={{ ...style, position: "relative", ...(isFullOverlay ? { overflow: "hidden" } : {}) }}>
+        <div
+            className="omnigrid-layout"
+            ref={layoutRef}
+            style={{ ...style, position: "relative", ...(isFullOverlay ? { overflow: "hidden" } : {}) }}
+        >
             {renderSlot("top")}
             <div className="omnigrid-layout-body">
                 {renderSlot("left")}
@@ -1617,7 +1818,11 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                             height: autoHeight ? measuredHeight : "100%",
                             minHeight: minViewportHeight,
                             minWidth: 0,
-                            overflowX: overlayBlocksHorizontalScroll ? "hidden" : needsHorizontalScroll ? "auto" : "hidden",
+                            overflowX: overlayBlocksHorizontalScroll
+                                ? "hidden"
+                                : needsHorizontalScroll
+                                  ? "auto"
+                                  : "hidden",
                             overflowY: overlayScope || autoHeight ? "hidden" : "auto",
                             position: "relative",
                             scrollbarGutter: verticalScrollbarGutter,
@@ -1674,7 +1879,12 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
                                         zIndex: 3,
                                     }}
                                 >
-                                    {renderHeader(viewportData.pinnedRightColumns, pinnedLeftWidth + scrollableWidth, `${pinnedRightWidth}px`, true)}
+                                    {renderHeader(
+                                        viewportData.pinnedRightColumns,
+                                        pinnedLeftWidth + scrollableWidth,
+                                        `${pinnedRightWidth}px`,
+                                        true,
+                                    )}
                                     {renderRowsLayer(pinnedRightRowsLayerRef, `${pinnedRightWidth}px`)}
                                 </div>
                             )}
@@ -1705,9 +1915,17 @@ export function OmniGrid<T>({ className, style, slotComponents, cellTooltipRende
             </div>
             {renderSlot("bottom")}
             <PopupHost grid={grid} />
-            <CellTooltipLayer viewportRef={viewportRef} renderer={cellTooltipRenderer} className={cellTooltipClassName} />
+            <CellTooltipLayer
+                viewportRef={viewportRef}
+                renderer={cellTooltipRenderer}
+                className={cellTooltipClassName}
+                resolveCellTooltip={(columnId) => columnTooltipOptions.get(columnId)}
+            />
             {overlayState.type && isFullOverlay && (
-                <div className="omnigrid-overlay omnigrid-overlay-full" role="status">
+                <div
+                    className="omnigrid-overlay omnigrid-overlay-full"
+                    role="status"
+                >
                     {renderOverlayContent(overlayState)}
                 </div>
             )}

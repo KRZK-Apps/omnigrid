@@ -22,6 +22,10 @@ const data = [...];
 <OmniGrid columns={columns} data={data} />;
 ```
 
+Column `headerRenderer` callbacks provide the header's primary content. The adapter owns the
+shared header layout and keeps sorting, filtering, and registered plugin extensions alongside it,
+so plugins can add controls without replacing or duplicating the header renderer.
+
 ## Overlays
 
 Automatic loading, no-rows, and no-matching-rows overlays cover the body below the sticky

@@ -1,5 +1,14 @@
-import type { ColumnDef, ColumnLeafDef, GridApi, GridPlugin, SlotNodeContent, SlotNodeEvent, SlotRenderContext } from "@omnigrid/core";
+import type {
+    ColumnDef,
+    ColumnLeafDef,
+    GridApi,
+    GridPlugin,
+    SlotNodeContent,
+    SlotNodeEvent,
+    SlotRenderContext,
+} from "@omnigrid/core";
 import { flattenColumns, isColumnGroup } from "@omnigrid/core";
+
 import type { ColumnResizeGuide, ColumnResizePluginOptions } from "./types";
 
 export type { ColumnResizeGuide, ColumnResizePluginOptions } from "./types";
@@ -15,7 +24,6 @@ export type { ColumnResizeGuide, ColumnResizePluginOptions } from "./types";
 export class ColumnResizePlugin<T> implements GridPlugin<T> {
     public readonly name = "@omnigrid/column-resize-plugin";
     private api?: GridApi<T>;
-    private readonly wrappedRenderers = new Map<unknown, ColumnLeafDef<T>["headerRenderer"]>();
     private activeResize?: {
         columnId: string;
         startX: number;
@@ -39,14 +47,18 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
 
     public register(api: GridApi<T>): () => void {
         this.api = api;
-        this.api.setColumns(this.attachResizeHandles(this.api.getState().columns));
+        const unregisterHeaderExtension = api.registerHeaderExtension({
+            id: `${this.name}:resize-handle`,
+            position: "overlay",
+            render: ({ column }) => (column.resizable === false ? null : this.createResizeHandleNode(column)),
+        });
         const unregisterPointerHandlers = this.bindPointerHandlers();
 
         return () => {
             unregisterPointerHandlers();
+            unregisterHeaderExtension();
             this.clearGuide();
             this.activeResize = undefined;
-            if (!api.isDestroyed()) api.setColumns(this.detachResizeHandles(api.getState().columns));
             this.api = undefined;
         };
     }
@@ -285,118 +297,34 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         return !!column && column.resizable !== false;
     }
 
-    private attachResizeHandles(columns: ColumnDef<T>[]): ColumnDef<T>[] {
-        return columns.map((column) => {
-            if (isColumnGroup(column)) {
-                return { ...column, children: this.attachResizeHandles(column.children) };
-            }
-
-            if (column.resizable === false) {
-                return column;
-            }
-
-            const originalHeaderRenderer = column.headerRenderer;
-            const wrapped: NonNullable<ColumnLeafDef<T>["headerRenderer"]> = (headerColumn: ColumnDef<T>) => {
-                const resolvedHeader = originalHeaderRenderer ? originalHeaderRenderer(headerColumn) : headerColumn.header ?? headerColumn.id;
-                return this.createResizeHandleNode(headerColumn as ColumnLeafDef<T>, resolvedHeader);
-            };
-            this.wrappedRenderers.set(wrapped, originalHeaderRenderer);
-            return { ...column, headerRenderer: wrapped };
-        });
-    }
-
-    /** Restores the original header renderers that were wrapped with resize handles. */
-    private detachResizeHandles(columns: ColumnDef<T>[]): ColumnDef<T>[] {
-        return columns.map((column) => {
-            if (isColumnGroup(column)) {
-                return { ...column, children: this.detachResizeHandles(column.children) };
-            }
-            if (!column.headerRenderer || !this.wrappedRenderers.has(column.headerRenderer)) return column;
-            return { ...column, headerRenderer: this.wrappedRenderers.get(column.headerRenderer) };
-        });
-    }
-
-    private createResizeHandleNode(column: ColumnLeafDef<T>, content: unknown): SlotNodeContent<T> {
-        const handleClass = column.pinned === "right"
-            ? "omnigrid-column-resize-handle omnigrid-column-resize-handle-left"
-            : "omnigrid-column-resize-handle";
-        const contentStyle = column.pinned === "right"
-            ? "display:flex; align-items:center; width:calc(100% + 12px); margin-left:-12px; padding-left:12px; min-width:0;"
-            : "display:flex; align-items:center; width:calc(100% + 12px); margin-right:-12px; min-width:0;";
-        const sortIndicator = column.sortState && this.api
-            ? {
-                  type: "node" as const,
-                  tag: "span",
-                  attrs: { class: "omnigrid-sort-indicator", "aria-hidden": true },
-                  children: [
-                      this.api.icons.get(column.sortState === "asc" ? "arrow-up" : "arrow-down"),
-                      ...(column.sortIndex !== undefined
-                          ? [
-                                {
-                                    type: "node" as const,
-                                    tag: "span",
-                                    attrs: { class: "omnigrid-sort-priority" },
-                                    children: [String(column.sortIndex)],
-                                },
-                            ]
-                          : []),
-                  ],
-              }
-            : undefined;
-
+    private createResizeHandleNode(column: ColumnLeafDef<T>): SlotNodeContent<T> {
+        const handleClass =
+            column.pinned === "right"
+                ? "omnigrid-column-resize-handle omnigrid-column-resize-handle-left"
+                : "omnigrid-column-resize-handle";
         return {
             type: "node",
             tag: "span",
             attrs: {
-                class: "omnigrid-header-content",
-                style: contentStyle,
+                class: handleClass,
+                "aria-hidden": true,
+                title: "Resize column",
+                style:
+                    column.pinned === "right"
+                        ? "position:absolute; top:0; bottom:0; left:-8px;"
+                        : "position:absolute; top:0; bottom:0; right:-8px;",
             },
-            children: [
-                {
-                    type: "node",
-                    tag: "span",
-                    attrs: {
-                        class: "omnigrid-header-label",
-                        style: column.wrapText
-                            ? "overflow:hidden; text-overflow:clip; white-space:normal; word-break:break-word;"
-                            : "overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
-                    },
-                    children: [content],
+            on: {
+                pointerdown: (_context: SlotRenderContext<T>, event: SlotNodeEvent) => {
+                    if (typeof event.clientX === "number") {
+                        this.beginResize(column.id, event.clientX);
+                    }
                 },
-                ...(sortIndicator
-                    ? [
-                          {
-                              type: "node" as const,
-                              tag: "span",
-                              attrs: { class: "omnigrid-header-tools" },
-                              children: [sortIndicator],
-                          },
-                      ]
-                    : []),
-                {
-                    type: "node",
-                    tag: "span",
-                    attrs: {
-                        class: handleClass,
-                        "aria-hidden": true,
-                        title: "Resize column",
-                        style: column.pinned === "right"
-                            ? "position:absolute; top:0; bottom:0; left:-8px;"
-                            : "position:absolute; top:0; bottom:0; right:-8px;",
-                    },
-                    on: {
-                        pointerdown: (_context: SlotRenderContext<T>, event: SlotNodeEvent) => {
-                            if (typeof event.clientX === "number") {
-                                this.beginResize(column.id, event.clientX);
-                            }
-                        },
-                        dblclick: (_context: SlotRenderContext<T>) => {
-                            this.autoSizeColumn(column.id);
-                        },
-                        click: () => undefined,
-                    },
+                dblclick: (_context: SlotRenderContext<T>) => {
+                    this.autoSizeColumn(column.id);
                 },
-            ],
+                click: () => undefined,
+            },
         };
     }
 

@@ -716,6 +716,29 @@ describe("Grid.applyTransaction — targeted row mutations", () => {
         return grid;
     }
 
+    it("does not flash columns that opt out of cellFlash", () => {
+        interface FlashRow {
+            id: number;
+            name: string;
+            icon: string;
+        }
+
+        const grid = new Grid<FlashRow>({
+            columns: [
+                { id: "name", field: "name" },
+                { id: "icon", field: "icon", cellFlash: false },
+            ],
+            data: [{ id: 1, name: "before", icon: "sleeping" }],
+            getRowId: (row) => row.id,
+            cellFlash: true,
+        });
+
+        grid.applyTransaction({ update: [{ id: 1, name: "after", icon: "aggressive" }] });
+
+        expect(grid.getState().flashedCells.has("1:name")).toBe(true);
+        expect(grid.getState().flashedCells.has("1:icon")).toBe(false);
+    });
+
     it("adds rows to the end and returns added nodes with resolved ids/indexes", () => {
         const grid = makeItemGrid([
             { id: 1, name: "a" },

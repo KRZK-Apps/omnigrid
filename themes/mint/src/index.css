@@ -13,10 +13,11 @@ html:root {
     --omnigrid-cell-selected-background: #d3efe1;
     --omnigrid-cell-unselectable-background: #e6f1ec;
     --omnigrid-cell-unselectable-color: #71877d;
-    --omnigrid-checkbox-accent: #059669;
+    --omnigrid-accent: #059669;
     --omnigrid-header-background: #05ad98;
     --omnigrid-header-border: #b8d9ce;
     --omnigrid-header-color: #f5f5f5;
+    --omnigrid-header-control-color: #f5f5f5;
     --omnigrid-column-resize-color: #038874;
     --omnigrid-slot-background: #effaf6;
     --omnigrid-button-background: #f7fffb;
@@ -42,10 +43,11 @@ html .dark {
     --omnigrid-cell-selected-background: #2c5244;
     --omnigrid-cell-unselectable-background: #1b3029;
     --omnigrid-cell-unselectable-color: #8ba99d;
-    --omnigrid-checkbox-accent: #5eead4;
+    --omnigrid-accent: #5eead4;
     --omnigrid-header-background: #0ce8c8;
     --omnigrid-header-border: #35584d;
     --omnigrid-header-color: #1a1d1e;
+    --omnigrid-header-control-color: #1a1d1e;
     --omnigrid-column-resize-color: #038874;
     --omnigrid-slot-background: #10231f;
     --omnigrid-button-background: #203c33;

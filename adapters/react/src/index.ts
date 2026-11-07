@@ -3,6 +3,8 @@ import "@omnigrid/default-theme";
 
 export * from "@omnigrid/core";
 export type {
+    CellTooltipRenderer,
+    CellTooltipRenderContext,
     ReactCellRenderer,
     ReactColumnDef,
     ReactColumnDef as ColumnDef,
@@ -16,7 +18,7 @@ export type {
 export { PooledRowPane } from "./pooledRow";
 export type { ContentBridge, PooledCellRenderInfo, PooledColumn, PooledRowCallbacks, PooledRowModifiers } from "./types";
 export { OmniGrid } from "./OmniGrid";
-export type { CellTooltipRenderer, GridProps, OverlayComponent, OverlayComponentProps, SlotRendererRegistry } from "./types";
+export type { GridProps, OverlayComponent, OverlayComponentProps, SlotRendererRegistry } from "./types";
 export { useGrid } from "./useGrid";
 export { DebouncedInput, isUIControlDescriptor, renderControl } from "./controls";
 export type { DebouncedInputProps } from "./controls";

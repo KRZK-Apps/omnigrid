@@ -9,6 +9,11 @@ import type { PopupHostProps } from "./types";
 
 const VIEWPORT_MARGIN: number = 8;
 
+export function clampPopupLeft(desiredLeft: number, popupWidth: number, minLeft: number, maxRight: number): number {
+    const maxLeft: number = Math.max(minLeft, maxRight - popupWidth);
+    return Math.min(Math.max(desiredLeft, minLeft), maxLeft);
+}
+
 function anchorStyle(popup: UIPopupDescriptor): CSSProperties {
     const base: CSSProperties = { position: "absolute", zIndex: 1000 };
     const anchor = popup.anchor;
@@ -55,19 +60,29 @@ export function PopupHost<T>({ grid }: PopupHostProps<T>): ReactNode {
         };
     }, [grid, isOpen, closeOnOutside, closeOnEscape]);
 
-    // Keep an anchored popup inside the window: a single measurement per popup change.
+    // Keep an anchored popup inside both the grid and the visible window.
     useLayoutEffect(() => {
         const element = elementRef.current;
         if (!element || !popup?.anchor) return;
-        const rect = element.getBoundingClientRect();
         const parent = element.parentElement;
-        const parentRect = parent ? parent.getBoundingClientRect() : { left: 0, top: 0 };
-        const maxLeft: number = Math.max(VIEWPORT_MARGIN, window.innerWidth - VIEWPORT_MARGIN - rect.width);
-        const left: number = Math.min(Math.max(rect.left, VIEWPORT_MARGIN), maxLeft);
-        if (left !== rect.left) {
-            element.style.transform = "none";
-            element.style.left = `${left - parentRect.left}px`;
-        }
+        const parentRect: DOMRect | null = parent?.getBoundingClientRect() ?? null;
+        const parentLeft: number = parentRect?.left ?? 0;
+        const minLeft: number = Math.max(VIEWPORT_MARGIN, parentLeft + VIEWPORT_MARGIN);
+        const maxRight: number = Math.min(
+            window.innerWidth - VIEWPORT_MARGIN,
+            (parentRect?.right ?? window.innerWidth) - VIEWPORT_MARGIN,
+        );
+        const availableWidth: number = Math.max(0, maxRight - minLeft);
+        element.style.maxWidth = `${availableWidth}px`;
+        element.style.minWidth = `${Math.min(200, availableWidth)}px`;
+
+        const rect: DOMRect = element.getBoundingClientRect();
+        const anchorLeft: number = parentLeft + popup.anchor.x;
+        const desiredLeft: number =
+            popup.placement === "bottom-end" ? anchorLeft + (popup.anchor.width ?? 0) - rect.width : anchorLeft;
+        const left: number = clampPopupLeft(desiredLeft, rect.width, minLeft, maxRight);
+        element.style.transform = "none";
+        element.style.left = `${left - parentLeft}px`;
     }, [popup]);
 
     if (!popup) return null;
