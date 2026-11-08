@@ -74,6 +74,7 @@ export function DebouncedInput({ descriptor }: DebouncedInputProps): ReactNode {
         "div",
         { className: "omnigrid-control-input-wrapper" },
         createElement("input", {
+            id: descriptor.id,
             className: ["omnigrid-control-input", descriptor.className].filter(Boolean).join(" "),
             type: descriptor.type === "number" ? "number" : descriptor.type === "date" ? "date" : "text",
             value: local,

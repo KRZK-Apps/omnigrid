@@ -48,6 +48,8 @@ class FakeElement {
     public readonly classList = new FakeClassList();
     public readonly dataset: Record<string, string> = {};
     public readonly children: FakeElement[] = [];
+    public readonly animationCalls: Array<{ keyframes: Keyframe[]; options: KeyframeAnimationOptions | undefined; animation: Animation }> = [];
+    public animationCancelCalls = 0;
     public className = "";
     public textContent = "";
     public innerHTML = "";
@@ -76,6 +78,18 @@ class FakeElement {
 
     public matches(_selector: string): boolean {
         return false;
+    }
+
+    public animate(keyframes: Keyframe[], options?: KeyframeAnimationOptions): Animation {
+        const animation: Animation = {
+            cancel: () => {
+                this.animationCancelCalls += 1;
+            },
+            oncancel: null,
+            onfinish: null,
+        } as unknown as Animation;
+        this.animationCalls.push({ keyframes, options, animation });
+        return animation;
     }
 }
 
@@ -185,6 +199,24 @@ function firstCell(host: FakeElement): FakeElement {
 function firstCellContent(host: FakeElement): FakeElement {
     return firstCell(host).children[0];
 }
+
+describe("PooledRowPane — row position animation", () => {
+    it("animates the independent translate property and keeps virtual positioning intact", () => {
+        const { pane, host } = makeHarness();
+
+        pane.setOffsetY(200);
+        pane.animateFrom(100);
+
+        expect(host.animationCalls[0]?.keyframes).toEqual([{ translate: "0px -100px" }, { translate: "0px 0px" }]);
+        expect(host.animationCalls[0]?.options).toEqual({ duration: 180, easing: "ease-out" });
+        expect(host.style.transform).toBe("translate3d(0, 200px, 0)");
+        expect(pane.getOffsetY()).toBe(200);
+
+        pane.setOffsetY(240);
+        expect(host.animationCancelCalls).toBe(1);
+        expect(host.style.transform).toBe("translate3d(0, 240px, 0)");
+    });
+});
 
 describe("PooledRowPane — staging placeholder for root-rendered cells", () => {
     it("paints the placeholder synchronously into a blank cell before the async root commit", () => {

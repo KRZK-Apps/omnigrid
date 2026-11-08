@@ -22,6 +22,11 @@ const data = [...];
 <OmniGrid columns={columns} data={data} />;
 ```
 
+Set `animateRows` to animate visible rows when filtering or sorting changes their
+positions. Row animation uses a separate CSS transform component, so virtualized
+positioning and scrolling remain independent. It is disabled by default; provide
+a stable `getRowId` to animate rows reliably across reorderings.
+
 Column `headerRenderer` callbacks provide the header's primary content. The adapter owns the
 shared header layout and keeps sorting, filtering, and registered plugin extensions alongside it,
 so plugins can add controls without replacing or duplicating the header renderer.

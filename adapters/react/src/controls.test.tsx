@@ -21,8 +21,8 @@ describe("renderControl", () => {
             { id: "g", type: "group", direction: "row", children: [{ id: "l", type: "label", text: "Hello" }] },
         ];
         const html: string = renderToStaticMarkup(createElement(Fragment, null, controls.map(renderControl)));
-        expect(html).toContain('class="omnigrid-control-input" type="text"');
-        expect(html).toContain('class="omnigrid-control-input" type="date"');
+        expect(html).toContain('id="t" class="omnigrid-control-input" type="text"');
+        expect(html).toContain('id="d" class="omnigrid-control-input" type="date"');
         expect(html).toContain('value="abc"');
         expect(html).toContain('class="omnigrid-select-button"');
         expect(html).toContain('aria-haspopup="listbox"');

@@ -125,6 +125,7 @@ interface RowLayerState<T> {
     processed: unknown[] | null;
     originX: number;
     rowWidth: number;
+    animationPositions: Map<RowId, number> | null;
     /**
      * Viewport data of the last pool sync. Row binds read the span layout from
      * it instead of re-computing `getViewportData()` per bound row — in
@@ -146,6 +147,7 @@ function createRowLayerState<T>(): RowLayerState<T> {
         processed: null,
         originX: 0,
         rowWidth: 0,
+        animationPositions: null,
         viewport: null,
     };
 }
@@ -933,6 +935,8 @@ export function OmniGrid<T>({
                     // (scrollable) while pinned layers render their full group.
                     const sliced = sliceSpanLayoutForLayer(viewport, layer.columns, !isLeft && !isRight, layout);
                     pane.bind(paneRow, layer.columns, layer.originX, sliced);
+                    const previousOffsetY = layer.animationPositions?.get(row.rowId);
+                    if (previousOffsetY !== undefined) pane.animateFrom(previousOffsetY);
                 },
                 resizeRow: (host, height) => {
                     const pane = paneMap.get(host);
@@ -976,10 +980,20 @@ export function OmniGrid<T>({
         const state = grid.getState();
         const processed = getPoolData(grid);
 
+        const processedChanged: boolean = layer.processed !== processed;
         const changed =
             layer.revision !== grid.getRevision() ||
             layer.totalWidth !== viewportData.totalWidth ||
-            layer.processed !== processed;
+            processedChanged;
+        const shouldAnimate: boolean = Boolean(options.animateRows && layer.processed !== null && processedChanged);
+        const animationPositions: Map<RowId, number> | null = shouldAnimate
+            ? new Map(
+                  layer.panes.flatMap((pane) => {
+                      const row = pane.getRow();
+                      return row ? [[row.rowId, pane.getOffsetY()] as const] : [];
+                  }),
+              )
+            : null;
         if (changed) {
             layer.revision = grid.getRevision();
             layer.totalWidth = viewportData.totalWidth;
@@ -989,6 +1003,7 @@ export function OmniGrid<T>({
 
         // Cached for the row binds below — the viewport data of THIS sync.
         layer.viewport = viewportData;
+        layer.animationPositions = animationPositions;
 
         pool.update({
             data: processed as T[],
@@ -1000,6 +1015,7 @@ export function OmniGrid<T>({
             rowWidth: layer.rowWidth,
             skipBind,
         });
+        layer.animationPositions = null;
     };
 
     /**
@@ -1264,6 +1280,13 @@ export function OmniGrid<T>({
         syncPool(false, false); // skipContentBind=false: structural changes always bind fully
     }, [state]);
 
+    useLayoutEffect(() => {
+        if (options.animateRows) return;
+        for (const layer of [layers.left, layers.central, layers.right]) {
+            for (const pane of layer.panes) pane.cancelAnimation();
+        }
+    }, [options.animateRows]);
+
     useEffect(() => {
         return () => {
             if (scrollFrameRef.current.id) cancelAnimationFrame(scrollFrameRef.current.id);
@@ -1284,6 +1307,11 @@ export function OmniGrid<T>({
         const frame = scrollFrameRef.current;
         frame.top = element.scrollTop;
         frame.left = element.scrollLeft;
+        if (options.animateRows) {
+            for (const layer of [layers.left, layers.central, layers.right]) {
+                for (const pane of layer.panes) pane.cancelAnimation();
+            }
+        }
 
         // The scrollbar width is NOT measured here: reading `offsetWidth` /
         // clientWidth forces a synchronous layout of the whole page, and a

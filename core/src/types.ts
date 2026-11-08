@@ -692,6 +692,14 @@ export interface GridOptions<T> {
      */
     quickFilter?: string;
     /**
+     * Animates visible rows when filtering, sorting, or other data changes
+     * reposition them. Row movement uses a separate transform component and
+     * does not change the grid's scroll position.
+     * @default false
+     * @api
+     */
+    animateRows?: boolean;
+    /**
      * License key for Pro plugins. When provided, Pro plugins verify the
      * cryptographic signature and activate full functionality. When missing
      * or invalid, Pro plugins enter demo mode with a non-intrusive watermark.

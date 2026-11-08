@@ -61,6 +61,8 @@ export class PooledRowPane<T> {
     private variableHeight = false;
     private heightMeasureId = 0;
     private rowHasWrapText = false;
+    private offsetY = 0;
+    private rowAnimation: Animation | null = null;
 
     public constructor(
         private readonly host: HTMLDivElement,
@@ -111,6 +113,7 @@ export class PooledRowPane<T> {
     }
     /** Binds a row to the panel and fully rebuilds content. */
     public bind(row: PooledRow<T>, columns: PooledColumn<T>[], originX = 0, spans?: RowSpanLayout | null): void {
+        this.cancelAnimation();
         const hovered = this.host.matches(":hover");
         if (hovered && this.row) this.callbacks.onRowHover(this.row, false);
         this.row = row;
@@ -145,7 +148,41 @@ export class PooledRowPane<T> {
 
     /** Single row positioning operation — transform only (no reflow). */
     public setOffsetY(offsetY: number): void {
-        this.host.style.transform = `translate3d(0, ${Math.round(offsetY)}px, 0)`;
+        const roundedOffsetY: number = Math.round(offsetY);
+        if (this.offsetY !== roundedOffsetY) this.cancelAnimation();
+        this.offsetY = roundedOffsetY;
+        this.host.style.transform = `translate3d(0, ${roundedOffsetY}px, 0)`;
+    }
+
+    /** Returns the current virtualized row position in grid coordinates. */
+    public getOffsetY(): number {
+        return this.offsetY;
+    }
+
+    /** Animates a row from its previous grid position without changing its scroll transform. */
+    public animateFrom(previousOffsetY: number): void {
+        this.cancelAnimation();
+        const deltaY: number = previousOffsetY - this.offsetY;
+        if (deltaY === 0) return;
+
+        const animation: Animation = this.host.animate(
+            [{ translate: `0px ${deltaY}px` }, { translate: "0px 0px" }],
+            { duration: 180, easing: "ease-out" },
+        );
+        this.rowAnimation = animation;
+        animation.onfinish = () => {
+            if (this.rowAnimation === animation) this.rowAnimation = null;
+        };
+        animation.oncancel = () => {
+            if (this.rowAnimation === animation) this.rowAnimation = null;
+        };
+    }
+
+    /** Cancels any active row-position animation. */
+    public cancelAnimation(): void {
+        const animation: Animation | null = this.rowAnimation;
+        this.rowAnimation = null;
+        animation?.cancel();
     }
 
     /**
