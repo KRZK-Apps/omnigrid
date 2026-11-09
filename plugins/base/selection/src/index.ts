@@ -497,13 +497,14 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
     private validateSelection(): void {
         if (!this.api) return;
         const processedData = this.api.getProcessedData();
+        const validIds = new Set<RowId>();
+        for (let i = 0; i < processedData.length; i += 1) {
+            const row = processedData[i];
+            if (this.isRowSelectable(row, i)) validIds.add(this.getSelectionRowId(row, i));
+        }
         let hasChanges = false;
-
         for (const rowId of this.selectedRowIds) {
-            const index = processedData.findIndex((row, idx) => this.getSelectionRowId(row, idx) === rowId);
-            const row = index !== -1 ? processedData[index] : undefined;
-
-            if (row && index !== -1 && !this.isRowSelectable(row, index)) {
+            if (!validIds.has(rowId)) {
                 this.selectedRowIds.delete(rowId);
                 hasChanges = true;
             }

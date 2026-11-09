@@ -255,6 +255,7 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
         this.page = nextPage;
         this.pageInputValue = String(nextPage);
         if (pageChanged) {
+            this.clearSelectionIfAvailable();
             this.refresh();
             this.requestPage();
         } else if (this.api && !this.api.isDestroyed()) {
@@ -295,6 +296,7 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
         this.page = 1;
         this.pageSizesOpen = false;
         this.lastAutoPageSize = pageSize === 0 ? this.getEffectivePageSize() : undefined;
+        this.clearSelectionIfAvailable();
         this.refresh();
         this.requestPage();
     }
@@ -331,12 +333,25 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
 
     private refresh(): void {
         if (!this.api || this.api.isDestroyed()) return;
-        this.api.setViewport({ scrollTop: 0 });
+        this.api.scrollTo({ scrollTop: 0 });
         this.api.setState((prev) => ({ ...prev, pagination: this.getState() }));
         if (this.mode === "client") {
             this.api.setData(this.api.getState().data);
         } else {
             this.api.refresh();
+        }
+    }
+
+    /**
+     * Clears the row selection when a SelectionPlugin is registered.
+     * Navigation (page change / page size change) invalidates any
+     * selection that referenced rows no longer present on the new page.
+     */
+    private clearSelectionIfAvailable(): void {
+        if (!this.api || this.api.isDestroyed()) return;
+        const clearSelection = this.api.methods.clearSelection as (() => void) | undefined;
+        if (typeof clearSelection === "function") {
+            clearSelection();
         }
     }
 
@@ -358,6 +373,7 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
         const pageChanged = nextPage !== this.page;
         this.page = nextPage;
         this.pageInputValue = String(nextPage);
+        if (pageChanged) this.clearSelectionIfAvailable();
         this.refresh();
         if (this.mode === "server" || pageChanged) this.requestPage();
     }

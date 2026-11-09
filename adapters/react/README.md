@@ -27,6 +27,12 @@ positions. Row animation uses a separate CSS transform component, so virtualized
 positioning and scrolling remain independent. It is disabled by default; provide
 a stable `getRowId` to animate rows reliably across reorderings.
 
+During fast vertical scrolling, the React adapter keeps the current row pool
+visually in place while the native scrollbar continues moving. It repositions
+the existing row layers rather than creating a second copy of the rows, then
+updates the pool after scrolling has been idle for 150 ms. The core tracks the
+live scroll position without store notifications or scroll-driven React renders.
+
 Column `headerRenderer` callbacks provide the header's primary content. The adapter owns the
 shared header layout and keeps sorting, filtering, and registered plugin extensions alongside it,
 so plugins can add controls without replacing or duplicating the header renderer.

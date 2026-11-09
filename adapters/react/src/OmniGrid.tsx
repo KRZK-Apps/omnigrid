@@ -94,19 +94,10 @@ function getPoolData<T>(grid: GridApi<T>): unknown[] {
 const SLOT_POSITIONS: SlotPosition[] = ["start", "center", "end"];
 
 /**
- * Scroll velocity (px/ms) above which a scroll is treated as "fast".
- * Mouse wheel and trackpad scrolls typically range 0.05–0.2 px/ms, while
- * scrollbar thumb drags and page jumps exceed 10 px/ms.
+ * How long after the last scroll event row-height anchoring corrections remain
+ * deferred, so they cannot fight active user input.
  */
-const FAST_SCROLL_VELOCITY = 2.0;
-
-/**
- * How long (ms) after the last processed scroll frame the fast-scroll state
- * is kept. The velocity is only sampled on scroll frames, so it has to be
- * aged out explicitly — otherwise a single fast flick would keep the grid in
- * fast-scroll mode forever.
- */
-const FAST_SCROLL_WINDOW = 150;
+const SCROLL_IDLE_WINDOW = 150;
 
 /**
  * Per-layer (DomPool + pane tracking) state for the three horizontal column
@@ -212,17 +203,14 @@ export function OmniGrid<T>({
     const pinnedRightRowsLayerRef = useRef<HTMLDivElement>(null);
     /** Space taken by the viewport's native scrollbars; body slots stay clear of it. */
     const [scrollbarInsets, setScrollbarInsets] = useState<{ right: number; bottom: number }>({ right: 0, bottom: 0 });
-    const scrollFrameRef = useRef<{ id: number; top: number; left: number; lastTop: number; lastTime: number }>({
+    const scrollFrameRef = useRef<{ id: number; top: number; left: number }>({
         id: 0,
         top: 0,
         left: 0,
-        lastTop: 0,
-        lastTime: 0,
     });
-    const scrollVelocityRef = useRef<number>(0);
-    /** Timestamp of the last processed scroll frame — used to age out the velocity. */
+    /** Timestamp of the last scroll event, used to defer row-height anchoring until idle. */
     const lastScrollTimeRef = useRef<number>(0);
-    /** Anchoring correction accumulated while a fast scroll was in progress. */
+    /** Anchoring correction accumulated while the user is scrolling. */
     const pendingAnchorRef = useRef<number>(0);
     /** Timer that applies the accumulated anchoring correction after the scroll settles. */
     const anchorTimerRef = useRef<number | null>(null);
@@ -233,19 +221,7 @@ export function OmniGrid<T>({
     /** rAF handle of the scheduled row-height flush. */
     const heightFlushRef = useRef<number | null>(null);
     /** Latest `syncPool` — read imperatively from `measureViewport`/ResizeObserver so the callback stays stable. */
-    const syncPoolRef = useRef<((synchronousColumnWindow?: boolean, skipContentBind?: boolean) => void) | null>(null);
-    /**
-     * Scrollable content height frozen at the start of a user scroll gesture.
-     *
-     * While the user drags the scrollbar thumb, measured row heights keep
-     * replacing estimates and `totalHeight` changes every frame. Rewriting the
-     * content height mid-drag makes the browser reposition the native
-     * scrollbar thumb (`scrollTop / (scrollHeight - clientHeight)`), so the
-     * thumb detaches from the mouse on the very first scroll of a
-     * variable-height grid. The height is therefore frozen to this snapshot
-     * for the duration of the gesture — row positions still use the measured
-     * offsets — and the real height is reapplied once the scroll settles.
-     */
+    const syncPoolRef = useRef<((synchronousColumnWindow?: boolean) => void) | null>(null);
     const optionsRef = useRef<GridProps<T>>(options);
     const columnWindowKeyRef = useRef("");
     /** Content size the scrollbar insets were measured for. */
@@ -585,20 +561,13 @@ export function OmniGrid<T>({
         return presentation;
     };
 
-    /**
-     * Whether the user is currently fast-scrolling.
-     *
-     * The velocity is sampled on scroll frames only, so it is aged out: when
-     * the last scroll frame is older than `FAST_SCROLL_WINDOW` the scroll has
-     * settled and the grid returns to its normal (fully bound) mode.
-     */
-    function isFastScrolling(): boolean {
-        if (scrollVelocityRef.current <= FAST_SCROLL_VELOCITY) return false;
-        return performance.now() - lastScrollTimeRef.current < FAST_SCROLL_WINDOW;
+    /** Whether a scroll event occurred recently enough that anchoring would fight user input. */
+    function isScrollActive(): boolean {
+        return performance.now() - lastScrollTimeRef.current < SCROLL_IDLE_WINDOW;
     }
 
     /**
-     * Applies the anchoring corrections that were deferred during a fast scroll.
+     * Applies the anchoring corrections that were deferred while scrolling.
      *
      * A row ABOVE the viewport that changes its height shifts the content
      * below it. While the user drags the scrollbar that correction fights the
@@ -610,9 +579,9 @@ export function OmniGrid<T>({
         anchorTimerRef.current = null;
         const pending: number = pendingAnchorRef.current;
         if (pending === 0) return;
-        if (isFastScrolling()) {
+        if (isScrollActive()) {
             // The user started scrolling again — the correction stays pending.
-            anchorTimerRef.current = window.setTimeout(flushPendingAnchor, FAST_SCROLL_WINDOW);
+            anchorTimerRef.current = window.setTimeout(flushPendingAnchor, SCROLL_IDLE_WINDOW);
             return;
         }
         pendingAnchorRef.current = 0;
@@ -621,10 +590,10 @@ export function OmniGrid<T>({
         grid.scrollTo({ scrollTop: Math.max(0, current + pending) });
     }
 
-    /** Schedules the deferred anchoring flush after the scroll has settled. */
+    /** Schedules the anchoring flush after scrolling has settled. */
     function scheduleAnchorFlush(): void {
         if (anchorTimerRef.current !== null) window.clearTimeout(anchorTimerRef.current);
-        anchorTimerRef.current = window.setTimeout(flushPendingAnchor, FAST_SCROLL_WINDOW);
+        anchorTimerRef.current = window.setTimeout(flushPendingAnchor, SCROLL_IDLE_WINDOW);
     }
 
     /**
@@ -646,11 +615,11 @@ export function OmniGrid<T>({
         const measured: number = pendingHeightCountRef.current;
         if (measured === 0) return;
         pendingHeightCountRef.current = 0;
-        const fast: boolean = isFastScrolling();
+        const scrolling: boolean = isScrollActive();
         const correction: number = pendingHeightCorrectionRef.current;
         pendingHeightCorrectionRef.current = 0;
         if (correction !== 0) {
-            if (fast) {
+            if (scrolling) {
                 // The correction fights the user's input while they are
                 // scrolling — it is applied once the scroll settles.
                 pendingAnchorRef.current += correction;
@@ -663,7 +632,7 @@ export function OmniGrid<T>({
         }
         // The measured heights changed the offsets of the rows below: push the
         // new geometry into the pools.
-        syncPool(false, fast);
+        syncPool(false);
     }
 
     /** Schedules the row-height flush for the next frame. */
@@ -970,7 +939,6 @@ export function OmniGrid<T>({
         layer: RowLayerState<T>,
         viewportData: ViewportData<T>,
         rowsLayerRef: React.MutableRefObject<HTMLDivElement | null>,
-        skipBind = false,
     ): void => {
         const bridge = ensureLayerContext();
         ensureLayerPool(layer, rowsLayerRef.current, bridge);
@@ -982,9 +950,7 @@ export function OmniGrid<T>({
 
         const processedChanged: boolean = layer.processed !== processed;
         const changed =
-            layer.revision !== grid.getRevision() ||
-            layer.totalWidth !== viewportData.totalWidth ||
-            processedChanged;
+            layer.revision !== grid.getRevision() || layer.totalWidth !== viewportData.totalWidth || processedChanged;
         const shouldAnimate: boolean = Boolean(options.animateRows && layer.processed !== null && processedChanged);
         const animationPositions: Map<RowId, number> | null = shouldAnimate
             ? new Map(
@@ -1013,7 +979,6 @@ export function OmniGrid<T>({
             rowHeights: viewportData.rowHeights,
             visibleRowRange: viewportData.visibleRowRange,
             rowWidth: layer.rowWidth,
-            skipBind,
         });
         layer.animationPositions = null;
     };
@@ -1026,13 +991,8 @@ export function OmniGrid<T>({
      * @param synchronousColumnWindow — when `true`, the rAF-driven scroll path
      *   triggers a `flushSync` for the column window header update so headers
      *   stay in step with the imperatively repositioned cells before paint.
-     * @param skipContentBind — when `true` (fast scroll), row positions are
-     *   updated but `bindRow` is deferred to the next slow-scroll frame. This
-     *   avoids synchronous React commits (~200 cell roots) that exceed the 16ms
-     *   frame budget, causing flicker/frame drops. Rows remain visible with
-     *   previous content at the correct new position.
      */
-    const syncPool = (synchronousColumnWindow = false, skipContentBind = false): void => {
+    const syncPool = (synchronousColumnWindow = false): void => {
         const state = grid.getState();
         const currentViewportData = grid.getViewportData();
 
@@ -1040,18 +1000,7 @@ export function OmniGrid<T>({
         // It is written imperatively: a Store notification per measured row
         // would re-render the whole grid, and the grid would then lag behind
         // the native scroll position (the user sees the previous rows).
-        //
-        // During an active user scroll gesture the height is frozen to the
-        // snapshot taken at gesture start (see `handleScroll`). Otherwise the
-        // browser recomputes the scrollbar thumb (`scrollTop /
-        // (scrollHeight - clientHeight)`) every time a measured row height
-        // replaces an estimate and `totalHeight` changes mid-drag — on the
-        // first scroll of a variable-height grid the thumb then lags behind
-        // the mouse pointer. Row positions still use the live measured
-        // offsets; only the scrollbar range is frozen until the scroll
-        // settles.
-        const effectiveTotalHeight: number = currentViewportData.totalHeight;
-        applyContentHeight(effectiveTotalHeight);
+        applyContentHeight(currentViewportData.totalHeight);
 
         const pinnedLeftWidth = currentViewportData.pinnedLeftColumns.reduce((sum, item) => sum + item.width, 0);
         const pinnedRightWidth = currentViewportData.pinnedRightColumns.reduce((sum, item) => sum + item.width, 0);
@@ -1074,29 +1023,15 @@ export function OmniGrid<T>({
 
         // Cell content rendering (root.render) is async under React concurrent
         // mode — without flushSync, rows are repositioned but their cell content
-        // stays stale for one frame, causing visible jitter on custom-renderer
-        // cells. Wrap ONLY the DOM binding in flushSync to force cell roots to
-        // commit before paint.
-        //
-        // Velocity-based: during fast scroll (scrollbar thumb drag), many scroll
-        // events fire but rAF throttles to ~60fps. Calling flushSync on every frame
-        // forces a synchronous React commit for ALL cell roots (~200 calls), which
-        // can exceed the 16ms frame budget and cause frame drops — appearing as
-        // flickering/emptying. During fast scroll, we skip flushSync: rows stay
-        // at correct positions with previous content (we don't clear content on
-        // recycle), so the table is never empty — just 1-frame stale, which is
-        // imperceptible during rapid scroll. When velocity drops, flushSync resumes
-        // for frame-perfect content. The structural path (useEffect) always uses
-        // flushSync for correctness.
-        // getViewportData() above runs outside flushSync since column geometry
-        // caching makes it fast, avoiding blocking on computation.
+        // stays stale for one frame. Wrap only the DOM binding in flushSync so
+        // cell roots commit before paint.
         const bindLayers = (): void => {
-            syncRowLayer(layers.left, currentViewportData, pinnedLeftRowsLayerRef, skipContentBind);
-            syncRowLayer(layers.central, currentViewportData, rowsLayerRef, skipContentBind);
-            syncRowLayer(layers.right, currentViewportData, pinnedRightRowsLayerRef, skipContentBind);
+            syncRowLayer(layers.left, currentViewportData, pinnedLeftRowsLayerRef);
+            syncRowLayer(layers.central, currentViewportData, rowsLayerRef);
+            syncRowLayer(layers.right, currentViewportData, pinnedRightRowsLayerRef);
         };
 
-        if (synchronousColumnWindow && !skipContentBind) {
+        if (synchronousColumnWindow) {
             flushSync(bindLayers);
         } else {
             bindLayers();
@@ -1108,40 +1043,34 @@ export function OmniGrid<T>({
         // Pinned panes hold all their columns at once — they only rebind via
         // the structural path above (revision bump).
         //
-        // Skip column window updates during fast scroll (skipContentBind) —
-        // the columns themselves haven't changed, and forcing a header re-render
-        // during fast scroll would cause frame drops. The column window will
-        // be updated on the next slow-scroll frame or structural update.
-        if (!skipContentBind) {
-            const columnWindowKey = `${currentViewportData.columnRange.start}:${currentViewportData.columnRange.end}:${state.viewport.width}:${pinnedLeftWidth}:${pinnedRightWidth}`;
-            if (columnWindowKey !== columnWindowKeyRef.current) {
-                columnWindowKeyRef.current = columnWindowKey;
-                const updateColumnWindow = (): void => {
-                    // Span-aware: each pane resolves its own row's layout so
-                    // merged cells keep their summed width while the window
-                    // slides — covered leaves stay parked off-screen.
-                    for (const pane of layers.central.panes) {
-                        const paneRow = pane.getRow();
-                        if (!paneRow) {
-                            pane.updateColumns(layers.central.columns, layers.central.originX, null);
-                            continue;
-                        }
-                        const spans = getCachedRowSpans(currentViewportData, paneRow.data, paneRow.index);
-                        pane.updateColumns(
-                            layers.central.columns,
-                            layers.central.originX,
-                            sliceSpanLayoutForLayer(currentViewportData, layers.central.columns, true, spans.central),
-                        );
+        const columnWindowKey = `${currentViewportData.columnRange.start}:${currentViewportData.columnRange.end}:${state.viewport.width}:${pinnedLeftWidth}:${pinnedRightWidth}`;
+        if (columnWindowKey !== columnWindowKeyRef.current) {
+            columnWindowKeyRef.current = columnWindowKey;
+            const updateColumnWindow = (): void => {
+                // Span-aware: each pane resolves its own row's layout so
+                // merged cells keep their summed width while the window
+                // slides — covered leaves stay parked off-screen.
+                for (const pane of layers.central.panes) {
+                    const paneRow = pane.getRow();
+                    if (!paneRow) {
+                        pane.updateColumns(layers.central.columns, layers.central.originX, null);
+                        continue;
                     }
-                    setColumnWindowVersion((v) => v + 1);
-                };
-                if (synchronousColumnWindow) {
-                    // Keep React-rendered cell content and headers in step with the
-                    // imperative cell repositioning before the browser paints.
-                    flushSync(updateColumnWindow);
-                } else {
-                    updateColumnWindow();
+                    const spans = getCachedRowSpans(currentViewportData, paneRow.data, paneRow.index);
+                    pane.updateColumns(
+                        layers.central.columns,
+                        layers.central.originX,
+                        sliceSpanLayoutForLayer(currentViewportData, layers.central.columns, true, spans.central),
+                    );
                 }
+                setColumnWindowVersion((v) => v + 1);
+            };
+            if (synchronousColumnWindow) {
+                // Keep React-rendered cell content and headers in step with the
+                // imperative cell repositioning before the browser paints.
+                flushSync(updateColumnWindow);
+            } else {
+                updateColumnWindow();
             }
         }
     };
@@ -1186,7 +1115,7 @@ export function OmniGrid<T>({
             width,
             ...(height > 0 ? { height } : {}),
         });
-        syncPoolRef.current?.(false, false);
+        syncPoolRef.current?.(false);
         setIsViewportMeasured(true);
     }, [grid, syncScrollbarInsets, setIsViewportMeasured]);
 
@@ -1204,7 +1133,7 @@ export function OmniGrid<T>({
             const height = element.clientHeight;
             if (width === 0 || height === 0) return;
             grid.setViewport({ width, height });
-            syncPoolRef.current?.(false, false);
+            syncPoolRef.current?.(false);
             setIsViewportMeasured(true);
         });
         observer.observe(element, { box: "content-box" });
@@ -1277,7 +1206,7 @@ export function OmniGrid<T>({
                 if (layer.pool) layer.pool.invalidate();
             }
         }
-        syncPool(false, false); // skipContentBind=false: structural changes always bind fully
+        syncPool(false);
     }, [state]);
 
     useLayoutEffect(() => {
@@ -1289,7 +1218,10 @@ export function OmniGrid<T>({
 
     useEffect(() => {
         return () => {
-            if (scrollFrameRef.current.id) cancelAnimationFrame(scrollFrameRef.current.id);
+            if (scrollFrameRef.current.id) {
+                cancelAnimationFrame(scrollFrameRef.current.id);
+                scrollFrameRef.current.id = 0;
+            }
             for (const layer of [layers.left, layers.central, layers.right]) {
                 layer.pool?.destroy();
                 layer.pool = null;
@@ -1307,6 +1239,7 @@ export function OmniGrid<T>({
         const frame = scrollFrameRef.current;
         frame.top = element.scrollTop;
         frame.left = element.scrollLeft;
+        lastScrollTimeRef.current = performance.now();
         if (options.animateRows) {
             for (const layer of [layers.left, layers.central, layers.right]) {
                 for (const pane of layer.panes) pane.cancelAnimation();
@@ -1330,29 +1263,16 @@ export function OmniGrid<T>({
             const element = viewportRef.current;
             const scrollTop = element ? element.scrollTop : frame.top;
             const scrollLeft = element ? element.scrollLeft : frame.left;
-            // Velocity detection: px/ms. Threshold at 2.0 px/ms — mouse wheel
-            // and trackpad scrolls typically range 0.05–0.2 px/ms, while
-            // scrollbar thumb drags and shift-click page jumps can exceed 10 px/ms.
-            // When velocity exceeds the threshold, skipContentBind is passed to
-            // syncPool: rows are repositioned but content binding is deferred,
-            // avoiding synchronous React commits that exceed the 16ms frame budget.
-            const now = performance.now();
-            const deltaT = now - frame.lastTime;
-            scrollVelocityRef.current = deltaT > 8 ? Math.abs(scrollTop - frame.lastTop) / deltaT : 0;
-            frame.lastTop = scrollTop;
-            frame.lastTime = now;
-            lastScrollTimeRef.current = now;
             // setViewport with scroll-only updates does NOT notify the Store,
             // so this does NOT trigger a React re-render. The DomPool is
             // updated imperatively below.
             grid.setViewport({ scrollTop, scrollLeft });
-            const skipContentBind = scrollVelocityRef.current > FAST_SCROLL_VELOCITY;
-            if (!skipContentBind && pendingAnchorRef.current !== 0) {
+            if (!isScrollActive() && pendingAnchorRef.current !== 0) {
                 // The scroll settled — the deferred anchoring correction can be
                 // applied now without fighting the user's input.
                 flushPendingAnchor();
             }
-            syncPool(true, skipContentBind);
+            syncPool(true);
         });
     };
 

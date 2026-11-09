@@ -1,6 +1,7 @@
-import type { ColumnDef, SlotContent, SlotMount, SlotName, SlotNodeContent } from "@omnigrid/core";
+import type { ColumnDef, ScrollPosition, SlotContent, SlotMount, SlotName, SlotNodeContent } from "@omnigrid/core";
 import { Grid } from "@omnigrid/core";
 import { describe, expect, it, vi } from "vitest";
+import { SelectionPlugin } from "@omnigrid/selection-plugin";
 
 import { PaginationPlugin } from "./index";
 
@@ -321,5 +322,57 @@ describe("PaginationPlugin removal", () => {
         grid.setPlugins([]);
         expect(grid.getProcessedData()).toHaveLength(25);
         expect(grid.getSlotMounts("bottom")).toHaveLength(0);
+    });
+});
+
+describe("PaginationPlugin + SelectionPlugin integration", () => {
+    it("resets the native scroll position when navigating to a different page", () => {
+        const data: Row[] = Array.from({ length: 25 }, (_, i) => ({ value: i }));
+        const columns: ColumnDef<Row>[] = [{ id: "value", field: "value", header: "Value" }];
+        const pagination = new PaginationPlugin<Row>({ pageSize: 10 });
+        const grid = new Grid<Row>({ columns, data, plugins: [pagination] });
+        const scrollPositions: ScrollPosition[] = [];
+
+        grid.scrollTo({ scrollTop: 600 });
+        grid.on("scrollTo", (position) => scrollPositions.push(position));
+
+        pagination.goToPage(2);
+
+        expect(scrollPositions).toEqual([{ scrollTop: 0, scrollLeft: 0 }]);
+        expect(grid.getScrollPosition()).toEqual({ scrollTop: 0, scrollLeft: 0 });
+
+        grid.destroy();
+    });
+
+    it("clears the selection when navigating to a different page", () => {
+        const data: Row[] = Array.from({ length: 25 }, (_, i) => ({ value: i }));
+        const columns: ColumnDef<Row>[] = [{ id: "value", field: "value", header: "Value" }];
+        const pagination = new PaginationPlugin<Row>({ pageSize: 10 });
+        const selection = new SelectionPlugin<Row>({ mode: "multiple" });
+        const grid = new Grid<Row>({ columns, data, plugins: [pagination, selection] });
+
+        selection.toggleRow(grid.getRowId(data[5], 5), 5);
+        expect(selection.getSelectedRowIds()).toHaveLength(1);
+
+        pagination.goToPage(2);
+        expect(selection.getSelectedRowIds()).toHaveLength(0);
+
+        grid.destroy();
+    });
+
+    it("clears the selection when the page size changes", () => {
+        const data: Row[] = Array.from({ length: 25 }, (_, i) => ({ value: i }));
+        const columns: ColumnDef<Row>[] = [{ id: "value", field: "value", header: "Value" }];
+        const pagination = new PaginationPlugin<Row>({ pageSize: 10 });
+        const selection = new SelectionPlugin<Row>({ mode: "multiple" });
+        const grid = new Grid<Row>({ columns, data, plugins: [pagination, selection] });
+
+        selection.toggleRow(grid.getRowId(data[5], 5), 5);
+        expect(selection.getSelectedRowIds()).toHaveLength(1);
+
+        pagination.setPageSize(20);
+        expect(selection.getSelectedRowIds()).toHaveLength(0);
+
+        grid.destroy();
     });
 });
