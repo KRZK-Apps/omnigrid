@@ -436,8 +436,12 @@ interface BaseColumnDef<T> {
     header: string;
     /** Pins the column to a horizontal edge of the grid. */
     pinned?: "left" | "right";
+    /** Keeps this column or group at the start of the column order. @api */
+    lockPosition?: "start";
     /** Whether this column may be resized by the resize plugin. */
     resizable?: boolean;
+    /** Whether this column can be moved by a column drag-and-drop plugin. @default false @api */
+    movable?: boolean;
     /**
      * Custom renderer for the primary content of this column's header.
      * Adapter controls and plugin extensions are rendered alongside it.
@@ -571,6 +575,13 @@ export interface ColumnGroupDef<T> extends BaseColumnDef<T> {
 
 /** Leaf or grouped column definition accepted by the grid. */
 export type ColumnDef<T> = ColumnLeafDef<T> | ColumnGroupDef<T>;
+
+/**
+ * Position at which a dragged column is dropped relative to its target.
+ *
+ * @api
+ */
+export type ColumnDropPosition = "before" | "after";
 
 /**
  * Properties inherited by leaf columns unless overridden by the column.
@@ -930,6 +941,16 @@ export interface GridEvents<T> {
     scrollTo: ScrollPosition;
     dataChange: T[];
     headerClick: { columnId: string; multiSort: boolean };
+    /** Fired when a movable column header starts being dragged. @api */
+    columnDragStart: { columnId: string };
+    /** Fired when a movable column header drag ends. @api */
+    columnDragEnd: { columnId: string };
+    /** Fired when a movable column is dropped relative to another leaf header. @api */
+    columnDrop: {
+        sourceColumnId: string;
+        targetColumnId: string;
+        position: ColumnDropPosition;
+    };
     sortingChanged: Array<{ columnId: string; direction: SortDirection }>;
     rowClick: RowClickEvent<T>;
     rowHover: RowHoverEvent<T>;

@@ -49,6 +49,7 @@ export type {
     ColSpanDef,
     ColumnClassRules,
     ColumnDataType,
+    ColumnDropPosition,
     DefaultColumnDef,
     ColumnFilterType,
     ColumnDef,

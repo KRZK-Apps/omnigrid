@@ -28,6 +28,8 @@ describe("SelectionPlugin column pinning", () => {
         // Checkbox column is the very first column and is pinned to the left.
         expect(state[0].id).toBe("__omnigrid_selection__");
         expect(state[0].pinned).toBe("left");
+        expect(state[0].movable).toBe(false);
+        expect(state[0].lockPosition).toBe("start");
         // The previously pinned-left column remains pinned after the checkbox.
         expect(state[1].pinned).toBe("left");
         expect(state[1].id).toBe("id");
@@ -36,7 +38,7 @@ describe("SelectionPlugin column pinning", () => {
         expect(state[2].id).toBe("name");
     });
 
-    it("leaves the checkbox column as the first scrollable column when there are no pinned-left columns", () => {
+    it("pins the checkbox column to the left when there are no configured pinned-left columns", () => {
         const columns: ColumnDef<Row>[] = [
             { id: "name", field: "name", header: "Name", flex: 1 },
             { id: "age", field: "age", header: "Age", width: 100 },
@@ -46,7 +48,7 @@ describe("SelectionPlugin column pinning", () => {
 
         const state = grid.getState().columns;
         expect(state[0].id).toBe("__omnigrid_selection__");
-        expect(state[0].pinned).toBeUndefined();
+        expect(state[0].pinned).toBe("left");
         expect(state.map((c) => c.id)).toEqual(["__omnigrid_selection__", "name", "age"]);
     });
 
@@ -163,15 +165,21 @@ describe("SelectionPlugin removal", () => {
 });
 
 describe("SelectionPlugin group selection", () => {
+    function getSelectionColumn(grid: Grid<Row>): ColumnLeafDef<Row> | undefined {
+        const viewport = grid.getViewportData();
+        return (
+            viewport.pinnedLeftLeafColumns.find((candidate) => candidate.id === "__omnigrid_selection__") ??
+            viewport.leafColumns.find((candidate) => candidate.id === "__omnigrid_selection__")
+        );
+    }
+
     function renderCheckbox(
         grid: Grid<Row>,
         rowId: RowId,
         index: number,
         data: Row,
     ): CheckboxControl & { group?: boolean } {
-        const column: ColumnLeafDef<Row> | undefined = grid.getViewportData().leafColumns.find(
-            (candidate) => candidate.id === "__omnigrid_selection__",
-        );
+        const column: ColumnLeafDef<Row> | undefined = getSelectionColumn(grid);
         if (!column?.cellRenderer) throw new Error("Selection checkbox renderer was not registered");
         const rendered: unknown = column.cellRenderer({ id: rowId, index, data, column });
         if (typeof rendered !== "object" || rendered === null || !("type" in rendered)) {
@@ -249,9 +257,7 @@ describe("SelectionPlugin group selection", () => {
             plugins: [plugin],
         });
         grid.registerRowHierarchy({ getLeafRowIds: () => undefined });
-        const selectionColumn: ColumnLeafDef<Row> | undefined = grid
-            .getViewportData()
-            .leafColumns.find((candidate) => candidate.id === "__omnigrid_selection__");
+        const selectionColumn: ColumnLeafDef<Row> | undefined = getSelectionColumn(grid);
         const header: CheckboxControl | undefined = selectionColumn?.headerRenderer?.() as CheckboxControl | undefined;
 
         header?.onChange({ shiftKey: false, ctrlKey: false });
@@ -284,9 +290,7 @@ describe("SelectionPlugin group selection", () => {
         const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({ mode: "multiple", showRowCheckboxes: true });
         const grid: Grid<Row> = new Grid<Row>({ columns: [], data: ROWS, getRowId: (row) => row.id, plugins: [plugin] });
         registerGroupHierarchy(grid);
-        const column: ColumnLeafDef<Row> | undefined = grid.getViewportData().leafColumns.find(
-            (candidate) => candidate.id === "__omnigrid_selection__",
-        );
+        const column: ColumnLeafDef<Row> | undefined = getSelectionColumn(grid);
 
         expect(column?.cellRenderer?.({ id: "group", index: 0, data: ROWS[0], column: column! })).toBe("");
         grid.destroy();

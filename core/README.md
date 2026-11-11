@@ -12,6 +12,7 @@ state, the data pipeline, 2D virtualization, DOM-pool row mapping, slots, and pl
 - **Data Pipeline** — plugins attach pure transforms (`T[] → T[]`) in registration order: raw → processed → virtualized.
 - **Virtualization Engine (2D)** — visible window of rows _and_ columns plus overscan; offsets are absolute table-space coordinates.
 - **Event Bus** — typed `on(event, listener)`; returns an unsubscribe function.
+- **Column drag events** — adapters emit `columnDragStart`, `columnDrop`, and `columnDragEnd` for movable leaf and group headers.
 - **DOM Pool mapping** — the core decides _which_ rows are visible; the adapter performs DOM ops via injected `DomPoolBindings`.
 - **Slot Manager / `GridApi.slots`** — headless widgets mounted by plugins into `top | bottom | left | right`.
 - **Column header extensions** — plugins register independent header elements; adapters render them beside the shared label and controls.
@@ -65,6 +66,7 @@ interface ColumnLeafDef<T> {
     minWidth?: number;
     maxWidth?: number;
     hidden?: boolean;
+    movable?: boolean; // opt in to leaf drag-and-drop with a reorder plugin
     pinned?: "left" | "right"; // fixed column in horizontal viewport
     sortable?: boolean; // read by SortingPlugin
     sortState?: SortDirection; // "asc" | "desc" — initial sort for SortingPlugin
@@ -94,6 +96,7 @@ interface ColumnGroupDef<T> {
     id: string;
     header: string;
     children: ColumnDef<T>[]; // nested leaves / groups
+    movable?: boolean; // opt in to moving the entire group with a reorder plugin
     pinned?: "left" | "right";
     collapsible?: boolean;
     defaultExpanded?: boolean;
@@ -105,6 +108,9 @@ interface ColumnGroupDef<T> {
     headerRenderer?: (column: ColumnDef<T>) => unknown;
 }
 ```
+
+`movable` is available on both leaf columns and groups. Dragging a group moves its complete
+subtree; dropping after the last leaf in the final group places the dragged column after the group.
 
 When grid-level `cellFlash` is enabled, set `cellFlash: false` on an individual leaf column to opt it out.
 

@@ -541,6 +541,14 @@
     cursor: pointer;
 }
 
+.omnigrid-header-cell[data-movable="true"] {
+    cursor: grab;
+}
+
+.omnigrid-header-cell[data-movable="true"]:active {
+    cursor: grabbing;
+}
+
 .omnigrid-pinned-right [role="columnheader"]:last-child {
     border-right: 0;
 }

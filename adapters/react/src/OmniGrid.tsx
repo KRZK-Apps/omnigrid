@@ -17,6 +17,7 @@ import type {
     CellAlign,
     CellRenderParams,
     CellSpan,
+    ColumnDropPosition,
     ColumnHeaderExtensionPosition,
     ColumnLeafDef,
     ColumnStyleParams,
@@ -98,6 +99,7 @@ const SLOT_POSITIONS: SlotPosition[] = ["start", "center", "end"];
  * deferred, so they cannot fight active user input.
  */
 const SCROLL_IDLE_WINDOW = 150;
+const COLUMN_DRAG_TYPE = "application/x-omnigrid-column";
 
 /**
  * Per-layer (DomPool + pane tracking) state for the three horizontal column
@@ -1499,6 +1501,8 @@ export function OmniGrid<T>({
                     data-sort={item.column.sortState}
                     data-sort-index={item.column.sortIndex}
                     data-sortable={item.column.sortable === true ? "true" : undefined}
+                    data-movable={item.column.movable === true ? "true" : undefined}
+                    draggable={item.column.movable === true}
                     aria-sort={
                         item.column.sortState === "asc"
                             ? "ascending"
@@ -1511,6 +1515,35 @@ export function OmniGrid<T>({
                             ? event.stopPropagation()
                             : grid.headerClick(item.column.id, event.shiftKey || event.ctrlKey || event.metaKey)
                     }
+                    onDragStart={(event) => {
+                        if (item.column.movable !== true) {
+                            event.preventDefault();
+                            return;
+                        }
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData(COLUMN_DRAG_TYPE, item.column.id);
+                        grid.emit("columnDragStart", { columnId: item.column.id });
+                    }}
+                    onDragOver={(event) => {
+                        if (!Array.from(event.dataTransfer.types).includes(COLUMN_DRAG_TYPE)) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                    }}
+                    onDragEnd={() => grid.emit("columnDragEnd", { columnId: item.column.id })}
+                    onDrop={(event) => {
+                        const sourceColumnId: string = event.dataTransfer.getData(COLUMN_DRAG_TYPE);
+                        if (!sourceColumnId) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const bounds: DOMRect = event.currentTarget.getBoundingClientRect();
+                        const position: ColumnDropPosition =
+                            event.clientX < bounds.left + bounds.width / 2 ? "before" : "after";
+                        grid.emit("columnDrop", {
+                            sourceColumnId,
+                            targetColumnId: item.column.id,
+                            position,
+                        });
+                    }}
                     onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") grid.headerClick(item.column.id);
                     }}
@@ -1642,7 +1675,38 @@ export function OmniGrid<T>({
                     key={`${depth}:${index}:${segment.group.id}`}
                     role="columnheader"
                     className={className}
+                    data-movable={segment.group.movable === true ? "true" : undefined}
+                    draggable={segment.group.movable === true}
                     aria-colspan={segment.columnCount}
+                    onDragStart={(event) => {
+                        if (segment.group.movable !== true) {
+                            event.preventDefault();
+                            return;
+                        }
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData(COLUMN_DRAG_TYPE, segment.group.id);
+                        grid.emit("columnDragStart", { columnId: segment.group.id });
+                    }}
+                    onDragOver={(event) => {
+                        if (!Array.from(event.dataTransfer.types).includes(COLUMN_DRAG_TYPE)) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                    }}
+                    onDragEnd={() => grid.emit("columnDragEnd", { columnId: segment.group.id })}
+                    onDrop={(event) => {
+                        const sourceColumnId: string = event.dataTransfer.getData(COLUMN_DRAG_TYPE);
+                        if (!sourceColumnId) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const bounds: DOMRect = event.currentTarget.getBoundingClientRect();
+                        const position: ColumnDropPosition =
+                            event.clientX < bounds.left + bounds.width / 2 ? "before" : "after";
+                        grid.emit("columnDrop", {
+                            sourceColumnId,
+                            targetColumnId: segment.group.id,
+                            position,
+                        });
+                    }}
                     style={groupCellLayout}
                 >
                     {segment.group.headerRenderer ? (

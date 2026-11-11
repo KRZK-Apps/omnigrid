@@ -392,6 +392,8 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
             stopRowClick: true,
             // The checkbox column must always stay pinned to the left.
             pinned: "left",
+            movable: false,
+            lockPosition: "start",
             headerRenderer: () =>
                 this.renderCheckbox({
                     checked: this.isAllSelectableRowsSelected(),

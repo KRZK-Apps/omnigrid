@@ -21,32 +21,51 @@ plugins. Free **Base** plugins are MIT; commercial **Pro** plugins are distribut
 
 ## Packages in this repository
 
-| Package | Directory | Description |
-|---|---|---|
-| `@omnigrid/core` | `core/` | Headless engine: state store, events, data pipeline, virtualization, slots, icons |
+### Ядро (core)
+
+| Package          | Directory | Description                                                                       |
+| ---------------- | --------- | --------------------------------------------------------------------------------- |
+| `@omnigrid/core` | `core/`   | Headless engine: state store, events, data pipeline, virtualization, slots, icons |
+
+### Адаптеры (adapters)
+
+| Package           | Directory         | Description                        |
+| ----------------- | ----------------- | ---------------------------------- |
 | `@omnigrid/react` | `adapters/react/` | React adapter/renderer (DOM layer) |
-| `@omnigrid/sorting-plugin` | `plugins/base/sorting/` | Column sorting (single + multi) |
-| `@omnigrid/selection-plugin` | `plugins/base/selection/` | Row/cell selection, checkbox column |
-| `@omnigrid/pagination-plugin` | `plugins/base/pagination/` | Client/server pagination, pager in a slot |
-| `@omnigrid/style` | `style/` | Required structural CSS |
+
+### Плагины (plugins)
+
+| Package                           | Directory                      | Description                               |
+| --------------------------------- | ------------------------------ | ----------------------------------------- |
+| `@omnigrid/sorting-plugin`        | `plugins/base/sorting/`        | Column sorting (single + multi)           |
+| `@omnigrid/selection-plugin`      | `plugins/base/selection/`      | Row/cell selection, checkbox column       |
+| `@omnigrid/pagination-plugin`     | `plugins/base/pagination/`     | Client/server pagination, pager in a slot |
+| `@omnigrid/resize-plugin`         | `plugins/base/resize/`         | Column resize                             |
+| `@omnigrid/column-reorder-plugin` | `plugins/base/column-reorder/` | Drag-and-drop column reordering           |
+| `@omnigrid/grouping-plugin`       | `plugins/base/grouping/`       | Row grouping                              |
+| `@omnigrid/quick-filter-plugin`   | `plugins/base/quick-filter/`   | Quick search input mounted into a slot    |
+| `@omnigrid/column-filter-plugin`  | `plugins/base/column-filter/`  | Column filter popup menu                  |
+| `@omnigrid/aggregation-plugin`    | `plugins/base/aggregation/`    | Aggregation                               |
+
+### Стиль и темы (style & themes)
+
+| Package                   | Directory         | Description               |
+| ------------------------- | ----------------- | ------------------------- |
+| `@omnigrid/style`         | `style/`          | Required structural CSS   |
 | `@omnigrid/default-theme` | `themes/default/` | Default light/dark colors |
-| `@omnigrid/mint-theme` | `themes/mint/` | Mint light/dark colors |
+| `@omnigrid/mint-theme`    | `themes/mint/`    | Mint light/dark colors    |
 
-> `plugins/pro/` is an empty public stub — commercial Pro plugins (`@omnigrid/plugin-pro`, grouping,
-> export, tree data, …) live in a separate private repository.
-
-Related but external repositories: `omnigrid-demo` (Next.js demo site) and `omnigrid-pro` (commercial).
+> Commercial Pro plugins (`@omnigrid/plugin-pro`, export, tree data, …) live in a separate private repository.
 
 ## Install
 
 ```bash
-# React grid (pulls in core + style + default theme automatically)
-npm install @omnigrid/react
 # Headless core only
 npm install @omnigrid/core
+# React grid (pulls in core + style + default theme automatically)
+npm install @omnigrid/react
 # Optional plugins / themes
-npm install @omnigrid/sorting-plugin @omnigrid/selection-plugin @omnigrid/pagination-plugin
-npm install @omnigrid/mint-theme
+npm install @omnigrid/<plugin/theme>
 ```
 
 ## Quick start — React
@@ -59,11 +78,11 @@ import { SortingPlugin } from "@omnigrid/sorting-plugin";
 const sorting = useMemo(() => new SortingPlugin<Row>(), []); // one instance per grid
 
 <OmniGrid
-    columns={columns}                // ColumnDef<T>[]
-    data={rows}                      // T[]
-    getRowId={(row) => row.id}       // stable RowId — recycling, selection
+    columns={columns} // ColumnDef<T>[]
+    data={rows} // T[]
+    getRowId={(row) => row.id} // stable RowId — recycling, selection
     plugins={[sorting]}
-    style={{ height: 480 }}          // fixed height ⇒ scrollable virtual viewport
+    style={{ height: 480 }} // fixed height ⇒ scrollable virtual viewport
 />;
 ```
 
@@ -74,9 +93,7 @@ import { Grid } from "@omnigrid/core";
 import type { ColumnDef } from "@omnigrid/core";
 import { SelectionPlugin } from "@omnigrid/selection-plugin";
 
-const columns: ColumnDef<Row>[] = [
-    { id: "name", field: "name", header: "Name", width: 220, sortable: true },
-];
+const columns: ColumnDef<Row>[] = [{ id: "name", field: "name", header: "Name", width: 220, sortable: true }];
 
 const grid = new Grid<Row>({
     data: rows,
@@ -87,7 +104,7 @@ const grid = new Grid<Row>({
 
 grid.on("rowClick", (event) => console.log(event.id));
 grid.setViewport({ width: 800, height: 400 }); // adapter feeds geometry
-const viewport = grid.getViewportData();       // virtualized window + offsets
+const viewport = grid.getViewportData(); // virtualized window + offsets
 grid.destroy();
 ```
 

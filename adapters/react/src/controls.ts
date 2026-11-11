@@ -2,12 +2,22 @@ import type { ChangeEvent, KeyboardEvent, ReactNode } from "react";
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import type { UIControlDescriptor, UIInputControl, UIMultiSelectControl, UISelectControl } from "@omnigrid/core";
+import type { UIControlDescriptor, UIMultiSelectControl, UISelectControl } from "@omnigrid/core";
 import type { DebouncedInputProps } from "./types";
 
 export type { DebouncedInputProps };
 
-const CONTROL_TYPES: ReadonlySet<string> = new Set(["text", "number", "date", "select", "checkbox", "button", "label", "multi-select", "group"]);
+const CONTROL_TYPES: ReadonlySet<string> = new Set([
+    "text",
+    "number",
+    "date",
+    "select",
+    "checkbox",
+    "button",
+    "label",
+    "multi-select",
+    "group",
+]);
 
 /** Type guard for core `UIControlDescriptor` objects. */
 export function isUIControlDescriptor(value: unknown): value is UIControlDescriptor {
@@ -86,23 +96,33 @@ export function DebouncedInput({ descriptor }: DebouncedInputProps): ReactNode {
             onKeyDown: handleKeyDown,
         }),
         local.length > 0 &&
-            createElement("button", {
-                type: "button",
-                className: "omnigrid-control-clear",
-                "aria-label": "Clear",
-                onClick: handleClear,
-            },
-            "×"),
+            createElement(
+                "button",
+                {
+                    type: "button",
+                    className: "omnigrid-control-clear",
+                    "aria-label": "Clear",
+                    onClick: handleClear,
+                },
+                "×",
+            ),
     );
 }
 
-function withLabel(descriptor: UIControlDescriptor, field: ReactNode, inline: boolean = false, resolveIcon?: (name: string) => ReactNode): ReactNode {
+function withLabel(
+    descriptor: UIControlDescriptor,
+    field: ReactNode,
+    inline: boolean = false,
+    resolveIcon?: (name: string) => ReactNode,
+): ReactNode {
     const className: string = ["omnigrid-control", `omnigrid-control-${descriptor.type}`].join(" ");
     const icon: ReactNode = descriptor.icon && resolveIcon ? resolveIcon(descriptor.icon) : null;
     const body: ReactNode = icon ? createElement("div", { className: "omnigrid-control-body" }, icon, field) : field;
     if (!descriptor.label) return createElement("div", { key: descriptor.id, className }, body);
     const label: ReactNode = createElement("span", { className: "omnigrid-control-label" }, descriptor.label);
-    return inline ? createElement("label", { key: descriptor.id, className }, body, label) : createElement("label", { key: descriptor.id, className }, label, body);
+    return inline
+        ? createElement("label", { key: descriptor.id, className }, body, label)
+        : createElement("label", { key: descriptor.id, className }, label, body);
 }
 
 /**
@@ -242,7 +262,12 @@ function SelectControl({ descriptor }: { descriptor: UISelectControl }): ReactNo
         let node: HTMLElement | null = buttonRef.current;
         while (node && node !== document.body) {
             const style: CSSStyleDeclaration = window.getComputedStyle(node);
-            if (style.overflowY === "auto" || style.overflowY === "scroll" || style.overflow === "auto" || style.overflow === "scroll") {
+            if (
+                style.overflowY === "auto" ||
+                style.overflowY === "scroll" ||
+                style.overflow === "auto" ||
+                style.overflow === "scroll"
+            ) {
                 targets.push(node);
             }
             node = node.parentElement;
@@ -259,10 +284,11 @@ function SelectControl({ descriptor }: { descriptor: UISelectControl }): ReactNo
         };
     }, [isOpen, anchorRect]);
 
-    const currentOption: UISelectControl["options"][number] | undefined = descriptor.options[selectedIndex === -1 ? 0 : selectedIndex];
+    const currentOption: UISelectControl["options"][number] | undefined =
+        descriptor.options[selectedIndex === -1 ? 0 : selectedIndex];
     const label: string = currentOption ? currentOption.label : descriptor.value;
 
-    const listbox: ReactNode | null = (
+    const listbox: ReactNode | null =
         anchorRect &&
         isOpen &&
         createPortal(
@@ -312,8 +338,7 @@ function SelectControl({ descriptor }: { descriptor: UISelectControl }): ReactNo
                 }),
             ),
             document.body,
-        )
-    );
+        );
 
     return createElement(
         "div",
@@ -388,9 +413,7 @@ function MultiSelectControl({ descriptor }: { descriptor: UIMultiSelectControl }
     };
 
     const toggleOption = (val: string, checked: boolean) => {
-        const currentlyChecked = new Set(
-            descriptor.options.filter((opt) => opt.checked).map((opt) => opt.value),
-        );
+        const currentlyChecked = new Set(descriptor.options.filter((opt) => opt.checked).map((opt) => opt.value));
         if (checked) {
             currentlyChecked.add(val);
         } else {
@@ -500,7 +523,11 @@ export function renderControl(descriptor: UIControlDescriptor, resolveIcon?: (na
                 {
                     key: descriptor.id,
                     type: "button",
-                    className: ["omnigrid-control-button", descriptor.variant === "primary" ? "omnigrid-control-button-primary" : null, descriptor.className]
+                    className: [
+                        "omnigrid-control-button",
+                        descriptor.variant === "primary" ? "omnigrid-control-button-primary" : null,
+                        descriptor.className,
+                    ]
                         .filter(Boolean)
                         .join(" "),
                     disabled: descriptor.disabled,
@@ -509,13 +536,25 @@ export function renderControl(descriptor: UIControlDescriptor, resolveIcon?: (na
                 descriptor.text,
             );
         case "label":
-            return createElement("div", { key: descriptor.id, className: ["omnigrid-control-label", descriptor.className].filter(Boolean).join(" ") }, descriptor.text);
+            return createElement(
+                "div",
+                {
+                    key: descriptor.id,
+                    className: ["omnigrid-control-label", descriptor.className].filter(Boolean).join(" "),
+                },
+                descriptor.text,
+            );
         case "group":
             return createElement(
                 "div",
                 {
                     key: descriptor.id,
-                    className: ["omnigrid-control", "omnigrid-control-group", descriptor.direction === "row" ? "omnigrid-control-group-row" : null, descriptor.className]
+                    className: [
+                        "omnigrid-control",
+                        "omnigrid-control-group",
+                        descriptor.direction === "row" ? "omnigrid-control-group-row" : null,
+                        descriptor.className,
+                    ]
                         .filter(Boolean)
                         .join(" "),
                 },
