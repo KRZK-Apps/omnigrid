@@ -21,39 +21,26 @@ plugins. Free **Base** plugins are MIT; commercial **Pro** plugins are distribut
 
 ## Packages in this repository
 
-### Ядро (core)
-
-| Package          | Directory | Description                                                                       |
-| ---------------- | --------- | --------------------------------------------------------------------------------- |
-| `@omnigrid/core` | `core/`   | Headless engine: state store, events, data pipeline, virtualization, slots, icons |
-
-### Адаптеры (adapters)
-
-| Package           | Directory         | Description                        |
-| ----------------- | ----------------- | ---------------------------------- |
-| `@omnigrid/react` | `adapters/react/` | React adapter/renderer (DOM layer) |
-
-### Плагины (plugins)
-
-| Package                           | Directory                      | Description                               |
-| --------------------------------- | ------------------------------ | ----------------------------------------- |
-| `@omnigrid/sorting-plugin`        | `plugins/base/sorting/`        | Column sorting (single + multi)           |
-| `@omnigrid/selection-plugin`      | `plugins/base/selection/`      | Row/cell selection, checkbox column       |
-| `@omnigrid/pagination-plugin`     | `plugins/base/pagination/`     | Client/server pagination, pager in a slot |
-| `@omnigrid/resize-plugin`         | `plugins/base/resize/`         | Column resize                             |
-| `@omnigrid/column-reorder-plugin` | `plugins/base/column-reorder/` | Drag-and-drop column reordering           |
-| `@omnigrid/grouping-plugin`       | `plugins/base/grouping/`       | Row grouping                              |
-| `@omnigrid/quick-filter-plugin`   | `plugins/base/quick-filter/`   | Quick search input mounted into a slot    |
-| `@omnigrid/column-filter-plugin`  | `plugins/base/column-filter/`  | Column filter popup menu                  |
-| `@omnigrid/aggregation-plugin`    | `plugins/base/aggregation/`    | Aggregation                               |
-
-### Стиль и темы (style & themes)
-
-| Package                   | Directory         | Description               |
-| ------------------------- | ----------------- | ------------------------- |
-| `@omnigrid/style`         | `style/`          | Required structural CSS   |
-| `@omnigrid/default-theme` | `themes/default/` | Default light/dark colors |
-| `@omnigrid/mint-theme`    | `themes/mint/`    | Mint light/dark colors    |
+| Package | Description |
+|---|---|
+| **Core** | |
+| `@omnigrid/core` | Headless engine: state store, events, data pipeline, virtualization, slots, icons |
+| **Adapters** | |
+| `@omnigrid/react` | React adapter/renderer (DOM layer) |
+| **Plugins** | |
+| `@omnigrid/sorting-plugin` | Column sorting (single + multi) |
+| `@omnigrid/selection-plugin` | Row/cell selection, checkbox column |
+| `@omnigrid/pagination-plugin` | Client/server pagination, pager in a slot |
+| `@omnigrid/resize-plugin` | Column resize |
+| `@omnigrid/column-reorder-plugin` | Drag-and-drop column reordering |
+| `@omnigrid/grouping-plugin` | Row grouping |
+| `@omnigrid/quick-filter-plugin` | Quick search input mounted into a slot |
+| `@omnigrid/column-filter-plugin` | Column filter popup menu |
+| `@omnigrid/aggregation-plugin` | Aggregation |
+| **Style & themes** | |
+| `@omnigrid/style` | Required structural CSS |
+| `@omnigrid/default-theme` | Default light/dark colors |
+| `@omnigrid/mint-theme` | Mint light/dark colors |
 
 > Commercial Pro plugins (`@omnigrid/plugin-pro`, export, tree data, …) live in a separate private repository.
 
@@ -65,7 +52,10 @@ npm install @omnigrid/core
 # React grid (pulls in core + style + default theme automatically)
 npm install @omnigrid/react
 # Optional plugins / themes
-npm install @omnigrid/<plugin/theme>
+npm install @omnigrid/sorting-plugin @omnigrid/selection-plugin @omnigrid/pagination-plugin
+npm install @omnigrid/resize-plugin @omnigrid/column-reorder-plugin @omnigrid/grouping-plugin
+npm install @omnigrid/quick-filter-plugin @omnigrid/column-filter-plugin @omnigrid/aggregation-plugin
+npm install @omnigrid/mint-theme
 ```
 
 ## Quick start — React
