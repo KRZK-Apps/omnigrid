@@ -1,26 +1,9 @@
 import type { ColumnDef, ColumnLeafDef, GridApi } from "@omnigrid/core";
-import type { AggregationFunc, ResolvedAggregationFunc } from "./types";
+import type { AggregationFunc } from "./types";
 import { DEFAULT_AGGREGATION_FUNCS } from "./types";
 
 export type { AggregationFunc, ResolvedAggregationFunc } from "./types";
 export { DEFAULT_AGGREGATION_FUNCS } from "./types";
-
-/**
- * Module augmentation: adds `aggFunc` to `ColumnLeafDef` so that TypeScript
- * recognizes it when the aggregation plugin is in scope. Core itself does not
- * know about `aggFunc` — it is purely a plugin concern.
- */
-declare module "@omnigrid/core" {
-    interface ColumnLeafDef<T> {
-        /** Aggregation function used when this column is inside a group. */
-        aggFunc?: AggregationFunc<T>;
-    }
-
-    interface PluginApiExtensions<T> {
-        /** Registers column id -> aggregation function mappings. */
-        registerAggregationFuncs: (funcs: Record<string, ResolvedAggregationFunc<T>>) => () => void;
-    }
-}
 
 /**
  * Registry of column id -> aggregation function mappings. Scans column

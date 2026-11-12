@@ -207,8 +207,8 @@ function flattenGroup<T>(
  * group node's `aggregations` map and `childrenCount`.
  *
  * @param root - Root group node.
- * @param aggregations - Column id -> aggregation function map, provided by an
- *   aggregation plugin (e.g. `@omnigrid/aggregation-plugin`).
+ * @param aggregations - Column id -> aggregation function map registered via
+ *   the grid aggregation API.
  * @api
  */
 export function computeAggregations<T>(

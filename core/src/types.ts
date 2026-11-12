@@ -81,6 +81,9 @@ export interface RowNode<T> {
 /** Aggregation function applied to column values within a group. */
 export type AggregationFunc<T = unknown> = (values: unknown[]) => unknown;
 
+/** Resolved aggregation callback registered with the grid grouping engine. */
+export type ResolvedAggregationFunc<T = unknown> = AggregationFunc<T>;
+
 /**
  * A group (aggregated) row produced by the Row Grouping engine.
  *
@@ -486,6 +489,8 @@ export interface ColumnLeafDef<T> extends BaseColumnDef<T> {
      * @api
      */
     maxLines?: number;
+    /** Aggregation function used when this column is inside a group. */
+    aggFunc?: AggregationFunc<T> | string;
     /**
      * Controls whether the cell keeps the theme's internal padding or removes it
      * so custom content can fill the cell.
@@ -1262,7 +1267,10 @@ export interface SlotMount<T> {
  *
  * @api
  */
-export interface PluginApiExtensions<T> {}
+export interface PluginApiExtensions<T> {
+    /** Registers column id -> aggregation function mappings. */
+    registerAggregationFuncs: (funcs: Record<string, ResolvedAggregationFunc<T>>) => () => void;
+}
 
 /**
  * Base grid API surface provided by the core engine.

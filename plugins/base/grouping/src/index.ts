@@ -11,7 +11,6 @@ import type {
     RowId,
     TreeRowNode,
 } from "@omnigrid/core";
-import type { ResolvedAggregationFunc } from "@omnigrid/aggregation-plugin";
 import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
 import type { BuildGroupNode } from "./groupingPipeline";
 import type { GroupingPluginOptions, GroupingColumnConfig } from "./types";
@@ -254,7 +253,7 @@ export class GroupingPlugin<T> implements GridPlugin<T> {
      * @returns Unregister function.
      * @api
      */
-    public registerAggregationFuncs(funcs: Record<string, ResolvedAggregationFunc<T>>): () => void {
+    public registerAggregationFuncs(funcs: Record<string, AggregationFunc<T>>): () => void {
         for (const [key, func] of Object.entries(funcs)) {
             this.aggregationFuncs.set(key, func);
         }
