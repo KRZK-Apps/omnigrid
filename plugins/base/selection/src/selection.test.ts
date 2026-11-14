@@ -223,6 +223,37 @@ describe("SelectionPlugin group selection", () => {
         grid.destroy();
     });
 
+    it("does not count the tree parent row itself as one of its descendant leaves", () => {
+        const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({
+            mode: "multiple",
+            groupSelection: "descendants",
+            showRowCheckboxes: true,
+        });
+        const grid: Grid<Row> = new Grid<Row>({
+            columns: [],
+            data: ROWS,
+            getRowId: (row) => row.id,
+            plugins: [plugin],
+        });
+        grid.registerRowHierarchy({
+            getLeafRowIds: (rowId) => (rowId === "tree-parent" ? ["b"] : undefined),
+        });
+        plugin.setSelectedRowIds(["a", "b"]);
+
+        expect(renderCheckbox(grid, "tree-parent", 0, ROWS[0])).toMatchObject({
+            checked: true,
+            indeterminate: false,
+            group: true,
+        });
+        renderCheckbox(grid, "b", 1, ROWS[1]).onChange({ shiftKey: false, ctrlKey: false });
+        expect(renderCheckbox(grid, "tree-parent", 0, ROWS[0])).toMatchObject({
+            checked: false,
+            indeterminate: false,
+            group: true,
+        });
+        grid.destroy();
+    });
+
     it("limits filteredDescendants to the filtered hierarchy scope", () => {
         const plugin: SelectionPlugin<Row> = new SelectionPlugin<Row>({
             mode: "multiple",

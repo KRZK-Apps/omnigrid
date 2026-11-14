@@ -48,6 +48,7 @@ import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./
 import {
     getCollapsedGroupDisplay,
     getGroupColumnRole,
+    getTreeDataLeafIndent,
     isGroupRowNode,
     poolGetRowId,
     renderGroupCellContent,
@@ -703,6 +704,23 @@ export function OmniGrid<T>({
                     : info.column.valueFormatter
                       ? info.column.valueFormatter(value)
                       : String(value ?? "");
+                const treeDataLeafIndent: number | undefined = getTreeDataLeafIndent(info.data, info.column, grid);
+                if (treeDataLeafIndent !== undefined) {
+                    return createElement(
+                        "span",
+                        {
+                            className: "omnigrid-cell-truncated",
+                            style: {
+                                display: "block",
+                                overflow: "hidden",
+                                paddingLeft: treeDataLeafIndent,
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                            },
+                        },
+                        contentToReactNode(content, bridgeArg),
+                    );
+                }
                 if (collapsedGroupDisplay && grid.getState().groupColumnMode === "single") {
                     return createElement(
                         "span",
@@ -742,9 +760,18 @@ export function OmniGrid<T>({
                     collapsedGroupDisplay !== undefined
                         ? collapsedGroupDisplay.value
                         : getCellValue(rawData, info.column);
-                if (info.column.valueFormatter) return info.column.valueFormatter(value);
-                const valueType = typeof value;
-                if (valueType === "string" || valueType === "number" || valueType === "boolean") return String(value);
+                const treeDataLeafIndent: number | undefined = getTreeDataLeafIndent(info.data, info.column, grid);
+                let placeholder: string | null;
+                if (info.column.valueFormatter) {
+                    placeholder = info.column.valueFormatter(value);
+                } else {
+                    const valueType: string = typeof value;
+                    placeholder = valueType === "string" || valueType === "number" || valueType === "boolean" ? String(value) : null;
+                }
+                if (placeholder !== null && treeDataLeafIndent !== undefined) {
+                    return `${"\u00a0".repeat(Math.ceil(treeDataLeafIndent / 4))}${placeholder}`;
+                }
+                if (placeholder !== null) return placeholder;
                 return null;
             },
             resolveRowClasses: (row) => {

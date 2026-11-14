@@ -9,7 +9,7 @@ import {
 } from "@omnigrid/core";
 import { describe, expect, it } from "vitest";
 
-import { getCollapsedGroupDisplay, renderGroupCellContent } from "./groupCell";
+import { getCollapsedGroupDisplay, getTreeDataLeafIndent, renderGroupCellContent, renderGroupCellPlaceholder } from "./groupCell";
 import type { ContentBridge, PooledCellRenderInfo } from "./types";
 
 interface Row {
@@ -32,6 +32,7 @@ describe("getCollapsedGroupDisplay", () => {
             value: "Licensed",
             level: 2,
         });
+
         expect(getCollapsedGroupDisplay(collapsedRow, nestedColumn, groupBy, "single")).toBeUndefined();
     });
 
@@ -103,5 +104,60 @@ describe("getCollapsedGroupDisplay", () => {
 
         expect(stopPropagation).toHaveBeenCalledOnce();
         expect(toggleGroup).toHaveBeenCalledWith(group.id);
+    });
+});
+
+describe("tree data leaf cells", () => {
+    it("preserves the tree column value for leaves while retaining grouping suppression", () => {
+        const leaf: {
+            type: "leaf";
+            id: string;
+            data: Row;
+            level: number;
+            parent: GroupRowNode<Row>;
+        } = {
+            type: "leaf",
+            id: "leaf",
+            data: { sector: "Europe", cargoCategory: "Chemicals", licenseStatus: "Licensed" },
+            level: 1,
+            parent: {
+                type: "group",
+                id: "parent",
+                field: "sector",
+                key: "Europe",
+                level: 0,
+                expanded: true,
+                childrenCount: 1,
+                aggregations: {},
+                children: [],
+            },
+        };
+        const column: ColumnLeafDef<Row> = { id: "sector", field: "sector" };
+        const treeGrid: GridApi<Row> = {
+            getState: () => ({ groupBy: ["sector"], groupColumnMode: "single" }),
+            methods: { getTreeRows: () => [] },
+        } as unknown as GridApi<Row>;
+        const groupingGrid: GridApi<Row> = {
+            getState: () => ({ groupBy: ["sector"], groupColumnMode: "single" }),
+            methods: {},
+        } as unknown as GridApi<Row>;
+        const info: PooledCellRenderInfo<Row> = {
+            data: leaf as unknown as Row,
+            column,
+            columnIndex: 0,
+            rowId: leaf.id,
+            rowIndex: 1,
+            colSpan: 1,
+        };
+        const bridge: ContentBridge<Row> = { registry: {}, context: () => ({}) as SlotRenderContext<Row> };
+
+        expect(renderGroupCellContent(info, bridge, treeGrid)).toBeUndefined();
+        expect(renderGroupCellPlaceholder(info, treeGrid)).toBeUndefined();
+        expect(renderGroupCellContent(info, bridge, groupingGrid)).toBeDefined();
+        expect(renderGroupCellPlaceholder(info, groupingGrid)).toBe("");
+        expect(getTreeDataLeafIndent(leaf, column, treeGrid)).toBe(50);
+        expect(getTreeDataLeafIndent({ ...leaf, level: 3 }, column, treeGrid)).toBe(90);
+        expect(getTreeDataLeafIndent(leaf, { id: "cargoCategory", field: "cargoCategory" }, treeGrid)).toBeUndefined();
+        expect(getTreeDataLeafIndent(leaf, column, groupingGrid)).toBeUndefined();
     });
 });

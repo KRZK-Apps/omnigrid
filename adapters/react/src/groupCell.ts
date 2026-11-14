@@ -7,8 +7,30 @@ import { type ContentBridge, contentToReactNode } from "./content";
 type ToggleGroupMethod = (groupId: string) => void;
 type GridWithToggleGroup<T> = GridApi<T> & { toggleGroup?: ToggleGroupMethod };
 
+const TREE_DATA_LEVEL_INDENT: number = 20;
+// Align leaf labels with group labels after the 24px toggle and 6px gap.
+const TREE_DATA_LEAF_CONTROL_OFFSET: number = 30;
+
 function isToggleGroupMethod(method: unknown): method is ToggleGroupMethod {
     return typeof method === "function";
+}
+
+function hasTreeDataRowModel<T>(grid: GridApi<T>): boolean {
+    return typeof grid.methods.getTreeRows === "function";
+}
+
+export function getTreeDataLeafIndent<T>(row: unknown, column: ColumnLeafDef<T>, grid: GridApi<T>): number | undefined {
+    if (!hasTreeDataRowModel(grid) || !row || typeof row !== "object" || !("type" in row) || row.type !== "leaf") {
+        return undefined;
+    }
+    if (!("level" in row) || typeof row.level !== "number") return undefined;
+
+    const state = grid.getState();
+    const groupBy: string[] = state.groupBy ?? [];
+    const mode: "single" | "perLevel" = state.groupColumnMode ?? "single";
+    if (!getGroupColumnRole(column, groupBy, mode).isGroupColumn) return undefined;
+
+    return row.level * TREE_DATA_LEVEL_INDENT + TREE_DATA_LEAF_CONTROL_OFFSET;
 }
 
 /**
@@ -185,7 +207,7 @@ export function renderGroupCellContent<T>(
 
     if (getCollapsedGroupDisplay(node, column, groupBy, mode) !== undefined) return undefined;
 
-    if (groupBy.length > 0 && mode === "single") {
+    if (!hasTreeDataRowModel(grid) && groupBy.length > 0 && mode === "single") {
         const role = getGroupColumnRole(column, groupBy, mode);
         if (role.isGroupColumn) {
             return createElement("span", { style: { paddingLeft: node.level * 20 } });
@@ -195,7 +217,7 @@ export function renderGroupCellContent<T>(
             return createElement("span");
         }
     }
-    if (groupBy.length > 0 && mode === "perLevel") {
+    if (!hasTreeDataRowModel(grid) && groupBy.length > 0 && mode === "perLevel") {
         const role = getGroupColumnRole(column, groupBy, mode);
         if (role.isGroupColumn && !showGroupValues) {
             return createElement("span");
@@ -254,13 +276,13 @@ export function renderGroupCellPlaceholder<T>(
 
     if (getCollapsedGroupDisplay(node, column, groupBy, mode) !== undefined) return undefined;
 
-    if (groupBy.length > 0 && mode === "single") {
+    if (!hasTreeDataRowModel(grid) && groupBy.length > 0 && mode === "single") {
         const role = getGroupColumnRole(column, groupBy, mode);
         if (role.isGroupColumn) return "";
         const isGroupField: boolean = groupBy.some((g: string) => column.id === g || column.field === g);
         if (isGroupField) return "";
     }
-    if (groupBy.length > 0 && mode === "perLevel") {
+    if (!hasTreeDataRowModel(grid) && groupBy.length > 0 && mode === "perLevel") {
         const role = getGroupColumnRole(column, groupBy, mode);
         if (role.isGroupColumn && !showGroupValues) return "";
     }
