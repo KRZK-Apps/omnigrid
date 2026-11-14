@@ -69,7 +69,7 @@ include their own light and dark variants; they are not light/dark mode toggles.
 ## Links
 
 - **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/adapters/react
-- **Demo:** https://omnigrid-demo.vercel.app/
+- **Demo:** https://omnigrid.cc/
 - **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
 
 ## License

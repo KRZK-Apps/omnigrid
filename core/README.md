@@ -292,7 +292,7 @@ per-row layouts (memoized per viewport commit) and paints merged widths via
 ## Links
 
 - **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/core
-- **Demo:** https://omnigrid-demo.vercel.app/
+- **Demo:** https://omnigrid.cc/
 - **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
 
 ## License

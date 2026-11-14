@@ -83,4 +83,4 @@ const sorting = useMemo(() => new SortingPlugin<Row>(), []); // one instance per
 - [core/README.md](core/README.md) — core API contracts: `GridApi`, `ColumnDef`, `GridOptions`, events.
 - [adapters/react/README.md](adapters/react/README.md), [plugins/base/sorting/README.md](plugins/base/sorting/README.md), [style/README.md](style/README.md).
 - Full architecture docs live in the workspace `doc/` folder (sibling repo).
-- Demo site: https://omnigrid-demo.vercel.app/
+- Demo site: https://omnigrid.cc/

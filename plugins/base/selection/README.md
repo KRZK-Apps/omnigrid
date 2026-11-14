@@ -55,7 +55,7 @@ selection is available only in `"multiple"` mode.
 ## Links
 
 - **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/selection
-- **Demo:** https://omnigrid-demo.vercel.app/
+- **Demo:** https://omnigrid.cc/
 - **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
 
 ## License

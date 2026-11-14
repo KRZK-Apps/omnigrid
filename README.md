@@ -107,7 +107,7 @@ grid.destroy();
 
 ## Links
 
-- **Demo:** https://omnigrid-demo.vercel.app/
+- **Demo:** https://omnigrid.cc/
 - **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
 
 ## License

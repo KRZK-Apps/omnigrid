@@ -21,7 +21,7 @@ adapter, install a theme package as well; for example,
 ## Links
 
 - **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/style
-- **Demo:** https://omnigrid-demo.vercel.app/
+- **Demo:** https://omnigrid.cc/
 - **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
 
 ## License
