@@ -41,7 +41,7 @@ import type {
     SlotRenderContext,
     ViewportData,
 } from "@omnigrid/core";
-import { DomPool, type GridApi, type RowId, flattenColumns, isActiveCondition } from "@omnigrid/core";
+import { DomPool, type GridApi, type RowClassRules, type RowId, flattenColumns, isActiveCondition } from "@omnigrid/core";
 
 import { CellTooltipLayer } from "./cellTooltip";
 import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
@@ -272,6 +272,21 @@ export function OmniGrid<T>({
     useEffect(() => {
         onGridReadyRef.current?.(grid);
     }, [grid]);
+
+    // Row class rules are resolved when pooled rows rebind (grid revision
+    // change), not on every React render. When the `rowClassRules` prop
+    // reference changes, bump the revision so every visible row re-evaluates
+    // its predicates in a single batch. `rowClassRules` must be referentially
+    // stable between renders unless its dependencies actually changed
+    // (memoize with `useMemo`); otherwise this effect re-fires every render.
+    const prevRowClassRulesRef = useRef<RowClassRules<T> | undefined>(undefined);
+    useEffect(() => {
+        const next = options.rowClassRules;
+        if (next !== prevRowClassRulesRef.current) {
+            prevRowClassRulesRef.current = next;
+            grid.refresh();
+        }
+    }, [grid, options.rowClassRules]);
 
     const autoHeight = style?.height === undefined;
     const rowHeight = grid.getState().rowHeight;
