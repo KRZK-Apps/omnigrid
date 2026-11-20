@@ -684,6 +684,14 @@ export interface GridOptions<T> {
     columnOverscan?: number;
     suppressRowHoverHighlight?: boolean;
     /**
+     * Hides the vertical and horizontal column borders drawn on body (row)
+     * cells. Header borders are left untouched, so column separators remain
+     * visible in the header row while the body appears borderless.
+     * @default false
+     * @api
+     */
+    suppressColumnBorders?: boolean;
+    /**
      * Enables automatic cell flashing when data is mutated via
      * `grid.applyTransaction()`. Cells whose values changed are highlighted
      * with a CSS transition that fades out automatically, except in columns

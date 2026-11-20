@@ -190,6 +190,20 @@
     border-left: 1px solid var(--omnigrid-grid-border);
 }
 
+/* Grid-level opt-out: removes column borders from body (row) cells only.
+   Headers ([role="columnheader"]) keep their borders, so toggling this
+   class affects rows without touching the header row.
+   Borders are kept at 1px width but made transparent so cell content boxes
+   (and therefore cell positions) do not change — no per-cell shift and no
+   cumulative drift across many columns. */
+.omnigrid-no-column-borders [role="cell"] {
+    border-right-color: transparent;
+    border-bottom-color: transparent;
+}
+.omnigrid-no-column-borders .omnigrid-pinned-right [role="cell"]:first-child {
+    border-left-color: transparent;
+}
+
 /* ------------------------------------------------------------------ */
 /* Slot Architecture                                                   */
 /* ------------------------------------------------------------------ */

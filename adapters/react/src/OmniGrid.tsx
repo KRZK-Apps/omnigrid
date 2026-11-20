@@ -353,6 +353,7 @@ export function OmniGrid<T>({
     // only cedes space to the scrollbar once it is really needed.
     const verticalScrollbarGutter = "auto";
     const suppressRowHoverHighlight = options.suppressRowHoverHighlight ?? false;
+    const suppressColumnBorders = options.suppressColumnBorders ?? false;
     const cellFlashRaw = options.cellFlash;
     const cellFlashDurationMs: number | false =
         cellFlashRaw === true ? 1000 : typeof cellFlashRaw === "number" && cellFlashRaw > 0 ? cellFlashRaw : false;
@@ -361,7 +362,7 @@ export function OmniGrid<T>({
         height: autoHeight ? measuredHeight : style?.height,
         ...(cellFlashDurationMs !== false ? { "--omnigrid-flash-duration": `${cellFlashDurationMs}ms` } : {}),
     };
-    const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null]
+    const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null, suppressColumnBorders ? "omnigrid-no-column-borders" : null]
         .filter(Boolean)
         .join(" ");
     const overlayState: OverlayState | undefined = state.overlay;
