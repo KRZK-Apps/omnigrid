@@ -24,6 +24,12 @@ overrides its color variables, including when a framework emits layout CSS
 before the adapter's page CSS. Keep the default theme dependency installed; the
 mint package only replaces the palette and does not include structural styles.
 
+## Links
+
+- **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/themes/mint
+- **Demo:** https://omnigrid.cc/demo/react/theme-builder
+- **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
+
 ## License
 
 MIT © KRZK Apps

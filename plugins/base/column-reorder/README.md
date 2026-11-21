@@ -26,6 +26,12 @@ const grid = new Grid({
 Use the optional `onChange` callback to persist the updated column definitions. The plugin also
 exposes `moveColumn(sourceColumnId, targetColumnId, position)` for programmatic reordering.
 
+## Links
+
+- **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/column-reorder
+- **Demo:** https://omnigrid.cc/demo/react/plugins/base/column-reorder
+- **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
+
 ## License
 
 MIT © KRZK Apps

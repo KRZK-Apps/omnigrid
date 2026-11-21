@@ -93,7 +93,7 @@ no dependency on an icon package.
 ## Links
 
 - **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/pagination
-- **Demo:** https://omnigrid.cc/
+- **Demo:** https://omnigrid.cc/demo/react/plugins/base/pagination
 - **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
 
 ## License

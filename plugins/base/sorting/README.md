@@ -37,7 +37,7 @@ plugin-wide `compare` option. To change the cycle after registration, call
 ## Links
 
 - **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/sorting
-- **Demo:** https://omnigrid.cc/
+- **Demo:** https://omnigrid.cc/demo/react/plugins/base/sorting
 - **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
 
 ## License

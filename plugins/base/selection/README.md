@@ -55,7 +55,7 @@ selection is available only in `"multiple"` mode.
 ## Links
 
 - **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/selection
-- **Demo:** https://omnigrid.cc/
+- **Demo:** https://omnigrid.cc/demo/react/plugins/base/selection
 - **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
 
 ## License

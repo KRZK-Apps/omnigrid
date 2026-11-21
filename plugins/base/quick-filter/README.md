@@ -37,3 +37,13 @@ const grid = new Grid({
     plugins: [plugin],
 });
 ```
+
+## Links
+
+- **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/quick-filter
+- **Demo:** https://omnigrid.cc/demo/react/plugins/base/filtering/quick-filter
+- **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
+
+## License
+
+MIT © KRZK Apps

@@ -13,7 +13,7 @@
         "url": "https://github.com/KRZK-Apps/omnigrid.git",
         "directory": "plugins/base/column-reorder"
     },
-    "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/column-reorder#readme",
+    "homepage": "https://omnigrid.cc/demo/react/plugins/base/column-reorder",
     "bugs": {
         "url": "https://github.com/KRZK-Apps/omnigrid/issues"
     },

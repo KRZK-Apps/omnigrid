@@ -14,7 +14,7 @@
         "url": "https://github.com/KRZK-Apps/omnigrid.git",
         "directory": "plugins/base/quick-filter"
     },
-    "homepage": "https://github.com/KRZK-Apps/omnigrid/tree/main/plugins/base/quick-filter#readme",
+    "homepage": "https://omnigrid.cc/demo/react/plugins/base/filtering/quick-filter",
     "bugs": {
         "url": "https://github.com/KRZK-Apps/omnigrid/issues"
     },

@@ -17,6 +17,12 @@ To replace the default palette with another theme, install and import that
 theme's package in your application after the React adapter. Theme packages
 provide their own light and dark palette overrides.
 
+## Links
+
+- **Source:** https://github.com/KRZK-Apps/omnigrid/tree/main/themes/default
+- **Demo:** https://omnigrid.cc/demo/react/theme-builder
+- **Issues:** https://github.com/KRZK-Apps/omnigrid/issues
+
 ## License
 
 MIT © KRZK Apps
