@@ -10,7 +10,7 @@ You are working on **OmniGrid**, a high-performance, framework-agnostic headless
 - **Monorepo Structure:**
   - `packages/core`: Framework-agnostic engine.
   - `packages/plugins/base`: Free, standard plugins (e.g., Pagination, Sorting, Filtering).
-  - `packages/plugins/pro`: Commercial, paid plugins utilizing local cryptographic license verification[cite: 1].
+  - `packages/plugins/pro`: Commercial, paid plugins requiring a valid commercial license key.
   - `packages/react`: Thin UI adapter layer for React[cite: 1].
 
 ---

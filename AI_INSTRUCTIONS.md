@@ -139,20 +139,13 @@ Pro = commercial plugins in the private `omnigrid-pro/` repo (a sibling of this 
 `@omnigrid/plugin-pro` (license `SEE LICENSE IN LICENSE.PRO.md`). `plugins/pro/` in THIS repo is a
 stub and must stay empty of logic.
 
-License model — **offline, local cryptographic validation**:
+Pro plugins require a valid commercial license key passed to the constructor. License validation
+lives entirely inside the private Pro repo and its implementation details are not documented here.
 
-- The license is a signed token issued by the licensing service and transferred to the customer at
-  purchase time, e.g. `base64(payload) + "." + base64(signature)`.
-- Payload: `{ licensee, tier, pluginIds: string[], issuedAt, expiresAt }`. Signature: **Ed25519**
-  over the payload bytes. The Pro package embeds the **public** verification key.
-- Verification happens **at load / `register()` time, locally**, via the Web Crypto API
-  (`crypto.subtle.verify`). **No network calls at runtime** — offline-friendly, no telemetry, no latency.
-- Constructor contract: `new SomeProPlugin({ licenseKey: string, ...options })`. Verify in the
-  constructor; on any failure throw `OmniGridLicenseError` (exported from the Pro package) and never
-  register/enable the premium feature. The base grid keeps functioning.
-- Never embed private keys, never add license logic to `@omnigrid/core`, `@omnigrid/react`, or base
-  plugins — core stays MIT and license-agnostic. Shared validation helpers (token parsing / signature
-  check) belong inside the private Pro repo only.
+- Constructor contract: `new SomeProPlugin({ licenseKey: string, ...options })`. On validation
+  failure the premium feature must never register/enable, and the base grid keeps functioning.
+- Never add license logic to `@omnigrid/core`, `@omnigrid/react`, or base plugins — core stays MIT
+  and license-agnostic. All license-related helpers belong inside the private Pro repo only.
 
 ## 10. Testing & quality gates
 
