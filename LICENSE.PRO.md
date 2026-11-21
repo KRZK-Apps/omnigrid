@@ -1,7 +1,7 @@
 # OmniGrid Pro Commercial License
 
-`@omnigrid/plugin-pro` and the other Pro plugins are distributed under this commercial license
-and are **not** covered by the repository's MIT license.
+All `@omnigrid/<pro-plugin>` are distributed under this commercial license and are **not** covered
+by the repository's MIT license.
 
 By purchasing, activating, or using a Pro plugin you agree to the terms below. The website
 [Terms and conditions](https://www.omnigrid.cc/terms) apply in addition to this license; where
