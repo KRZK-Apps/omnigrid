@@ -9,9 +9,9 @@ import type {
 } from "@omnigrid/core";
 import { flattenColumns, isColumnGroup } from "@omnigrid/core";
 
-import type { ColumnResizeGuide, ColumnResizePluginOptions } from "./types";
+import type { ColumnResizeGuide, ColumnResizePluginOptions } from "./types.js";
 
-export type { ColumnResizeGuide, ColumnResizePluginOptions } from "./types";
+export type { ColumnResizeGuide, ColumnResizePluginOptions } from "./types.js";
 
 /**
  * Headless column-resize controller.

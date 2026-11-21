@@ -43,8 +43,8 @@ import type {
 } from "@omnigrid/core";
 import { DomPool, type GridApi, type RowClassRules, type RowId, flattenColumns, isActiveCondition } from "@omnigrid/core";
 
-import { CellTooltipLayer } from "./cellTooltip";
-import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content";
+import { CellTooltipLayer } from "./cellTooltip.js";
+import { type ContentBridge, contentToReactNode, hasRenderableContent } from "./content.js";
 import {
     getCollapsedGroupDisplay,
     getGroupColumnRole,
@@ -53,14 +53,14 @@ import {
     poolGetRowId,
     renderGroupCellContent,
     renderGroupCellPlaceholder,
-} from "./groupCell";
-import { computeGroupSegments } from "./groupHeader";
-import { renderDefaultOverlay } from "./overlays";
-import { PooledRowPane } from "./pooledRow";
-import { PopupHost } from "./popup";
-import type { ReactColumnLeafDef } from "./reactColumnDef";
-import { createCellRoot } from "./reactRoot";
-import { getRowRenderParams } from "./rowRenderParams";
+} from "./groupCell.js";
+import { computeGroupSegments } from "./groupHeader.js";
+import { renderDefaultOverlay } from "./overlays.js";
+import { PooledRowPane } from "./pooledRow.js";
+import { PopupHost } from "./popup.js";
+import type { ReactColumnLeafDef } from "./reactColumnDef.js";
+import { createCellRoot } from "./reactRoot.js";
+import { getRowRenderParams } from "./rowRenderParams.js";
 import {
     type ResolvedColumnPresentation,
     resolveCellClasses,
@@ -70,16 +70,16 @@ import {
     resolveGroupHeaderStyle,
     resolveHeaderClasses,
     resolveHeaderStyle,
-} from "./styling";
-import type { PooledColumn, PooledRowCallbacks } from "./types";
+} from "./styling.js";
+import type { PooledColumn, PooledRowCallbacks } from "./types.js";
 import type {
     CellTooltipOptions,
     GridProps,
     OverlayComponent,
     OverlayComponentProps,
     SlotRendererRegistry,
-} from "./types";
-import { useGrid } from "./useGrid";
+} from "./types.js";
+import { useGrid } from "./useGrid.js";
 
 function getCellValue<T>(row: T, column: ColumnLeafDef<T>): unknown {
     if (column.valueGetter) return column.valueGetter(row);

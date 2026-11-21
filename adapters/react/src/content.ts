@@ -3,8 +3,8 @@ import { cloneElement, createElement, Fragment, isValidElement } from "react";
 
 import type { CheckboxControl, SlotNodeContent, SlotRenderContext } from "@omnigrid/core";
 
-import { isUIControlDescriptor, renderControl } from "./controls";
-import type { ContentBridge } from "./types";
+import { isUIControlDescriptor, renderControl } from "./controls.js";
+import type { ContentBridge } from "./types.js";
 
 export type { ContentBridge };
 

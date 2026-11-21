@@ -2,7 +2,7 @@ import { type ReactNode, createElement } from "react";
 
 import type { ColumnLeafDef, GridApi, GroupRowNode, RowId, TreeRowNode } from "@omnigrid/core";
 
-import { type ContentBridge, contentToReactNode } from "./content";
+import { type ContentBridge, contentToReactNode } from "./content.js";
 
 type ToggleGroupMethod = (groupId: string) => void;
 type GridWithToggleGroup<T> = GridApi<T> & { toggleGroup?: ToggleGroupMethod };

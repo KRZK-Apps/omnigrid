@@ -6,17 +6,17 @@ import {
     getColumnGroups,
     getRowSpans,
     resolveColSpan,
-} from "./columns";
-import { EventBus } from "./events";
-import { applyFilterModel, applyQuickFilter, isActiveCondition } from "./filtering";
-import type { ColumnFilterModel, FilterCondition, FilterModel } from "./filtering";
-import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
-import { IconRegistry } from "./icons";
-import { evaluateAutoOverlay } from "./overlays";
-import type { OverlayOptions, OverlayState, OverlayType } from "./overlays";
-import { DataPipeline } from "./pipeline";
-import { SlotManager } from "./slots";
-import { type StateUpdater, Store } from "./store";
+} from "./columns.js";
+import { EventBus } from "./events.js";
+import { applyFilterModel, applyQuickFilter, isActiveCondition } from "./filtering.js";
+import type { ColumnFilterModel, FilterCondition, FilterModel } from "./filtering.js";
+import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline.js";
+import { IconRegistry } from "./icons.js";
+import { evaluateAutoOverlay } from "./overlays.js";
+import type { OverlayOptions, OverlayState, OverlayType } from "./overlays.js";
+import { DataPipeline } from "./pipeline.js";
+import { SlotManager } from "./slots.js";
+import { type StateUpdater, Store } from "./store.js";
 import type {
     AggregationFunc,
     ColumnHeaderExtension,
@@ -48,10 +48,10 @@ import type {
     TreeRowNode,
     ViewportData,
     ViewportState,
-} from "./types";
-import { PopupManager } from "./ui";
-import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
-import { Virtualizer } from "./virtualizer";
+} from "./types.js";
+import { PopupManager } from "./ui.js";
+import type { UIPopupAnchor, UIPopupDescriptor } from "./ui.js";
+import { Virtualizer } from "./virtualizer.js";
 
 export class Grid<T> implements GridApi<T> {
     private readonly store: Store<GridState<T>>;

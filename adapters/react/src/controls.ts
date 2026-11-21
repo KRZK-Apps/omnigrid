@@ -3,7 +3,7 @@ import { createElement, useCallback, useEffect, useMemo, useRef, useState } from
 import { createPortal } from "react-dom";
 
 import type { UIControlDescriptor, UIMultiSelectControl, UISelectControl } from "@omnigrid/core";
-import type { DebouncedInputProps } from "./types";
+import type { DebouncedInputProps } from "./types.js";
 
 export type { DebouncedInputProps };
 

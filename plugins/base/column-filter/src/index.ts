@@ -13,13 +13,13 @@ import type {
     UISelectOption,
 } from "@omnigrid/core";
 import { flattenColumns } from "@omnigrid/core";
-import { inferColumnDataType, resolveFilterType } from "./inference";
-import { ALL_OPERATOR_LABELS, DATE_OPERATORS, NUMBER_OPERATORS, TEXT_OPERATORS } from "./operators";
-import type { ColumnFilterColumnDef } from "./types";
+import { inferColumnDataType, resolveFilterType } from "./inference.js";
+import { ALL_OPERATOR_LABELS, DATE_OPERATORS, NUMBER_OPERATORS, TEXT_OPERATORS } from "./operators.js";
+import type { ColumnFilterColumnDef } from "./types.js";
 
-export { inferColumnDataType, resolveFilterType } from "./inference";
-export { ALL_OPERATOR_LABELS, DATE_OPERATORS, NUMBER_OPERATORS, TEXT_OPERATORS } from "./operators";
-export type { ColumnFilterColumnDef } from "./types";
+export { inferColumnDataType, resolveFilterType } from "./inference.js";
+export { ALL_OPERATOR_LABELS, DATE_OPERATORS, NUMBER_OPERATORS, TEXT_OPERATORS } from "./operators.js";
+export type { ColumnFilterColumnDef } from "./types.js";
 
 declare module "@omnigrid/core" {
     interface ColumnLeafDef<T> extends ColumnFilterColumnDef<T> {}

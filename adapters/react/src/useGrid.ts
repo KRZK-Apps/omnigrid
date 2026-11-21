@@ -2,8 +2,8 @@ import type { ColumnDef as CoreColumnDef, ColumnLeafDef, GridOptions, GridState,
 import { isColumnGroup } from '@omnigrid/core';
 import { Grid } from '@omnigrid/core';
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
-import type { UseGridResult } from "./types";
-import type { ReactGridOptions } from "./reactColumnDef";
+import type { UseGridResult } from "./types.js";
+import type { ReactGridOptions } from "./reactColumnDef.js";
 
 /**
  * Binds the Grid instance from @omnigrid/core to the React lifecycle.

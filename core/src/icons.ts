@@ -1,4 +1,4 @@
-import type { SlotNodeContent } from "./types";
+import type { SlotNodeContent } from "./types.js";
 
 export type IconName =
     | "chevron-left"

@@ -1,23 +1,23 @@
-export { DomPool } from "./dom-pool";
-export { EventBus } from "./events";
-export { evaluateAutoOverlay } from "./overlays";
-export { IconRegistry } from "./icons";
-export type { IconDefinition, IconName } from "./icons";
-export { Grid } from "./grid";
-export { Grid as GridCore } from "./grid";
-export { SlotManager } from "./slots";
-export { Store } from "./store";
-export type { StateUpdater } from "./store";
-export { DataPipeline, PIPELINE_STAGE_ORDER } from "./pipeline";
-export type { PipelineProcessor, PipelineStage } from "./pipeline";
+export { DomPool } from "./dom-pool.js";
+export { EventBus } from "./events.js";
+export { evaluateAutoOverlay } from "./overlays.js";
+export { IconRegistry } from "./icons.js";
+export type { IconDefinition, IconName } from "./icons.js";
+export { Grid } from "./grid.js";
+export { Grid as GridCore } from "./grid.js";
+export { SlotManager } from "./slots.js";
+export { Store } from "./store.js";
+export type { StateUpdater } from "./store.js";
+export { DataPipeline, PIPELINE_STAGE_ORDER } from "./pipeline.js";
+export type { PipelineProcessor, PipelineStage } from "./pipeline.js";
 export {
     applyFilterModel,
     applyQuickFilter,
     isActiveCondition,
     isFilterModelActive,
     matchesColumnFilter,
-} from "./filtering";
-export type { ColumnFilterModel, FilterCondition, FilterModel, FilterOperator } from "./filtering";
+} from "./filtering.js";
+export type { ColumnFilterModel, FilterCondition, FilterModel, FilterOperator } from "./filtering.js";
 export type {
     UIButtonControl,
     UICheckboxDescriptor,
@@ -32,8 +32,8 @@ export type {
     UITextBlockControl,
     UIMultiSelectControl,
     UIMultiSelectOption,
-} from "./ui";
-export type { OverlayOptions, OverlayScope, OverlayState, OverlayType } from "./overlays";
+} from "./ui.js";
+export type { OverlayOptions, OverlayScope, OverlayState, OverlayType } from "./overlays.js";
 export type {
     BlockConfig,
     CellAlign,
@@ -119,7 +119,7 @@ export type {
     ViewportData,
     ViewportState,
     VirtualItem,
-} from "./types";
+} from "./types.js";
 export {
     applyDefaultColumnDef,
     getColumnGroups,
@@ -130,5 +130,5 @@ export {
     getCellSpanningParams,
     resolveColSpan,
     getRowSpans,
-} from "./columns";
-export { Virtualizer, RowHeightRegistry } from "./virtualizer";
+} from "./columns.js";
+export { Virtualizer, RowHeightRegistry } from "./virtualizer.js";

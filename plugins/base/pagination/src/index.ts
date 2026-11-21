@@ -17,7 +17,7 @@ import type {
     PaginationPluginOptions,
     PaginationSlotName,
     PaginationState,
-} from "./types";
+} from "./types.js";
 
 export type {
     PaginationBlockConfig,

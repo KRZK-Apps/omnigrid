@@ -1,4 +1,4 @@
-import type { CellSpan, CellSpanningParams, ColumnDef, ColumnGroupDef, ColumnGroupViewport, ColumnLeafDef, DefaultColumnDef, RowId, RowNode, RowSpanLayout } from "./types";
+import type { CellSpan, CellSpanningParams, ColumnDef, ColumnGroupDef, ColumnGroupViewport, ColumnLeafDef, DefaultColumnDef, RowId, RowNode, RowSpanLayout } from "./types.js";
 
 /**
  * Runtime narrowing: does the column definition describe a GROUP

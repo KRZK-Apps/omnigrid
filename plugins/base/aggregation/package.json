@@ -1,6 +1,6 @@
 {
     "name": "@omnigrid/aggregation-plugin",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Headless aggregation plugin for OmniGrid",
     "keywords": [
         "omnigrid",

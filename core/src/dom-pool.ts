@@ -6,7 +6,7 @@ import type {
     Range,
     RowHost,
     RowId,
-} from "./types";
+} from "./types.js";
 
 export interface DomPoolOptions<T> {
     rowHeight: number;

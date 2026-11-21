@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@omnigrid/core";
-import type { GroupingRow } from "./types";
+import type { GroupingRow } from "./types.js";
 
 export const groupingData: GroupingRow[] = [
     { id: 1, region: "Europe", department: "Sales", sales: 100 },

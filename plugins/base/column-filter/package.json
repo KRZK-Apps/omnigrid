@@ -1,6 +1,6 @@
 {
     "name": "@omnigrid/column-filter-plugin",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Headless column filter popup plugin for OmniGrid",
     "keywords": [
         "omnigrid",

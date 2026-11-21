@@ -16,7 +16,7 @@ import type {
     SelectionRenderer,
     SelectionRendererParams,
     SelectionState,
-} from "./types";
+} from "./types.js";
 
 export type {
     GroupSelectionMode,

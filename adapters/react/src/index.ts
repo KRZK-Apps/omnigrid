@@ -14,17 +14,17 @@ export type {
     ReactColumnLeafDef as ColumnLeafDef,
     ReactGridOptions,
     ReactGridOptions as GridOptions,
-} from "./reactColumnDef";
-export { PooledRowPane } from "./pooledRow";
-export type { ContentBridge, PooledCellRenderInfo, PooledColumn, PooledRowCallbacks, PooledRowModifiers } from "./types";
-export { OmniGrid } from "./OmniGrid";
-export type { GridProps, OverlayComponent, OverlayComponentProps, SlotRendererRegistry } from "./types";
-export { useGrid } from "./useGrid";
-export { DebouncedInput, isUIControlDescriptor, renderControl } from "./controls";
-export type { DebouncedInputProps } from "./controls";
-export { PopupHost } from "./popup";
-export type { PopupHostProps } from "./types";
-export type { UseGridResult } from "./types";
+} from "./reactColumnDef.js";
+export { PooledRowPane } from "./pooledRow.js";
+export type { ContentBridge, PooledCellRenderInfo, PooledColumn, PooledRowCallbacks, PooledRowModifiers } from "./types.js";
+export { OmniGrid } from "./OmniGrid.js";
+export type { GridProps, OverlayComponent, OverlayComponentProps, SlotRendererRegistry } from "./types.js";
+export { useGrid } from "./useGrid.js";
+export { DebouncedInput, isUIControlDescriptor, renderControl } from "./controls.js";
+export type { DebouncedInputProps } from "./controls.js";
+export { PopupHost } from "./popup.js";
+export type { PopupHostProps } from "./types.js";
+export type { UseGridResult } from "./types.js";
 export {
     type ResolvedColumnPresentation,
     resolveCellClasses,
@@ -34,4 +34,4 @@ export {
     resolveGroupHeaderStyle,
     resolveHeaderClasses,
     resolveHeaderStyle,
-} from "./styling";
+} from "./styling.js";

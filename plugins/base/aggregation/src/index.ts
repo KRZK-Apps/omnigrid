@@ -1,9 +1,9 @@
 import type { ColumnDef, ColumnLeafDef, GridApi } from "@omnigrid/core";
-import type { AggregationFunc } from "./types";
-import { DEFAULT_AGGREGATION_FUNCS } from "./types";
+import type { AggregationFunc } from "./types.js";
+import { DEFAULT_AGGREGATION_FUNCS } from "./types.js";
 
-export type { AggregationFunc, ResolvedAggregationFunc } from "./types";
-export { DEFAULT_AGGREGATION_FUNCS } from "./types";
+export type { AggregationFunc, ResolvedAggregationFunc } from "./types.js";
+export { DEFAULT_AGGREGATION_FUNCS } from "./types.js";
 
 /**
  * Registry of column id -> aggregation function mappings. Scans column

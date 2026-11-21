@@ -4,7 +4,7 @@ import type {
     GroupRowNode,
     RowId,
     TreeRowNode,
-} from "./types";
+} from "./types.js";
 
 /** Internal mutable node used while building the group tree. */
 interface BuildGroupNode<T> extends GroupRowNode<T> {

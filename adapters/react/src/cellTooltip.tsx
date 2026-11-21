@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
-import type { CellTooltipRenderContext, CellTooltipRenderer } from "./reactColumnDef";
-import type { CellTooltipOptions } from "./types";
+import type { CellTooltipRenderContext, CellTooltipRenderer } from "./reactColumnDef.js";
+import type { CellTooltipOptions } from "./types.js";
 
 interface TooltipData {
     text: string;

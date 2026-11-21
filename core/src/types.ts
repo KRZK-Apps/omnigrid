@@ -1,12 +1,12 @@
-import type { FilterCondition, FilterModel, FilterOperator } from "./filtering";
-import type { IconRegistry } from "./icons";
-import type { OverlayOptions, OverlayState, OverlayType } from "./overlays";
-import type { DataPipeline, PipelineProcessor, PipelineStage } from "./pipeline";
-import type { SlotManager } from "./slots";
-import type { StateUpdater } from "./store";
-import type { UIPopupAnchor, UIPopupDescriptor } from "./ui";
+import type { FilterCondition, FilterModel, FilterOperator } from "./filtering.js";
+import type { IconRegistry } from "./icons.js";
+import type { OverlayOptions, OverlayState, OverlayType } from "./overlays.js";
+import type { DataPipeline, PipelineProcessor, PipelineStage } from "./pipeline.js";
+import type { SlotManager } from "./slots.js";
+import type { StateUpdater } from "./store.js";
+import type { UIPopupAnchor, UIPopupDescriptor } from "./ui.js";
 
-export type { PipelineProcessor, PipelineStage } from "./pipeline";
+export type { PipelineProcessor, PipelineStage } from "./pipeline.js";
 
 export type RowId = string | number;
 export type SortDirection = "asc" | "desc";

@@ -3,9 +3,9 @@ import { createElement, useEffect, useLayoutEffect, useRef, useState } from "rea
 
 import type { GridApi, SlotRenderContext, UIPopupDescriptor } from "@omnigrid/core";
 
-import type { ContentBridge } from "./content";
-import { contentToReactNode } from "./content";
-import type { PopupHostProps } from "./types";
+import type { ContentBridge } from "./content.js";
+import { contentToReactNode } from "./content.js";
+import type { PopupHostProps } from "./types.js";
 
 const VIEWPORT_MARGIN: number = 8;
 

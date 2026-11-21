@@ -1,4 +1,4 @@
-import type { ColumnLeafDef, Range, VirtualItem } from "./types";
+import type { ColumnLeafDef, Range, VirtualItem } from "./types.js";
 
 export interface VirtualizerOptions {
     rowHeight: number;

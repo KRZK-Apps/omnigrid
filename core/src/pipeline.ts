@@ -1,4 +1,4 @@
-import type { GridState } from "./types";
+import type { GridState } from "./types.js";
 
 /**
  * Stages of the data pipeline executed in ascending order.

@@ -3,7 +3,7 @@ import type {
     SlotMountOptions,
     SlotName,
     SlotProvider,
-} from "./types";
+} from "./types.js";
 
 export interface SlotManagerOptions<T> {
     /**

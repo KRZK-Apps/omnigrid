@@ -10,9 +10,9 @@ import type {
     UIInputControl,
 } from "@omnigrid/core";
 import { applyQuickFilter, flattenColumns, getCellValue } from "@omnigrid/core";
-import type { QuickFilterPluginOptions, QuickFilterSlotName } from "./types";
+import type { QuickFilterPluginOptions, QuickFilterSlotName } from "./types.js";
 
-export type { QuickFilterPluginOptions, QuickFilterSlotName } from "./types";
+export type { QuickFilterPluginOptions, QuickFilterSlotName } from "./types.js";
 
 /**
  * Standalone base plugin providing a global quick filter text input in the top or bottom

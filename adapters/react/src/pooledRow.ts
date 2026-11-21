@@ -1,8 +1,8 @@
 import type { CellAlign, ColumnLeafDef, PooledRow, RowId, RowSpanLayout, RowStyle } from "@omnigrid/core";
 
-import { type ContentBridge, contentToReactNode, isSlotHtmlContent } from "./content";
-import type { CellRoot } from "./reactRoot";
-import type { PooledCellRenderInfo, PooledColumn, PooledRowCallbacks, PooledRowModifiers } from "./types";
+import { type ContentBridge, contentToReactNode, isSlotHtmlContent } from "./content.js";
+import type { CellRoot } from "./reactRoot.js";
+import type { PooledCellRenderInfo, PooledColumn, PooledRowCallbacks, PooledRowModifiers } from "./types.js";
 
 const OFFSCREEN_X = -200000;
 const OFFSCREEN_Y = -200000;

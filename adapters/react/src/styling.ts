@@ -9,7 +9,7 @@ import type {
     HeaderStyle,
     RowStyle,
 } from "@omnigrid/core";
-import type { ResolvedColumnPresentation } from "./types";
+import type { ResolvedColumnPresentation } from "./types.js";
 
 export type { ResolvedColumnPresentation };
 

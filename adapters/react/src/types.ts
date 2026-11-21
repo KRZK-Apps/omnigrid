@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 
 import type { SlotRenderContext, UIInputControl } from "@omnigrid/core";
 
-import type { CellRoot } from "./reactRoot";
-import type { CellTooltipRenderer, ReactGridOptions } from "./reactColumnDef";
+import type { CellRoot } from "./reactRoot.js";
+import type { CellTooltipRenderer, ReactGridOptions } from "./reactColumnDef.js";
 
 /** Tooltip overrides resolved for a particular data column. */
 export interface CellTooltipOptions {

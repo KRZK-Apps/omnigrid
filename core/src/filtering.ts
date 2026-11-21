@@ -1,5 +1,5 @@
-import { flattenColumns, getCellValue } from "./columns";
-import type { ColumnDef, ColumnLeafDef } from "./types";
+import { flattenColumns, getCellValue } from "./columns.js";
+import type { ColumnDef, ColumnLeafDef } from "./types.js";
 
 /**
  * Comparison operators supported by the core filter engine.

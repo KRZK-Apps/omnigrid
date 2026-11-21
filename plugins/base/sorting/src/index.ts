@@ -1,8 +1,8 @@
 import type { ColumnDef, ColumnLeafDef, GridApi, GridPlugin, SortDirection } from "@omnigrid/core";
 import { flattenColumns, isColumnGroup } from "@omnigrid/core";
-import type { SortModelItem } from "./types";
+import type { SortModelItem } from "./types.js";
 
-export type { SortModelItem } from "./types";
+export type { SortModelItem } from "./types.js";
 
 /** Configuration for the sorting plugin. */
 export interface SortingPluginOptions<T> {

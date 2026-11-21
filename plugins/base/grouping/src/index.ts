@@ -11,12 +11,12 @@ import type {
     RowId,
     TreeRowNode,
 } from "@omnigrid/core";
-import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
-import type { BuildGroupNode } from "./groupingPipeline";
-import type { GroupingPluginOptions, GroupingColumnConfig } from "./types";
+import { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline.js";
+import type { BuildGroupNode } from "./groupingPipeline.js";
+import type { GroupingPluginOptions, GroupingColumnConfig } from "./types.js";
 
-export type { GroupingPluginOptions, GroupingColumnConfig } from "./types";
-export { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline";
+export type { GroupingPluginOptions, GroupingColumnConfig } from "./types.js";
+export { buildGroupTree, computeAggregations, flattenTree } from "./groupingPipeline.js";
 
 interface HierarchyCache<T> {
     data: T[];

@@ -1,8 +1,13 @@
 {
     "name": "@omnigrid/column-reorder-plugin",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Headless column drag-and-drop reordering plugin for OmniGrid",
-    "keywords": ["omnigrid", "grid", "column-reorder", "plugin"],
+    "keywords": [
+        "omnigrid",
+        "grid",
+        "column-reorder",
+        "plugin"
+    ],
     "repository": {
         "type": "git",
         "url": "https://github.com/KRZK-Apps/omnigrid.git",
@@ -22,7 +27,9 @@
             "import": "./dist/index.js"
         }
     },
-    "files": ["dist"],
+    "files": [
+        "dist"
+    ],
     "scripts": {
         "build": "npx tsc -p tsconfig.json",
         "lint": "npx tsc --noEmit -p tsconfig.json",
