@@ -8,14 +8,12 @@ OmniGrid is a high-performance, framework-agnostic **headless data grid** for Ty
 
 - `core/` — `@omnigrid/core`: framework-agnostic engine (MIT, zero runtime deps).
 - `adapters/react/` — `@omnigrid/react`: React adapter/renderer; the only DOM-touching layer.
-- `plugins/base/sorting/` — `@omnigrid/sorting-plugin` (free, MIT).
-- `plugins/base/selection/` — `@omnigrid/selection-plugin` (free, MIT).
-- `plugins/base/pagination/` — `@omnigrid/pagination-plugin` (free, MIT).
-- `plugins/pro/` — empty public stub; commercial features ship in the private `omnigrid-pro` repo.
+- `plugins/base/` — free Base plugins (MIT): `@omnigrid/sorting-plugin`, `@omnigrid/selection-plugin`, `@omnigrid/pagination-plugin`, `@omnigrid/resize-plugin`, `@omnigrid/column-reorder-plugin`, `@omnigrid/grouping-plugin`, `@omnigrid/aggregation-plugin`, `@omnigrid/quick-filter-plugin`, `@omnigrid/column-filter-plugin`.
+- `plugins/pro/` — Pro plugins, distributed under a commercial license (`@omnigrid/infinite-scroll-plugin`, `@omnigrid/tree-data-plugin`), shipping from the private `omnigrid-pro` repo.
 - `style/` — `@omnigrid/style`: required structural CSS built on theme CSS variables.
 - `themes/default/`, `themes/mint/` — `@omnigrid/default-theme`, `@omnigrid/mint-theme`: colors via `--omnigrid-*` variables (light + dark).
 
-Sibling repos in the workspace (NOT part of this repo): `omnigrid-demo/` (Next.js demo site) and `omnigrid-pro/` (private, `@omnigrid/plugin-pro`).
+Sibling repos in the workspace (NOT part of this repo): `omnigrid-demo/` (Next.js demo site) and `omnigrid-pro/` (private, source of the commercial Pro plugins `@omnigrid/infinite-scroll-plugin` and `@omnigrid/tree-data-plugin`).
 
 ## Core concepts
 
@@ -23,10 +21,10 @@ Sibling repos in the workspace (NOT part of this repo): `omnigrid-demo/` (Next.j
 - **2D Virtualization** — only rows/columns intersecting the viewport (plus overscan) are rendered. Row nodes are reused from a fixed DOM pool and repositioned with `transform: translateY(...)`; nothing is created/destroyed while scrolling. `Grid#getViewportData()` returns the virtual window with absolute table-space offsets for rows, scrollable columns, and left/right pinned columns.
 - **Scroll is not state** — `scrollTop`/`scrollLeft` are ephemeral (not in the observable Store); scroll-only `setViewport` calls never notify subscribers, so adapters do not re-render per scroll frame.
 - **Data Pipeline** — `raw data → filter → sort → group → paginate → virtual viewport`. Plugins attach pure transforms (`T[] → T[]`) via `api.registerDataProcessor(fn)`.
-- **Plugin System** — plugins implement `{ name, register(api): () => void }`. Base plugins: sorting, selection, pagination (free, MIT). Pro plugins (`@omnigrid/plugin-pro`, private repo): grouping/aggregation, tree data, export, advanced selection.
+- **Plugin System** — plugins implement `{ name, register(api): () => void }`. Base plugins (free, MIT): sorting, selection, pagination, resize, column-reorder, grouping, aggregation, quick-filter, column-filter. Pro plugins (commercial, private repo): infinite-scroll (`@omnigrid/infinite-scroll-plugin`), tree data (`@omnigrid/tree-data-plugin`).
 - **Slot Architecture** — plugins mount headless widgets into named zones `top | bottom | left | right` via `api.slots.mount(slot, content, options)`. Content is framework-agnostic (text, declarative `SlotNodeContent` nodes, HTML, or native adapter components); order via `priority`, alignment via `position`.
 - **React bindings (`@omnigrid/react`)** — a thin adapter: `<OmniGrid columns={...} data={...} plugins={[...]}/>` and a `useGrid()` hook. Renders pooled rows, `transform`-based positioning, `createRoot` cell portals, and CSS-variable column widths.
-- **License verification (Pro)** — offline, local cryptographic validation. Pro plugin constructors accept a `licenseKey`; the package verifies an Ed25519-signed license token against an embedded public key (Web Crypto). No network calls at runtime. Invalid or missing keys make the plugin refuse to register — the grid stays functional.
+- **License verification (Pro)** — Pro plugins require a valid commercial license key passed to the constructor. License validation lives entirely inside the private Pro repo; an invalid or missing key makes the plugin refuse to register, and the grid stays functional.
 
 ## Quick start — Core (headless)
 

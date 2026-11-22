@@ -42,7 +42,7 @@ plugins. Free **Base** plugins are MIT; commercial **Pro** plugins are distribut
 | `@omnigrid/default-theme`         | Default light/dark colors                                                         |
 | `@omnigrid/mint-theme`            | Mint light/dark colors                                                            |
 
-> Commercial Pro plugins (`@omnigrid/plugin-pro`, export, tree data, …) live in a separate private repository.
+> Commercial **Pro** plugins (`@omnigrid/infinite-scroll-plugin`, `@omnigrid/tree-data-plugin`, …) are distributed under a commercial license from a separate private repository. See [`LICENSE.PRO.md`](LICENSE.PRO.md).
 
 ## Install
 
@@ -113,4 +113,4 @@ grid.destroy();
 ## License
 
 Base packages (core, react, base plugins, style, themes): **MIT** © KRZK Apps.
-Pro plugins (`@omnigrid/plugin-pro`): commercial license.
+Pro plugins (`@omnigrid/infinite-scroll-plugin`, `@omnigrid/tree-data-plugin`): commercial license — see [`LICENSE.PRO.md`](LICENSE.PRO.md).
