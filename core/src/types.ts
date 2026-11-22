@@ -1440,6 +1440,7 @@ export interface CoreGridApi<T> {
         event: EventName,
         listener: (payload: GridEvents<T>[EventName]) => void,
     ): () => void;
+    onAny(listener: (event: string, payload: unknown) => void): () => void;
     /** Emits a typed grid event for plugin-to-plugin and adapter notifications. */
     emit<EventName extends keyof GridEvents<T>>(event: EventName, payload: GridEvents<T>[EventName]): void;
     registerPlugin(plugin: GridPlugin<T>): () => void;

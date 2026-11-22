@@ -1791,36 +1791,38 @@ export function OmniGrid<T>({
                 width,
             }}
         >
-            {Array.from({ length: headerRowCount }, (_, depth) => (
+            <div role="rowgroup">
+                {Array.from({ length: headerRowCount }, (_, depth) => (
+                    <div
+                        key={`group-row-${depth}`}
+                        role="row"
+                        className="omnigrid-header-row omnigrid-header-group-row"
+                        style={{
+                            height: rowHeight,
+                            left: 0,
+                            overflow: "hidden",
+                            position: "absolute",
+                            top: depth * rowHeight,
+                            width: "100%",
+                        }}
+                    >
+                        {renderGroupCells(depth, columns, originX)}
+                    </div>
+                ))}
                 <div
-                    key={`group-row-${depth}`}
                     role="row"
-                    className="omnigrid-header-row omnigrid-header-group-row"
+                    className="omnigrid-header-row"
                     style={{
                         height: rowHeight,
                         left: 0,
-                        overflow: "hidden",
+                        overflow: "visible",
                         position: "absolute",
-                        top: depth * rowHeight,
+                        top: headerRowCount * rowHeight,
                         width: "100%",
                     }}
                 >
-                    {renderGroupCells(depth, columns, originX)}
+                    {renderHeaderCells(columns, originX)}
                 </div>
-            ))}
-            <div
-                role="row"
-                className="omnigrid-header-row"
-                style={{
-                    height: rowHeight,
-                    left: 0,
-                    overflow: "visible",
-                    position: "absolute",
-                    top: headerRowCount * rowHeight,
-                    width: "100%",
-                }}
-            >
-                {renderHeaderCells(columns, originX)}
             </div>
         </div>
     );

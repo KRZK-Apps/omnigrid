@@ -73,4 +73,9 @@ declare module "@omnigrid/core" {
         /** Clears the current selection. */
         clearSelection?: () => void;
     }
+
+    interface GridEvents<T> {
+        /** Fired when the selected rows change. Payload is the new selection state. */
+        "selection:change": SelectionState<T>;
+    }
 }

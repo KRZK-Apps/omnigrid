@@ -494,6 +494,7 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
         this.api.setState((prev) => ({ ...prev, selection: this.getSelectionState() }));
         this.api.refresh();
         this.onSelectionChange?.(this.getSelectionState());
+        this.api.emit("selection:change", this.getSelectionState());
     }
 
     private validateSelection(): void {

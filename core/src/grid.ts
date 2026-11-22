@@ -1318,6 +1318,11 @@ export class Grid<T> implements GridApi<T> {
         return this.events.on(event, listener);
     }
 
+    public onAny(listener: (event: string, payload: unknown) => void): () => void {
+        this.assertActive();
+        return this.events.onAny(listener);
+    }
+
     public emit<EventName extends keyof GridEvents<T>>(event: EventName, payload: GridEvents<T>[EventName]): void {
         this.assertActive();
         this.events.emit(event, payload);
