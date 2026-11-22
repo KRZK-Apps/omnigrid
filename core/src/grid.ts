@@ -80,6 +80,8 @@ export class Grid<T> implements GridApi<T> {
     private readonly popups = new PopupManager((popup) => this.events.emit("popupChange", popup));
     private revision = 0;
     private destroyed = false;
+    /** Guards the coalesced `stateChange` microtask so one synchronous tick emits at most one event. */
+    private stateChangeScheduled = false;
 
     /**
      * Overlay management state:
@@ -161,7 +163,7 @@ export class Grid<T> implements GridApi<T> {
         });
         this.slots = new SlotManager<T>({
             onChange: (slot: SlotName, mounts: SlotMount<T>[]) => {
-                this.store.setState({});
+                this.store.setState({}, { force: true });
                 this.events.emit("slotsChange", { slot, mounts });
             },
         });
@@ -171,7 +173,7 @@ export class Grid<T> implements GridApi<T> {
             this.groupedRowsRevision = -1;
             if (!this.destroyed) this.recomputeOverlay();
         });
-        this.store.subscribe(() => this.events.emit("stateChange", this.store.getState()));
+        this.store.subscribe(() => this.scheduleStateChange());
         options.plugins?.forEach((plugin) => this.registerPlugin(plugin));
         this.recomputeOverlay();
     }
@@ -820,12 +822,42 @@ export class Grid<T> implements GridApi<T> {
         return clone;
     }
 
+    /**
+     * Shallow structural comparison of two filter models. Conditions are
+     * compared by operator and operands so an equivalent re-applied model is
+     * detected without allocating a canonical string form.
+     */
+    private static filterModelsEqual(left: FilterModel, right: FilterModel): boolean {
+        const leftKeys: string[] = Object.keys(left);
+        const rightKeys: string[] = Object.keys(right);
+        if (leftKeys.length !== rightKeys.length) return false;
+        for (const key of leftKeys) {
+            const a: ColumnFilterModel | undefined = left[key];
+            const b: ColumnFilterModel | undefined = right[key];
+            if (!a || !b) return false;
+            if (a.logic !== b.logic) return false;
+            if (a.conditions.length !== b.conditions.length) return false;
+            for (let index = 0; index < a.conditions.length; index += 1) {
+                const ca: FilterCondition = a.conditions[index]!;
+                const cb: FilterCondition = b.conditions[index]!;
+                if (ca.operator !== cb.operator) return false;
+                if (!Object.is(ca.value, cb.value)) return false;
+                if (!Object.is(ca.valueTo, cb.valueTo)) return false;
+                if (!Object.is(ca.caseSensitive, cb.caseSensitive)) return false;
+            }
+        }
+        return true;
+    }
+
     public setFilterModel(model: FilterModel): void {
         this.assertActive();
         const next: FilterModel = {};
         for (const [key, entry] of Object.entries(Grid.cloneFilterModel(model))) {
             if (entry.conditions.length > 0) next[key] = entry;
         }
+        // Repeated writes of an equivalent model (e.g. a controlled prop
+        // re-applied on every render) must not trigger stateChange/filterChanged.
+        if (Grid.filterModelsEqual(this.filterModel, next)) return;
         this.filterModel = next;
         this.filteredDataCache = null;
         this.processedDataCache = null;
@@ -833,7 +865,8 @@ export class Grid<T> implements GridApi<T> {
         this.groupedRowsRevision = -1;
         this.revision += 1;
         this.scrollTo({ scrollTop: 0 });
-        this.store.setState({});
+        // The filter model lives outside the Store, so force a repaint notification.
+        this.store.setState({}, { force: true });
         this.recomputeOverlay();
         this.events.emit("filterChanged", this.getFilterModel());
     }
@@ -954,7 +987,7 @@ export class Grid<T> implements GridApi<T> {
         const previousHeight: number = this.virtualizer.getRowHeight(rowIndex);
         const correction: number = this.virtualizer.setRowHeight(rowIndex, height, scrollTop, count);
         if (this.virtualizer.getRowHeight(rowIndex) === previousHeight) return 0;
-        if (options?.notify !== false) this.store.setState({});
+        if (options?.notify !== false) this.store.setState({}, { force: true });
         if (correction !== 0 && options?.anchor !== false) {
             this.scrollTo({ scrollTop: scrollTop + correction });
         }
@@ -974,7 +1007,7 @@ export class Grid<T> implements GridApi<T> {
         const count: number = this.getProcessedData().length;
         const scrollTop: number = this.scrollPosition.scrollTop;
         const correction: number = this.virtualizer.resetRowHeight(rowIndex, scrollTop, count);
-        if (options?.notify !== false) this.store.setState({});
+        if (options?.notify !== false) this.store.setState({}, { force: true });
         if (correction !== 0 && options?.anchor !== false) {
             this.scrollTo({ scrollTop: scrollTop + correction });
         }
@@ -986,7 +1019,7 @@ export class Grid<T> implements GridApi<T> {
         this.assertActive();
         this.virtualizer.resetAllRowHeights();
         this.revision += 1;
-        this.store.setState({});
+        this.store.setState({}, { force: true });
     }
 
     /**
@@ -1243,6 +1276,25 @@ export class Grid<T> implements GridApi<T> {
     }
 
     /**
+     * Coalesces `stateChange` into a single microtask per synchronous tick.
+     *
+     * A burst of synchronous state updates (e.g. a page change that writes both
+     * the pagination slice and the dataset) collapses into ONE `stateChange`
+     * carrying the final snapshot, instead of a stream of intermediate events.
+     * Domain events (`dataChange`, `viewportChange`, `overlayChange`) stay
+     * synchronous and precise.
+     */
+    private scheduleStateChange(): void {
+        if (this.stateChangeScheduled) return;
+        this.stateChangeScheduled = true;
+        queueMicrotask(() => {
+            this.stateChangeScheduled = false;
+            if (this.destroyed) return;
+            this.events.emit("stateChange", this.store.getState());
+        });
+    }
+
+    /**
      * Repaints the current viewport: notifies Store subscribers that
      * visible rows and row classes (rowClassRules) may need rebinding
      * in a single batch. Increments revision so adapters can detect
@@ -1251,7 +1303,7 @@ export class Grid<T> implements GridApi<T> {
     public refresh(): void {
         this.assertActive();
         this.revision += 1;
-        this.store.setState({});
+        this.store.setState({}, { force: true });
     }
 
     /**
@@ -1351,12 +1403,12 @@ export class Grid<T> implements GridApi<T> {
         this.assertActive();
         const registered: ColumnHeaderExtension<T> = { ...extension };
         this.headerExtensions.set(extension.id, registered);
-        this.store.setState({});
+        this.store.setState({}, { force: true });
 
         return () => {
             if (this.headerExtensions.get(extension.id) !== registered) return;
             this.headerExtensions.delete(extension.id);
-            if (!this.destroyed) this.store.setState({});
+            if (!this.destroyed) this.store.setState({}, { force: true });
         };
     }
 

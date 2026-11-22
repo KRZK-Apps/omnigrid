@@ -7,7 +7,7 @@ export { Grid } from "./grid.js";
 export { Grid as GridCore } from "./grid.js";
 export { SlotManager } from "./slots.js";
 export { Store } from "./store.js";
-export type { StateUpdater } from "./store.js";
+export type { SetStateOptions, StateUpdater } from "./store.js";
 export { DataPipeline, PIPELINE_STAGE_ORDER } from "./pipeline.js";
 export type { PipelineProcessor, PipelineStage } from "./pipeline.js";
 export {

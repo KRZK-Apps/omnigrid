@@ -103,8 +103,7 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
     private readonly pageInputCharacters: number;
     private readonly mode: "client" | "server";
     private readonly onChange: PaginationPluginOptions<T>["onChange"];
-    private unsubscribeViewport: (() => void) | undefined;
-    private unsubscribeState: (() => void) | undefined;
+    private unsubscribeStore: (() => void) | undefined;
     private unregisterMethods: (() => void) | undefined;
     private lastAutoPageSize: number | undefined;
 
@@ -191,8 +190,11 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
         });
         api.setState((prev) => ({ ...prev, pagination: this.getState() }));
         this.lastAutoPageSize = this.pageSize === 0 ? this.getEffectivePageSize() : undefined;
-        this.unsubscribeViewport = api.on("viewportChange", () => this.handleViewportChange());
-        this.unsubscribeState = api.on("stateChange", () => this.handleViewportChange());
+        // Auto page size depends on the viewport height AND the header height
+        // (which changes with column groups). A single synchronous Store
+        // subscription covers both cases and — unlike `viewportChange` — never
+        // runs on scroll-only frames, since those bypass the Store entirely.
+        this.unsubscribeStore = api.subscribe(() => this.handleViewportChange());
 
         this.slotMounts = this.blockConfigs.map((config) => {
             const id = `${SLOT_ID}:${config.name}`;
@@ -212,10 +214,8 @@ export class PaginationPlugin<T> implements GridPlugin<T> {
             this.unregisterProcessor = undefined;
             this.unregisterMethods?.();
             this.unregisterMethods = undefined;
-            this.unsubscribeViewport?.();
-            this.unsubscribeViewport = undefined;
-            this.unsubscribeState?.();
-            this.unsubscribeState = undefined;
+            this.unsubscribeStore?.();
+            this.unsubscribeStore = undefined;
             this.slotMounts.forEach((mount) => mount.unmount());
             this.slotMounts = [];
             if (this.api && !this.api.isDestroyed()) {
