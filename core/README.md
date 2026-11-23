@@ -254,7 +254,7 @@ In a UI framework, use the adapter — e.g. `@omnigrid/react`:
     data={rows}
     getRowId={(row) => row.id}
     plugins={plugins}
-    style={{ height: 480 }}
+    height={480}
 />
 ```
 

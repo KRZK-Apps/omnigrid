@@ -18,7 +18,7 @@ export type {
 export { PooledRowPane } from "./pooledRow.js";
 export type { ContentBridge, PooledCellRenderInfo, PooledColumn, PooledRowCallbacks, PooledRowModifiers } from "./types.js";
 export { OmniGrid } from "./OmniGrid.js";
-export type { GridProps, OverlayComponent, OverlayComponentProps, SlotRendererRegistry } from "./types.js";
+export type { GridProps, GridSizingMode, OverlayComponent, OverlayComponentProps, SlotRendererRegistry } from "./types.js";
 export { useGrid } from "./useGrid.js";
 export { DebouncedInput, isUIControlDescriptor, renderControl } from "./controls.js";
 export type { DebouncedInputProps } from "./controls.js";

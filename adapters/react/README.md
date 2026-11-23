@@ -22,6 +22,24 @@ const data = [...];
 <OmniGrid columns={columns} data={data} />;
 ```
 
+The grid fills its parent's available height by default. Give the parent a
+constrained height (for example, in a flex layout) and the adapter measures the
+actual viewport with `ResizeObserver`. Use `height` for a fixed grid height, or
+set `sizingMode="auto"` to grow the grid with its rows. Supplying `height`
+without `sizingMode` selects fixed sizing; explicitly setting
+`sizingMode="fixed"` requires `height`:
+
+```tsx
+<OmniGrid columns={columns} data={data} height={480} />
+<OmniGrid columns={columns} data={data} sizingMode="auto" />
+```
+
+`minHeight` applies only to auto-height grids. Auto-height renders the full row
+content and should be avoided for large datasets when vertical virtualization
+is needed. `style` remains available for CSS customization; use `height` and
+`sizingMode` to select the grid's sizing behavior. A legacy `style.height` can
+still size the outer element in fill mode, but it no longer selects auto-height.
+
 Set `animateRows` to animate visible rows when filtering or sorting changes their
 positions. Row animation uses a separate CSS transform component, so virtualized
 positioning and scrolling remain independent. It is disabled by default; provide

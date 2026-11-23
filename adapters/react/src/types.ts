@@ -101,14 +101,28 @@ export type OverlayComponentProps<T> = import("@omnigrid/core").OverlayComponent
 export type OverlayComponent<T> =
     import("react").ComponentType<import("@omnigrid/core").OverlayComponentProps<T>> | import("@omnigrid/core").OverlayComponent<T>;
 
-export interface GridProps<T> extends Omit<ReactGridOptions<T>, "overlayComponents"> {
+interface GridPropsBase<T> extends Omit<ReactGridOptions<T>, "overlayComponents"> {
     className?: string;
     style?: import("react").CSSProperties;
     /**
-     * Minimum grid height in rows when `style.height` is not set (auto-height
-     * mode). The viewport will be at least `headerHeight + minHeight *
-     * rowHeight` tall so the grid does not collapse when it has few or no
-     * rows. Set to `0` to disable.
+     * Height behavior. Defaults to `fill`, unless `height` is provided without
+     * an explicit mode, which selects `fixed`.
+     *
+     * @api
+     * @default "fill"
+     */
+    sizingMode?: GridSizingMode;
+    /**
+     * Explicit height for `fixed` sizing. When provided without `sizingMode`,
+     * the grid uses `fixed` sizing.
+     *
+     * @api
+     */
+    height?: import("react").CSSProperties["height"];
+    /**
+     * Minimum grid height in rows in `auto` sizing mode. The viewport will be
+     * at least `headerHeight + minHeight * rowHeight` tall so it does not
+     * collapse when it has few or no rows. Set to `0` to disable.
      *
      * @api
      * @default 3
@@ -129,6 +143,25 @@ export interface GridProps<T> extends Omit<ReactGridOptions<T>, "overlayComponen
     slotComponents?: SlotRendererRegistry<T>;
     overlayComponents?: Record<string, import("@omnigrid/core").OverlayComponent<T>>;
 }
+
+/**
+ * Controls how the grid obtains its height.
+ *
+ * @api
+ */
+export type GridSizingMode = "fixed" | "fill" | "auto";
+
+/**
+ * React adapter props with explicit grid sizing.
+ *
+ * @api
+ */
+export type GridProps<T> = GridPropsBase<T> &
+    (
+        | { sizingMode: "fixed"; height: NonNullable<import("react").CSSProperties["height"]> }
+        | { sizingMode: "fill" | "auto"; height?: never }
+        | { sizingMode?: undefined; height?: import("react").CSSProperties["height"] }
+    );
 
 /**
  * Pre-resolved presentation (classes and inline styles) for a column data body.

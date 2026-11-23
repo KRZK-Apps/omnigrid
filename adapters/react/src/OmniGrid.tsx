@@ -185,6 +185,8 @@ function createRowLayerState<T>(): RowLayerState<T> {
 export function OmniGrid<T>({
     className,
     style,
+    height,
+    sizingMode: sizingModeProp,
     slotComponents,
     cellTooltipRenderer,
     cellTooltipClassName,
@@ -305,7 +307,16 @@ export function OmniGrid<T>({
         }
     }, [grid, options.rowClassRules]);
 
-    const autoHeight = style?.height === undefined;
+    const sizingMode = sizingModeProp ?? (height !== undefined ? "fixed" : "fill");
+    if (sizingMode === "fixed" && height === undefined) {
+        throw new Error('OmniGrid requires the "height" prop when sizingMode is "fixed".');
+    }
+    const autoHeight = sizingMode === "auto";
+    const styleHeight = style?.height;
+    const gridStyle: CSSProperties = { ...style };
+    delete gridStyle.height;
+    const layoutHeight: CSSProperties["height"] =
+        sizingMode === "fixed" ? height : sizingMode === "fill" ? (styleHeight ?? "100%") : undefined;
     const rowHeight = grid.getState().rowHeight;
 
     // Column-group header stack: `headerRowCount` group rows (one per depth) above
@@ -369,8 +380,7 @@ export function OmniGrid<T>({
     const cellFlashDurationMs: number | false =
         cellFlashRaw === true ? 1000 : typeof cellFlashRaw === "number" && cellFlashRaw > 0 ? cellFlashRaw : false;
     const viewportStyle = {
-        ...style,
-        height: autoHeight ? measuredHeight : style?.height,
+        ...gridStyle,
         ...(cellFlashDurationMs !== false ? { "--omnigrid-flash-duration": `${cellFlashDurationMs}ms` } : {}),
     };
     const viewportClassName = ["omnigrid", className, suppressRowHoverHighlight ? "omnigrid-no-row-hover" : null, suppressColumnBorders ? "omnigrid-no-column-borders" : null]
@@ -1226,7 +1236,7 @@ export function OmniGrid<T>({
         // back to minWidth) and only snap to the correct size after the
         // ResizeObserver-driven useEffect runs — a visible flash on first load.
         measureViewport();
-    }, [autoHeight, hasVerticalOverflow, measureViewport, overlayScope]);
+    }, [autoHeight, hasVerticalOverflow, height, measureViewport, overlayScope, sizingMode, styleHeight]);
 
     useEffect(() => {
         const unsubscribe: () => void = grid.on("scrollTo", (position) => {
@@ -1833,6 +1843,10 @@ export function OmniGrid<T>({
                 top: 0,
                 zIndex: isPinned ? 4 : 2,
                 width,
+                // Force own compositing layer to fix Edge 1px sticky shift during scroll
+                transform: "translateZ(0)",
+                willChange: "transform",
+                backfaceVisibility: "hidden",
             }}
         >
             <div role="rowgroup">
@@ -1885,6 +1899,10 @@ export function OmniGrid<T>({
                 top: headerHeight,
                 visibility: isViewportMeasured ? undefined : "hidden",
                 width,
+                // Force own compositing layer to fix Edge 1px sticky shift during scroll
+                transform: "translateZ(0)",
+                willChange: "transform",
+                backfaceVisibility: "hidden",
             }}
         />
     );
@@ -1893,7 +1911,13 @@ export function OmniGrid<T>({
         <div
             className="omnigrid-layout"
             ref={layoutRef}
-            style={{ ...style, position: "relative", ...(isFullOverlay ? { overflow: "hidden" } : {}) }}
+            style={{
+                ...gridStyle,
+                height: layoutHeight,
+                ...(sizingMode === "fill" ? { flex: "1 1 0", minHeight: 0 } : {}),
+                position: "relative",
+                ...(isFullOverlay ? { overflow: "hidden" } : {}),
+            }}
         >
             {renderSlot("top")}
             <div className="omnigrid-layout-body">
