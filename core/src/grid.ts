@@ -5,6 +5,8 @@ import {
     getCellValue,
     getColumnGroups,
     getRowSpans,
+    inferColumns,
+    isColumnGroup,
     resolveColSpan,
 } from "./columns.js";
 import { EventBus } from "./events.js";
@@ -97,6 +99,9 @@ export class Grid<T> implements GridApi<T> {
     private loadError: unknown;
     private overlayState: OverlayState = { type: null };
     private overlayManual = false;
+    private autoColumnsPending = false;
+    private readonly autoColumnHeaderMode: GridOptions<T>["autoColumnHeaderMode"];
+    private readonly getColumnHeader: GridOptions<T>["getColumnHeader"];
     /** Grid-level `wrapText` flag — applied to every column without an explicit one. */
     private wrapTextAll: boolean | undefined;
 
@@ -116,9 +121,19 @@ export class Grid<T> implements GridApi<T> {
     private scrollPosition: ScrollPosition = { scrollTop: 0, scrollLeft: 0 };
 
     public constructor(options: GridOptions<T>) {
+        this.autoColumnsPending = options.columns === undefined && (options.data?.length ?? 0) === 0;
+        this.autoColumnHeaderMode = options.autoColumnHeaderMode;
+        this.getColumnHeader = options.getColumnHeader;
         const state: GridState<T> = {
             data: options.data ?? [],
-            columns: applyWrapText(applyDefaultColumnDef(options.columns, options.defaultColumnDef), options.wrapText),
+            columns: applyWrapText(
+                applyDefaultColumnDef(
+                    options.columns ??
+                        inferColumns(options.data, options.getColumnHeader, options.autoColumnHeaderMode),
+                    options.defaultColumnDef,
+                ),
+                options.wrapText,
+            ),
             viewport: { width: 0, height: 0, scrollTop: 0, scrollLeft: 0 },
             rowHeight: options.rowHeight ?? 32,
             groupBy: [],
@@ -1043,18 +1058,59 @@ export class Grid<T> implements GridApi<T> {
         return this.virtualizer.getRowHeight(rowIndex);
     }
 
+    private resolvePendingAutoColumns(data: T[]): GridState<T>["columns"] | undefined {
+        if (!this.autoColumnsPending || data.length === 0) return undefined;
+
+        const inferredColumns: ColumnLeafDef<T>[] = inferColumns(data, this.getColumnHeader, this.autoColumnHeaderMode);
+        const inferredById: Map<string, ColumnLeafDef<T>> = new Map(inferredColumns.map((column) => [column.id, column]));
+        const currentColumns: GridState<T>["columns"] = this.store.getState().columns;
+        const currentIds: Set<string> = new Set();
+        const mergedColumns: GridState<T>["columns"] = [];
+
+        currentColumns.forEach((currentColumn) => {
+            const inferredColumn: ColumnLeafDef<T> | undefined = inferredById.get(currentColumn.id);
+            if (inferredColumn && !isColumnGroup(currentColumn)) {
+                mergedColumns.push({
+                    ...inferredColumn,
+                    ...currentColumn,
+                    id: inferredColumn.id,
+                    field: inferredColumn.field,
+                    header: inferredColumn.header,
+                });
+            } else {
+                mergedColumns.push(currentColumn);
+            }
+            currentIds.add(currentColumn.id);
+        });
+
+        inferredColumns.forEach((column) => {
+            if (!currentIds.has(column.id)) mergedColumns.push(column);
+        });
+
+        this.autoColumnsPending = false;
+        return mergedColumns;
+    }
+
     public setData(data: T[] | null | undefined): void {
         this.assertActive();
         this.loadError = undefined;
         this.hasData = data !== undefined && data !== null;
         const nextData: T[] = data ?? [];
+        const inferredColumns: GridState<T>["columns"] | undefined = this.resolvePendingAutoColumns(nextData);
         this.filteredDataCache = null;
         this.processedDataCache = null;
         this.groupedRowsCache = null;
         this.groupedRowsRevision = -1;
         this.virtualizer.resetAllRowHeights();
         this.revision += 1;
-        this.store.setState({ data: nextData });
+        const nextState: Partial<GridState<T>> = { data: nextData };
+        if (inferredColumns !== undefined) {
+            nextState.columns = applyWrapText(
+                applyDefaultColumnDef(inferredColumns, this.defaultColumnDef),
+                this.wrapTextAll,
+            );
+        }
+        this.store.setState(nextState);
         this.events.emit("dataChange", nextData);
         this.recomputeOverlay();
     }
@@ -1071,13 +1127,21 @@ export class Grid<T> implements GridApi<T> {
         if (!rows || rows.length === 0) return;
         const currentData: T[] = this.store.getState().data;
         const nextData: T[] = [...currentData, ...rows];
+        const inferredColumns: GridState<T>["columns"] | undefined = this.resolvePendingAutoColumns(nextData);
         this.hasData = true;
         this.filteredDataCache = null;
         this.processedDataCache = null;
         this.groupedRowsCache = null;
         this.groupedRowsRevision = -1;
         this.revision += 1;
-        this.store.setState({ data: nextData });
+        const nextState: Partial<GridState<T>> = { data: nextData };
+        if (inferredColumns !== undefined) {
+            nextState.columns = applyWrapText(
+                applyDefaultColumnDef(inferredColumns, this.defaultColumnDef),
+                this.wrapTextAll,
+            );
+        }
+        this.store.setState(nextState);
         this.events.emit("dataChange", nextData);
         this.recomputeOverlay();
     }

@@ -70,6 +70,7 @@ export type ReactColumnDef<T> = ReactColumnLeafDef<T> | ReactColumnGroupDef<T>;
  * @api
  */
 export type ReactGridOptions<T> = Omit<GridOptions<T>, "columns" | "defaultColumnDef"> & {
-    columns: ReactColumnDef<T>[];
+    /** Column definitions; inferred from the first data row when omitted. @api */
+    columns?: ReactColumnDef<T>[];
     defaultColumnDef?: Partial<Omit<ReactColumnLeafDef<T>, "id" | "header">>;
 };

@@ -1,4 +1,16 @@
-import type { CellSpan, CellSpanningParams, ColumnDef, ColumnGroupDef, ColumnGroupViewport, ColumnLeafDef, DefaultColumnDef, RowId, RowNode, RowSpanLayout } from "./types.js";
+import type {
+    AutoColumnHeaderMode,
+    CellSpan,
+    CellSpanningParams,
+    ColumnDef,
+    ColumnGroupDef,
+    ColumnGroupViewport,
+    ColumnLeafDef,
+    DefaultColumnDef,
+    RowId,
+    RowNode,
+    RowSpanLayout,
+} from "./types.js";
 
 /**
  * Runtime narrowing: does the column definition describe a GROUP
@@ -11,6 +23,43 @@ export function isColumnGroup<T>(column: ColumnDef<T>): column is ColumnGroupDef
 /** Inverse of `isColumnGroup` — handy for filters over the flat working set. */
 export function isColumnLeaf<T>(column: ColumnDef<T>): column is ColumnLeafDef<T> {
     return !isColumnGroup(column);
+}
+
+/**
+ * Infers flat leaf columns from the own enumerable string keys of the first data row.
+ *
+ * @param data - Rows used to infer the columns.
+ * @param getColumnHeader - Optional formatter for each inferred field key.
+ * @param autoColumnHeaderMode - Built-in formatting mode used when no custom formatter is provided.
+ * @returns Inferred columns, or an empty array when no object row is available.
+ * @api
+ */
+export function inferColumns<T>(
+    data: T[] | null | undefined,
+    getColumnHeader?: (field: string) => string,
+    autoColumnHeaderMode: AutoColumnHeaderMode = "as-is",
+): ColumnLeafDef<T>[] {
+    const firstRow: T | undefined | null = data?.[0];
+    if (firstRow === null || typeof firstRow !== "object") return [];
+
+    return Object.keys(firstRow).map((field) => {
+        const header: string = getColumnHeader
+            ? getColumnHeader(field)
+            : autoColumnHeaderMode === "title-case"
+              ? formatAutoColumnHeader(field)
+              : field;
+
+        return { id: field, field, header };
+    });
+}
+
+function formatAutoColumnHeader(field: string): string {
+    const words: string[] = field
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2")
+        .split(" ");
+
+    return words.map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`).join(" ");
 }
 
 /**

@@ -646,10 +646,37 @@ export interface RowHeightUpdateOptions {
     notify?: boolean;
 }
 
+/**
+ * Built-in formatting modes for headers inferred from row fields.
+ * @api
+ */
+export type AutoColumnHeaderMode = "as-is" | "title-case";
+
 export interface GridOptions<T> {
     /** Row data; omitted or null means an initial load is pending. */
     data?: T[] | null;
-    columns: ColumnDef<T>[];
+    /**
+     * Column definitions. When omitted, the core infers columns from the first
+     * row and waits for data if the initial dataset is empty. The inferred
+     * schema stays fixed; call `setColumns` to change it afterward. Pass `[]`
+     * to explicitly disable inference.
+     * @api
+     */
+    columns?: ColumnDef<T>[];
+    /**
+     * Formatting mode for headers of columns inferred by the core. Defaults
+     * to `as-is`; `title-case` splits camel-case field names into words and
+     * capitalizes each word. Ignored when `columns` is provided.
+     * @default as-is
+     * @api
+     */
+    autoColumnHeaderMode?: AutoColumnHeaderMode;
+    /**
+     * Custom formatter for headers of inferred columns. Takes precedence over
+     * `autoColumnHeaderMode` when provided. Ignored when `columns` is provided.
+     * @api
+     */
+    getColumnHeader?: (field: string) => string;
     /** Properties applied to every leaf column unless overridden. @api */
     defaultColumnDef?: DefaultColumnDef<T>;
     /** Returns a stable row ID; defaults to the row's current index. Use a stable ID to preserve row identity when rows are reordered. */

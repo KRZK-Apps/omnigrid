@@ -1,5 +1,5 @@
 import type { ColumnDef as CoreColumnDef, ColumnLeafDef, GridOptions, GridState, ViewportData } from '@omnigrid/core';
-import { isColumnGroup } from '@omnigrid/core';
+import { inferColumns, isColumnGroup } from '@omnigrid/core';
 import { Grid } from '@omnigrid/core';
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import type { UseGridResult } from "./types.js";
@@ -37,6 +37,12 @@ export function useGrid<T>(options: ReactGridOptions<T>): UseGridResult<T> {
     const getSnapshot = useCallback(() => grid.getState(), [grid]);
     const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
+    const autoColumnIdsRef = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        if (options.columns !== undefined || autoColumnIdsRef.current.size > 0 || state.data.length === 0) return;
+        autoColumnIdsRef.current = new Set(inferColumns(state.data, options.getColumnHeader).map((column) => column.id));
+    }, [options.columns, options.getColumnHeader, state.data]);
+
     // Reconcile plugins when the plugin list changes. Plugins removed from the
     // list are unregistered (their cleanup restores default behavior); new ones
     // are registered. Declared before the data sync so that, on a switch, the
@@ -70,8 +76,8 @@ export function useGrid<T>(options: ReactGridOptions<T>): UseGridResult<T> {
     // Sync columns when the columns reference changes (e.g. dynamic column
     // definitions). Skip on the first run — plugins may have prepended
     // selection/sorting columns during registerPlugin() in the Grid
-    // constructor, and calling setColumns here would overwrite those injected
-    // columns. Only sync on subsequent changes to options.columns.
+    // constructor, and calling grid.setColumns here would overwrite those
+    // injected columns. Only sync on subsequent changes to options.columns.
     //
     // StrictMode note: `options.columns` is a new array reference on every
     // render, but its entries are usually the same column objects (a new
@@ -96,6 +102,7 @@ export function useGrid<T>(options: ReactGridOptions<T>): UseGridResult<T> {
         const columnsChanged: boolean = prev.length !== next.length || prev.some((column, index) => column !== next[index]);
         const defaultColumnDefChanged: boolean = lastSyncedDefaultColumnDefRef.current !== options.defaultColumnDef;
         if (columnsChanged || defaultColumnDefChanged) {
+            const previousColumnsWereAuto: boolean = lastSyncedColumnsRef.current === undefined;
             lastSyncedColumnsRef.current = options.columns;
             lastSyncedDefaultColumnDefRef.current = options.defaultColumnDef;
             // Merge the user's column definitions into the current (plugin-enriched)
@@ -104,6 +111,14 @@ export function useGrid<T>(options: ReactGridOptions<T>): UseGridResult<T> {
             // not part of the user's column definitions; replacing columns with the
             // raw definitions would strip them and break e.g. column resize handles.
             const current = grid.getState().columns;
+            const autoColumnIds: Set<string> =
+                previousColumnsWereAuto && options.columns !== undefined
+                    ? autoColumnIdsRef.current.size > 0
+                        ? autoColumnIdsRef.current
+                        : new Set(
+                              inferColumns(grid.getState().data, options.getColumnHeader).map((column) => column.id),
+                          )
+                    : new Set();
             // Merge the user's column definitions INTO the current (plugin-enriched)
             // columns instead of replacing them wholesale. Iterating over `current`
             // preserves plugin-injected columns (e.g. the selection column prepended
@@ -118,7 +133,7 @@ export function useGrid<T>(options: ReactGridOptions<T>): UseGridResult<T> {
             current.forEach((currentColumn) => {
                 const userColumn = next.find((c) => c.id === currentColumn.id);
                 if (!userColumn) {
-                    merged.push(currentColumn);
+                    if (!autoColumnIds.has(currentColumn.id)) merged.push(currentColumn);
                     return;
                 }
                 const enriched: CoreColumnDef<T> = { ...userColumn };

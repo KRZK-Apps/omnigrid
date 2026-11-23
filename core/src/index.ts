@@ -38,6 +38,7 @@ export type {
     BlockConfig,
     CellAlign,
     AggregationFunc,
+    AutoColumnHeaderMode,
     ColumnHeaderExtension,
     ColumnHeaderExtensionPosition,
     CellRenderParams,
@@ -130,5 +131,6 @@ export {
     getCellSpanningParams,
     resolveColSpan,
     getRowSpans,
+    inferColumns,
 } from "./columns.js";
 export { Virtualizer, RowHeightRegistry } from "./virtualizer.js";

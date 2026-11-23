@@ -1,6 +1,6 @@
 {
     "name": "@omnigrid/core",
-    "version": "0.1.35",
+    "version": "0.1.36",
     "description": "Framework-agnostic core engine for OmniGrid",
     "keywords": [
         "omnigrid",

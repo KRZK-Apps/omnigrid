@@ -22,6 +22,24 @@ const data = [...];
 <OmniGrid columns={columns} data={data} />;
 ```
 
+`columns` is optional. When omitted, the core creates one leaf column for each
+own property of the first data row. If there are no rows yet, it waits for data.
+The inferred schema stays fixed; call `grid.setColumns` when the schema changes.
+By default, each header is the property key. Set
+`autoColumnHeaderMode="title-case"` to split camel-case keys into capitalized
+words. For custom formatting, use the core's `getColumnHeader` option:
+
+```tsx
+<OmniGrid
+    data={data}
+    autoColumnHeaderMode="title-case"
+/>
+<OmniGrid
+    data={data}
+    getColumnHeader={(field) => field.toUpperCase()}
+/>
+```
+
 The grid fills its parent's available height by default. Give the parent a
 constrained height (for example, in a flex layout) and the adapter measures the
 actual viewport with `ResizeObserver`. Use `height` for a fixed grid height, or

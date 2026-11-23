@@ -30,7 +30,9 @@ adapter-native scroll adjustment without moving scroll coordinates into the Stor
 ```ts
 interface GridOptions<T> {
     data?: T[] | null; // row data; null/omitted means initial loading
-    columns: ColumnDef<T>[]; // required
+    columns?: ColumnDef<T>[]; // inferred from the first row when omitted
+    autoColumnHeaderMode?: "as-is" | "title-case"; // default: "as-is"
+    getColumnHeader?: (field: string) => string; // custom formatter; takes precedence over autoColumnHeaderMode
     getRowId?: (row: T, index: number) => RowId; // default: index-based
     rowHeight?: number; // fixed px row height; default 32 (offset math is O(1))
     rowOverscan?: number; // extra rows above/below viewport; default 5
@@ -47,6 +49,14 @@ interface GridOptions<T> {
     overlayComponents?: Record<string, OverlayComponent<T>>;
 }
 ```
+
+When `columns` is omitted, the core infers leaf columns from the first row.
+If the initial dataset is empty or pending, it waits for the first non-empty
+`setData` or `appendData`. The inferred schema stays fixed afterward; call
+`setColumns` when the schema changes. An explicit `columns: []` disables
+inference. Headers default to the field key; set `autoColumnHeaderMode` to
+`"title-case"` to split camel-case keys into capitalized words, or provide
+`getColumnHeader` for a custom formatter.
 
 Row callbacks receive `params.rowType` (`"leaf"` or `"group"`). Group rows are synthetic and have no `data`; checking `rowType` narrows the callback parameters.
 
