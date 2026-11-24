@@ -332,8 +332,8 @@ export function OmniGrid<T>({
      * Keeps the spacer height and visible row-layer height in sync without
      * re-rendering the grid for every measured row.
      */
-    const applyContentHeight = (totalHeight: number): void => {
-        const layerHeight: string = `${autoHeight ? totalHeight : Math.max(0, state.viewport.height - headerHeight)}px`;
+    const applyContentHeight = (totalHeight: number, viewportHeight: number): void => {
+        const layerHeight: string = `${autoHeight ? totalHeight : Math.max(0, viewportHeight - headerHeight)}px`;
         for (const ref of [rowsLayerRef, pinnedLeftRowsLayerRef, pinnedRightRowsLayerRef]) {
             const element: HTMLDivElement | null = ref.current;
             if (element && element.style.height !== layerHeight) element.style.height = layerHeight;
@@ -1046,10 +1046,17 @@ export function OmniGrid<T>({
             visibleRowRange: viewportData.visibleRowRange,
             rowWidth: layer.rowWidth,
         });
-        for (const pane of layer.panes) {
-            const row = pane.getRow();
-            if (!row) continue;
-            const offsetY: number = Math.round(row.offsetY - layer.scrollTop);
+        // A pooled row's bound offset predates measurements of preceding rows.
+        for (const host of pool.getHosts()) {
+            const pane = layer.paneMap.get(host);
+            const hostElement: HTMLDivElement = host as HTMLDivElement;
+            const rowIndexValue: string | undefined = hostElement.dataset.rowIndex;
+            if (!pane || rowIndexValue === undefined) continue;
+            const rowIndex: number = Number(rowIndexValue);
+            const rangeIndex: number = rowIndex - viewportData.rowRange.start;
+            const rowOffset: number | undefined = viewportData.rows[rangeIndex]?.offset;
+            if (rowOffset === undefined) continue;
+            const offsetY: number = Math.round(rowOffset - layer.scrollTop);
             if (pane.getOffsetY() !== offsetY) pane.setOffsetY(offsetY);
         }
         layer.animationPositions = null;
@@ -1072,7 +1079,7 @@ export function OmniGrid<T>({
         // It is written imperatively: a Store notification per measured row
         // would re-render the whole grid, and the grid would then lag behind
         // the native scroll position (the user sees the previous rows).
-        applyContentHeight(currentViewportData.totalHeight);
+        applyContentHeight(currentViewportData.totalHeight, state.viewport.height);
 
         const pinnedLeftWidth = currentViewportData.pinnedLeftColumns.reduce((sum, item) => sum + item.width, 0);
         const pinnedRightWidth = currentViewportData.pinnedRightColumns.reduce((sum, item) => sum + item.width, 0);
@@ -1178,22 +1185,23 @@ export function OmniGrid<T>({
         scrollbarWidthRef.current = scrollbarWidth;
         const width = element.clientWidth;
         const height = element.clientHeight;
-        if (width === 0) {
+        if (width === 0 || height <= headerHeight) {
             // Layout may not be computed yet on the first paint. Retry on the
-            // next animation frame so flex columns are sized against the real
-            // client width instead of collapsing to minWidth at width === 0.
-            requestAnimationFrame(() => {
+            // next frame, but do not reveal a zero-height row layer.
+            window.requestAnimationFrame(() => {
+                const current: HTMLDivElement | null = viewportRef.current;
+                if (!current || current.clientWidth === 0 || current.clientHeight <= headerHeight) return;
                 measureViewport();
             });
             return;
         }
         grid.setViewport({
             width,
-            ...(height > 0 ? { height } : {}),
+            height,
         });
         syncPoolRef.current?.(false);
         setIsViewportMeasured(true);
-    }, [grid, syncScrollbarInsets, setIsViewportMeasured]);
+    }, [grid, headerHeight, syncScrollbarInsets, setIsViewportMeasured]);
 
     useEffect(() => {
         const element = viewportRef.current;
@@ -1207,7 +1215,7 @@ export function OmniGrid<T>({
             scrollbarWidthRef.current = scrollbarWidth;
             const width = element.clientWidth;
             const height = element.clientHeight;
-            if (width === 0 || height === 0) return;
+            if (width === 0 || height <= headerHeight) return;
             grid.setViewport({ width, height });
             syncPoolRef.current?.(false);
             setIsViewportMeasured(true);
