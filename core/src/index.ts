@@ -69,6 +69,7 @@ export type {
     GroupRowRenderer,
     CoreGridApi,
     CoreGridState,
+    GridStateUpdateOptions,
     GridApi,
     GridEvents,
     GridOptions,

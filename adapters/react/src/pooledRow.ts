@@ -136,13 +136,28 @@ export class PooledRowPane<T> {
     }
 
     /** Re-layouts cells for a new horizontal column window. */
-    public updateColumns(columns: PooledColumn<T>[], originX = 0, spans?: RowSpanLayout | null): void {
+    public updateColumns(columns: PooledColumn<T>[], originX = 0, spans?: RowSpanLayout | null, rowWidth?: number): void {
         this.originX = originX;
         const row = this.row;
-        if (row) this.applyRowSizing(row);
+        if (row) {
+            if (rowWidth !== undefined) row.width = rowWidth;
+            this.applyRowSizing(row);
+        }
         this.mapColumns(columns, false, spans);
         if (this.variableHeight && row) {
             this.scheduleHeightMeasurement(row);
+        }
+    }
+
+    /** Refreshes this row's presentation and the cells in the requested columns. */
+    public refreshCells(columnIds?: ReadonlySet<string>): void {
+        const row = this.row;
+        if (!row) return;
+        const hovered: boolean = this.host.matches(":hover");
+        this.applyRowPresentation(row);
+        if (hovered) this.host.classList.add("omnigrid-row-hover");
+        for (const cell of this.cells) {
+            if (cell.column && (!columnIds || columnIds.has(cell.column.id))) this.renderContent(cell);
         }
     }
 

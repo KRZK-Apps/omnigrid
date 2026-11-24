@@ -1,6 +1,6 @@
 import { Grid, flattenColumns } from "@omnigrid/core";
 import type { ColumnHeaderExtension, ColumnLeafDef } from "@omnigrid/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ColumnResizePlugin } from "./index";
 
@@ -61,6 +61,71 @@ describe("ColumnResizePlugin", () => {
         plugin.endResize();
         expect(plugin.getResizeGuide().visible).toBe(false);
         grid.destroy();
+    });
+
+    it("coalesces pointer moves per frame and applies the final width on pointer up", () => {
+        const grid = new Grid<ResizeRow>({
+            columns: [{ id: "name", header: "Name", width: 120, minWidth: 80, maxWidth: 220 }],
+            data: [{ name: "Alice" }],
+        });
+        const listeners: Map<string, EventListenerOrEventListenerObject> = new Map();
+        const frames: Map<number, FrameRequestCallback> = new Map();
+        let nextFrameId: number = 0;
+        const fakeDocument = {
+            addEventListener: (type: string, listener: EventListenerOrEventListenerObject): void => {
+                listeners.set(type, listener);
+            },
+            removeEventListener: (type: string): void => {
+                listeners.delete(type);
+            },
+        };
+        const fakeWindow = {
+            cancelAnimationFrame: (id: number): void => {
+                frames.delete(id);
+            },
+            requestAnimationFrame: (callback: FrameRequestCallback): number => {
+                nextFrameId += 1;
+                frames.set(nextFrameId, callback);
+                return nextFrameId;
+            },
+        };
+        vi.stubGlobal("document", fakeDocument);
+        vi.stubGlobal("window", fakeWindow);
+
+        try {
+            const plugin = new ColumnResizePlugin<ResizeRow>();
+            plugin.register(grid);
+            plugin.beginResize("name", 200);
+            const pointerMove: EventListenerOrEventListenerObject | undefined = listeners.get("pointermove");
+            if (typeof pointerMove !== "function") throw new Error("Pointer-move handler was not registered");
+            const dispatchMove = (clientX: number): void => {
+                const event: Event = new Event("pointermove");
+                Object.defineProperty(event, "clientX", { value: clientX });
+                pointerMove(event);
+            };
+
+            dispatchMove(220);
+            dispatchMove(230);
+            dispatchMove(240);
+            expect(plugin.getColumnWidth("name")).toBe(120);
+            expect(frames.size).toBe(1);
+
+            const frame: FrameRequestCallback | undefined = frames.get(nextFrameId);
+            if (!frame) throw new Error("Pointer-move frame was not scheduled");
+            frames.delete(nextFrameId);
+            frame(16);
+            expect(plugin.getColumnWidth("name")).toBe(160);
+            expect(frames.size).toBe(0);
+
+            dispatchMove(250);
+            dispatchMove(270);
+            expect(plugin.endResize()).toBe(190);
+            expect(plugin.getColumnWidth("name")).toBe(190);
+            expect(frames.size).toBe(0);
+            grid.destroy();
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 
     it("starts flex resizing from the current calculated width", () => {

@@ -23,6 +23,7 @@ import type {
     AggregationFunc,
     ColumnHeaderExtension,
     ColumnHeaderExtensionPosition,
+    ColumnDef,
     ColumnLeafDef,
     DataProcessor,
     DataRowNode,
@@ -44,6 +45,7 @@ import type {
     RowSpanLayout,
     RowTransaction,
     ScrollPosition,
+    GridStateUpdateOptions,
     SlotMount,
     SlotName,
     TransactionResult,
@@ -54,6 +56,50 @@ import type {
 import { PopupManager } from "./ui.js";
 import type { UIPopupAnchor, UIPopupDescriptor } from "./ui.js";
 import { Virtualizer } from "./virtualizer.js";
+
+function haveSameColumnProperties(previous: object, next: object, ignoredKeys: string[]): boolean {
+    const previousProperties = previous as Record<string, unknown>;
+    const nextProperties = next as Record<string, unknown>;
+    const previousKeys: string[] = Object.keys(previousProperties).filter((key) => !ignoredKeys.includes(key));
+    const nextKeys: string[] = Object.keys(nextProperties).filter((key) => !ignoredKeys.includes(key));
+    return (
+        previousKeys.length === nextKeys.length &&
+        previousKeys.every((key) => nextKeys.includes(key) && previousProperties[key] === nextProperties[key])
+    );
+}
+
+function areColumnDefinitionsEqualExceptSizing<T>(previous: ColumnDef<T>[], next: ColumnDef<T>[]): boolean {
+    if (previous.length !== next.length) return false;
+
+    return previous.every((previousColumn, index) => {
+        const nextColumn = next[index];
+        if (!nextColumn) return false;
+
+        if (isColumnGroup(previousColumn)) {
+            return (
+                isColumnGroup(nextColumn) &&
+                haveSameColumnProperties(previousColumn, nextColumn, ["children"]) &&
+                areColumnDefinitionsEqualExceptSizing(previousColumn.children, nextColumn.children)
+            );
+        }
+
+        return !isColumnGroup(nextColumn) && haveSameColumnProperties(previousColumn, nextColumn, ["width", "flex"]);
+    });
+}
+
+function haveColumnSizingChanged<T>(previous: ColumnDef<T>[], next: ColumnDef<T>[]): boolean {
+    return previous.some((previousColumn, index) => {
+        const nextColumn = next[index];
+        if (!nextColumn) return false;
+        if (isColumnGroup(previousColumn)) {
+            return isColumnGroup(nextColumn) && haveColumnSizingChanged(previousColumn.children, nextColumn.children);
+        }
+        return (
+            !isColumnGroup(nextColumn) &&
+            (previousColumn.width !== nextColumn.width || previousColumn.flex !== nextColumn.flex)
+        );
+    });
+}
 
 export class Grid<T> implements GridApi<T> {
     private readonly store: Store<GridState<T>>;
@@ -247,17 +293,20 @@ export class Grid<T> implements GridApi<T> {
      * Updates the grid state via partial patch or functional updater.
      * Accessible by plugins to update their contributed state slices.
      * @param updater - Partial state patch or reducer function.
+     * @param options - Set `structural` to `false` for presentation-only plugin state.
      * @api
      */
-    public setState(updater: StateUpdater<GridState<T>>): void {
+    public setState(updater: StateUpdater<GridState<T>>, options: GridStateUpdateOptions = {}): void {
         this.assertActive();
-        this.filteredDataCache = null;
-        this.processedDataCache = null;
-        this.groupedRowsCache = null;
-        this.groupedRowsRevision = -1;
-        this.revision += 1;
+        if (options.structural !== false) {
+            this.filteredDataCache = null;
+            this.processedDataCache = null;
+            this.groupedRowsCache = null;
+            this.groupedRowsRevision = -1;
+            this.revision += 1;
+        }
         this.store.setState(updater);
-        this.recomputeOverlay();
+        if (options.structural !== false) this.recomputeOverlay();
     }
 
     /**
@@ -1371,7 +1420,18 @@ export class Grid<T> implements GridApi<T> {
     }
 
     /**
+     * Requests an adapter refresh of visible cells without structural rebinding.
+     * @param columnIds - Optional column IDs to refresh.
+     * @api
+     */
+    public refreshCells(columnIds?: readonly string[]): void {
+        this.assertActive();
+        this.events.emit("cellsRefresh", { columnIds });
+    }
+
+    /**
      * Replaces the column definitions and optionally updates shared leaf-column defaults.
+     * Width-only changes preserve processed data caches and the structural revision.
      *
      * @param columns - New column definitions.
      * @param defaultColumnDef - Updated defaults; pass `undefined` to clear existing defaults.
@@ -1380,13 +1440,20 @@ export class Grid<T> implements GridApi<T> {
     public setColumns(columns: GridState<T>["columns"], defaultColumnDef?: DefaultColumnDef<T>): void {
         this.assertActive();
         if (arguments.length > 1) this.defaultColumnDef = defaultColumnDef;
-        this.filteredDataCache = null;
-        this.processedDataCache = null;
-        this.groupedRowsCache = null;
-        this.groupedRowsRevision = -1;
-        this.revision += 1;
+        const nextColumns = applyWrapText(applyDefaultColumnDef(columns, this.defaultColumnDef), this.wrapTextAll);
+        const sizingOnlyChange: boolean =
+            arguments.length === 1 &&
+            areColumnDefinitionsEqualExceptSizing(this.store.getState().columns, nextColumns) &&
+            haveColumnSizingChanged(this.store.getState().columns, nextColumns);
+        if (!sizingOnlyChange) {
+            this.filteredDataCache = null;
+            this.processedDataCache = null;
+            this.groupedRowsCache = null;
+            this.groupedRowsRevision = -1;
+            this.revision += 1;
+        }
         this.store.setState({
-            columns: applyWrapText(applyDefaultColumnDef(columns, this.defaultColumnDef), this.wrapTextAll),
+            columns: nextColumns,
         });
         this.recomputeOverlay();
     }

@@ -1000,10 +1000,18 @@ export interface GridEvents<T> {
     filterChanged: FilterModel;
     /** Fired after the global quick filter changed; the payload is the new query string. */
     quickFilterChanged: string;
+    /** Fired when adapters should refresh rendered cells without rebinding rows. */
+    cellsRefresh: { columnIds?: readonly string[] };
     /** Fired when a popup is opened, updated (`descriptor`) or closed (`null`). */
     popupChange: UIPopupDescriptor | null;
     /** Fired when the user asks for a column's filter menu (e.g. clicks the header filter icon). */
     filterMenuRequest: { columnId: string; anchor: UIPopupAnchor };
+}
+
+/** Options for updating plugin-contributed grid state. @api */
+export interface GridStateUpdateOptions {
+    /** Whether the update invalidates data caches and the structural revision. @default true */
+    structural?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1317,9 +1325,10 @@ export interface CoreGridApi<T> {
     /**
      * Updates the grid state via partial patch or reducer.
      * @param updater - State slice patch or updater function.
+     * @param options - Set `structural` to `false` for presentation-only plugin state.
      * @api
      */
-    setState(updater: StateUpdater<GridState<T>>): void;
+    setState(updater: StateUpdater<GridState<T>>, options?: GridStateUpdateOptions): void;
     /**
      * Registers methods dynamically contributed by plugins.
      * These methods are attached both to `api.methods` and directly to `api`.
@@ -1462,6 +1471,12 @@ export interface CoreGridApi<T> {
     getRowHeight(rowIndex: number): number;
     setViewport(viewport: Partial<ViewportState>): void;
     refresh(): void;
+    /**
+     * Refreshes rendered cell contents and row presentation without rebinding rows.
+     * @param columnIds - Optional column IDs to refresh; omitted to refresh all visible cells.
+     * @api
+     */
+    refreshCells(columnIds?: readonly string[]): void;
     subscribe(listener: () => void): () => void;
     on<EventName extends keyof GridEvents<T>>(
         event: EventName,

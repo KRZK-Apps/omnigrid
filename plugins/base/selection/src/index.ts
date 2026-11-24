@@ -491,10 +491,12 @@ export class SelectionPlugin<T> implements GridPlugin<T> {
 
     private refresh(): void {
         if (!this.api || this.api.isDestroyed()) return;
-        this.api.setState((prev) => ({ ...prev, selection: this.getSelectionState() }));
-        this.api.refresh();
-        this.onSelectionChange?.(this.getSelectionState());
-        this.api.emit("selection:change", this.getSelectionState());
+        const api: GridApi<T> = this.api;
+        const selectionState: SelectionState<T> = this.getSelectionState();
+        api.setState((prev) => ({ ...prev, selection: selectionState }), { structural: false });
+        api.refreshCells([this.selectionColumnId]);
+        this.onSelectionChange?.(selectionState);
+        api.emit("selection:change", selectionState);
     }
 
     private validateSelection(): void {

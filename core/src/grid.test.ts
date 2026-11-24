@@ -216,6 +216,42 @@ describe("Grid.getRevision — structural change detection", () => {
         expect(grid.getRevision()).toBe(before + 1);
     });
 
+    it("preserves the processed data cache for width-only column changes", () => {
+        const grid = makeGrid(
+            [{ id: "a", width: 100 }, { id: "b", flex: 1 }],
+            800,
+        );
+        grid.registerDataProcessor((data: Row[]): Row[] => data.slice());
+        const revisionBefore: number = grid.getRevision();
+        const cachedData = grid.getProcessedData();
+
+        grid.setColumns([{ id: "a", width: 160 }, { id: "b", flex: 1 }]);
+
+        expect(grid.getRevision()).toBe(revisionBefore);
+        expect(grid.getProcessedData()).toBe(cachedData);
+    });
+
+    it("invalidates the processed data cache for non-sizing column changes", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        grid.registerDataProcessor((data: Row[]): Row[] => data.slice());
+        const revisionBefore: number = grid.getRevision();
+        const cachedData = grid.getProcessedData();
+
+        grid.setColumns([{ id: "a", width: 100, header: "Updated" }]);
+
+        expect(grid.getRevision()).toBe(revisionBefore + 1);
+        expect(grid.getProcessedData()).not.toBe(cachedData);
+    });
+
+    it("retains structural invalidation when setColumns receives unchanged definitions", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const revisionBefore: number = grid.getRevision();
+
+        grid.setColumns([{ id: "a", width: 100 }]);
+
+        expect(grid.getRevision()).toBe(revisionBefore + 1);
+    });
+
     it("does not increment on scroll-only updates", () => {
         const grid = makeGrid([{ id: "a", width: 100 }], 800);
         const before = grid.getRevision();
@@ -232,6 +268,33 @@ describe("Grid.getRevision — structural change detection", () => {
 
         expect(grid.getScrollPosition()).toEqual({ scrollTop: 64, scrollLeft: 0 });
         expect(listener).toHaveBeenCalledWith({ scrollTop: 64, scrollLeft: 0 });
+    });
+});
+
+describe("Grid.refreshCells", () => {
+    it("notifies adapters without incrementing the structural revision", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const refreshEvents: Array<{ columnIds?: readonly string[] }> = [];
+        const revisionBefore: number = grid.getRevision();
+        grid.on("cellsRefresh", (event) => refreshEvents.push(event));
+
+        grid.refreshCells(["a"]);
+
+        expect(refreshEvents).toEqual([{ columnIds: ["a"] }]);
+        expect(grid.getRevision()).toBe(revisionBefore);
+    });
+});
+
+describe("Grid.setState — presentation-only extension updates", () => {
+    it("does not invalidate data caches or the structural revision when requested", () => {
+        const grid = makeGrid([{ id: "a", width: 100 }], 800);
+        const cachedData = grid.getProcessedData();
+        const revisionBefore: number = grid.getRevision();
+
+        grid.setState((prev) => ({ ...prev, showChildCount: !prev.showChildCount }), { structural: false });
+
+        expect(grid.getRevision()).toBe(revisionBefore);
+        expect(grid.getProcessedData()).toBe(cachedData);
     });
 });
 

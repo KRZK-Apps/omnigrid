@@ -311,6 +311,31 @@ describe("PooledRowPane — staging placeholder for root-rendered cells", () => 
 });
 
 describe("PooledRowPane — column spanning", () => {
+    it("refreshes only cells in the requested columns", () => {
+        const { pane, renderCalls } = makeHarness({ complexContent: true });
+        const ageColumn: ColumnLeafDef<Row> = { id: "age", field: "age", width: 120 };
+        pane.bind(
+            row(0, { name: "Alice", age: 30 }),
+            [col(0, 0), { column: ageColumn, index: 1, offset: 120, width: 120 }],
+            0,
+        );
+
+        pane.refreshCells(new Set(["name"]));
+
+        expect(renderCalls).toHaveLength(3);
+    });
+
+    it("updates row and cell widths without rebinding cell content", () => {
+        const { pane, host, renderCalls } = makeHarness({ complexContent: true });
+        pane.bind(row(0, { name: "Alice", age: 30 }), [col(0, 0)], 0);
+
+        pane.updateColumns([{ column: COLUMN, index: 0, offset: 0, width: 160 }], 0, null, 160);
+
+        expect(host.style.width).toBe("160px");
+        expect((host.children as FakeElement[])[0].style.width).toBe("160px");
+        expect(renderCalls).toHaveLength(1);
+    });
+
     it("renders the span origin with the summed width and parks covered cells off-screen", () => {
         const { pane, host } = makeHarness();
         const columns = [col(0, 0), col(1, 120), col(2, 240)];

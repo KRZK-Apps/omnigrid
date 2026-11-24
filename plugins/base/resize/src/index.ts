@@ -38,6 +38,8 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
     private resizeDragged = false;
     /** Suppress the click synthesized right after a completed drag-resize. */
     private suppressNextClick = false;
+    private pointerMoveFrame: number | null = null;
+    private pendingPointerX: number | null = null;
 
     public constructor(options: ColumnResizePluginOptions<T> = {}) {
         this.onResize = options.onResize;
@@ -56,6 +58,7 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
 
         return () => {
             unregisterPointerHandlers();
+            this.cancelPendingPointerMove();
             unregisterHeaderExtension();
             this.clearGuide();
             this.activeResize = undefined;
@@ -157,6 +160,7 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
         const currentWidth = this.getColumnWidth(columnId);
         if (currentWidth === undefined) return 0;
 
+        this.cancelPendingPointerMove();
         this.activeResize = {
             columnId,
             startX: clientX,
@@ -223,6 +227,7 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
      * @api
      */
     public endResize(): number {
+        this.flushPendingPointerMove();
         const active = this.activeResize;
         if (!active) return 0;
         const width = this.getColumnWidth(active.columnId) ?? active.startWidth;
@@ -335,7 +340,14 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
 
         const handlePointerMove = (event: PointerEvent) => {
             if (!this.activeResize) return;
-            this.resizeTo(event.clientX);
+            this.pendingPointerX = event.clientX;
+            if (this.pointerMoveFrame !== null) return;
+            this.pointerMoveFrame = window.requestAnimationFrame(() => {
+                this.pointerMoveFrame = null;
+                const clientX = this.pendingPointerX;
+                this.pendingPointerX = null;
+                if (clientX !== null && this.activeResize) this.resizeTo(clientX);
+            });
         };
 
         const handlePointerUp = () => {
@@ -368,6 +380,24 @@ export class ColumnResizePlugin<T> implements GridPlugin<T> {
     private findLeafColumn(columnId: string): ColumnLeafDef<T> | undefined {
         if (!this.api) return undefined;
         return flattenColumns(this.api.getState().columns).find((column) => column.id === columnId);
+    }
+
+    private flushPendingPointerMove(): void {
+        if (this.pointerMoveFrame !== null && typeof window !== "undefined") {
+            window.cancelAnimationFrame(this.pointerMoveFrame);
+        }
+        this.pointerMoveFrame = null;
+        const clientX = this.pendingPointerX;
+        this.pendingPointerX = null;
+        if (clientX !== null && this.activeResize) this.resizeTo(clientX);
+    }
+
+    private cancelPendingPointerMove(): void {
+        if (this.pointerMoveFrame !== null && typeof window !== "undefined") {
+            window.cancelAnimationFrame(this.pointerMoveFrame);
+        }
+        this.pointerMoveFrame = null;
+        this.pendingPointerX = null;
     }
 
     private clampWidth(column: ColumnLeafDef<T>, width: number): number {

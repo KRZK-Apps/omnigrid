@@ -290,11 +290,16 @@ describe("SelectionPlugin group selection", () => {
         grid.registerRowHierarchy({ getLeafRowIds: () => undefined });
         const selectionColumn: ColumnLeafDef<Row> | undefined = getSelectionColumn(grid);
         const header: CheckboxControl | undefined = selectionColumn?.headerRenderer?.() as CheckboxControl | undefined;
+        const cellsRefresh = vi.fn();
+        const revisionBefore: number = grid.getRevision();
+        grid.on("cellsRefresh", cellsRefresh);
 
         header?.onChange({ shiftKey: false, ctrlKey: false });
 
         expect(plugin.getSelectedRowIds()).toEqual([0]);
         expect(plugin.getSelectionState().selectedRows).toEqual([ROWS[0]]);
+        expect(cellsRefresh).toHaveBeenCalledWith({ columnIds: ["__omnigrid_selection__"] });
+        expect(grid.getRevision()).toBe(revisionBefore);
         grid.destroy();
     });
 

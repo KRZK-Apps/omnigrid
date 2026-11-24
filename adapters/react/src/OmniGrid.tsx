@@ -117,7 +117,6 @@ interface RowLayerState<T> {
     columns: PooledColumn<T>[];
     windowKey: string;
     revision: number;
-    totalWidth: number;
     processed: unknown[] | null;
     originX: number;
     rowWidth: number;
@@ -147,7 +146,6 @@ function createRowLayerState<T>(): RowLayerState<T> {
         columns: [],
         windowKey: "",
         revision: -1,
-        totalWidth: -1,
         processed: null,
         originX: 0,
         rowWidth: 0,
@@ -168,7 +166,7 @@ function createRowLayerState<T>(): RowLayerState<T> {
  * Scroll position is decoupled from React's render cycle: `Grid.setViewport`
  * for scroll-only updates does NOT notify the Store, so React does NOT
  * re-render on every scroll frame. React re-renders only on structural
- * changes (data, columns, dimensions) and column-window changes (header only).
+ * changes (data, columns, dimensions) and column geometry changes (header only).
  *
  * Horizontally pinned columns each back onto their own `DomPool` whose rows
  * live in a `position: sticky` pane (a sibling of the scrollable content inside
@@ -245,7 +243,7 @@ export function OmniGrid<T>({
     /** Latest `syncPool` — read imperatively from `measureViewport`/ResizeObserver so the callback stays stable. */
     const syncPoolRef = useRef<((synchronousColumnWindow?: boolean) => void) | null>(null);
     const optionsRef = useRef<GridProps<T>>(options);
-    const columnWindowKeyRef = useRef("");
+    const columnGeometryKeyRef = useRef("");
     /** Content size the scrollbar insets were measured for. */
     const contentSizeKeyRef = useRef("");
     const scrollbarWidthRef = useRef(0);
@@ -265,11 +263,9 @@ export function OmniGrid<T>({
 
     const layerContextRef = useRef<{ bridge: ContentBridge<T> } | null>(null);
 
-    // `columnWindowVersion` is a simple counter that increments each time the
-    // horizontal column window changes (i.e., when scrollLeft crosses a
-    // column boundary). It exists solely to trigger a targeted React re-render
-    // of the header — row DOM nodes remain managed by the DomPool and are
-    // never touched by React's reconciliation.
+    // This counter triggers a targeted React re-render of the header when
+    // horizontal column geometry changes. Row DOM nodes remain managed by the
+    // DomPool and are never touched by React's reconciliation.
     const [, setColumnWindowVersion] = useState(0);
     /** Set to `true` once the viewport dimensions have been measured against
      *  the real DOM element. Before that the grid content is hidden so the
@@ -1015,8 +1011,7 @@ export function OmniGrid<T>({
         const processed = getPoolData(grid);
 
         const processedChanged: boolean = layer.processed !== processed;
-        const changed =
-            layer.revision !== grid.getRevision() || layer.totalWidth !== viewportData.totalWidth || processedChanged;
+        const changed = layer.revision !== grid.getRevision() || processedChanged;
         const shouldAnimate: boolean = Boolean(options.animateRows && layer.processed !== null && processedChanged);
         const animationPositions: Map<RowId, number> | null = shouldAnimate
             ? new Map(
@@ -1028,7 +1023,6 @@ export function OmniGrid<T>({
             : null;
         if (changed) {
             layer.revision = grid.getRevision();
-            layer.totalWidth = viewportData.totalWidth;
             layer.processed = processed;
             pool.invalidate();
         }
@@ -1120,32 +1114,52 @@ export function OmniGrid<T>({
             bindLayers();
         }
 
-        // The horizontal column window changes infrequently (only when
-        // crossing column boundaries). When it does, update central row cells
-        // imperatively AND trigger a targeted React re-render for the header.
-        // Pinned panes hold all their columns at once — they only rebind via
-        // the structural path above (revision bump).
-        //
-        const columnWindowKey = `${currentViewportData.columnRange.start}:${currentViewportData.columnRange.end}:${state.viewport.width}:${pinnedLeftWidth}:${pinnedRightWidth}`;
-        if (columnWindowKey !== columnWindowKeyRef.current) {
-            columnWindowKeyRef.current = columnWindowKey;
+        // Column geometry can change without changing the visible window, such
+        // as during a resize. Update every pane imperatively so row content is
+        // not rebound on each pointer frame.
+        const getLayerGeometryKey = (layer: RowLayerState<T>, includeWindow: boolean): string =>
+            JSON.stringify([
+                includeWindow ? currentViewportData.columnRange : null,
+                includeWindow ? state.viewport.width : null,
+                layer.originX,
+                layer.rowWidth,
+                layer.columns.map((item) => [item.column.id, item.offset, item.width]),
+            ]);
+        const leftGeometryKey: string = getLayerGeometryKey(layers.left, false);
+        const centralGeometryKey: string = getLayerGeometryKey(layers.central, true);
+        const rightGeometryKey: string = getLayerGeometryKey(layers.right, false);
+        const columnGeometryKey: string = JSON.stringify([leftGeometryKey, centralGeometryKey, rightGeometryKey]);
+        if (columnGeometryKey !== columnGeometryKeyRef.current) {
+            columnGeometryKeyRef.current = columnGeometryKey;
             const updateColumnWindow = (): void => {
-                // Span-aware: each pane resolves its own row's layout so
-                // merged cells keep their summed width while the window
-                // slides — covered leaves stay parked off-screen.
-                for (const pane of layers.central.panes) {
-                    const paneRow = pane.getRow();
-                    if (!paneRow) {
-                        pane.updateColumns(layers.central.columns, layers.central.originX, null);
-                        continue;
+                const updateLayerColumns = (
+                    layer: RowLayerState<T>,
+                    geometryKey: string,
+                    isCentral: boolean,
+                ): void => {
+                    if (layer.windowKey === geometryKey) return;
+                    layer.windowKey = geometryKey;
+                    const isLeft: boolean = layer === layers.left;
+                    const isRight: boolean = layer === layers.right;
+                    for (const pane of layer.panes) {
+                        const paneRow = pane.getRow();
+                        if (!paneRow) {
+                            pane.updateColumns(layer.columns, layer.originX, null, layer.rowWidth);
+                            continue;
+                        }
+                        const spans = getCachedRowSpans(currentViewportData, paneRow.data, paneRow.index);
+                        const layout = isLeft ? spans.left : isRight ? spans.right : spans.central;
+                        pane.updateColumns(
+                            layer.columns,
+                            layer.originX,
+                            sliceSpanLayoutForLayer(currentViewportData, layer.columns, isCentral, layout),
+                            layer.rowWidth,
+                        );
                     }
-                    const spans = getCachedRowSpans(currentViewportData, paneRow.data, paneRow.index);
-                    pane.updateColumns(
-                        layers.central.columns,
-                        layers.central.originX,
-                        sliceSpanLayoutForLayer(currentViewportData, layers.central.columns, true, spans.central),
-                    );
-                }
+                };
+                updateLayerColumns(layers.left, leftGeometryKey, false);
+                updateLayerColumns(layers.central, centralGeometryKey, true);
+                updateLayerColumns(layers.right, rightGeometryKey, false);
                 setColumnWindowVersion((v) => v + 1);
             };
             if (synchronousColumnWindow) {
@@ -1255,6 +1269,16 @@ export function OmniGrid<T>({
         });
         return unsubscribe;
     }, [grid]);
+
+    useEffect(() => {
+        const unsubscribe: () => void = grid.on("cellsRefresh", ({ columnIds }) => {
+            const columnsToRefresh: Set<string> | undefined = columnIds ? new Set(columnIds) : undefined;
+            for (const layer of [layers.left, layers.central, layers.right]) {
+                for (const pane of layer.panes) pane.refreshCells(columnsToRefresh);
+            }
+        });
+        return unsubscribe;
+    }, [grid, layers]);
 
     useEffect(
         () => () => {
